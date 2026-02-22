@@ -1,8 +1,9 @@
+import Image from "next/image";
 import LoginForm from "@/components/auth/LoginForm";
 
 export const metadata = {
-  title: "Sign In — Personal Tracker",
-  description: "Sign in to your Personal Tracker account.",
+  title: "Sign In — Ops Upgrade",
+  description: "Sign in to your Ops Upgrade account.",
 };
 
 /**
@@ -14,11 +15,16 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
       <div className="w-full max-w-sm space-y-8">
         {/* Header */}
-        <div className="text-center">
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-            Personal Tracker
-          </h1>
-          <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+        <div className="flex flex-col items-center gap-4">
+          <Image
+            src="/images/logo-with-name.png"
+            alt="Ops Upgrade"
+            width={200}
+            height={50}
+            priority
+            className="h-12 w-auto rounded"
+          />
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Sign in to your account
           </p>
         </div>

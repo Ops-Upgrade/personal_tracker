@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { logout } from "@/api/auth";
 import { ROUTES } from "@/routes/paths";
@@ -24,11 +25,16 @@ export default function Navbar({ userEmail }: NavbarProps) {
   return (
     <nav className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* App Name */}
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Personal Tracker
-          </span>
+        {/* App Logo */}
+        <div className="flex items-center">
+          <Image
+            src="/images/logo-with-name.png"
+            alt="Ops Upgrade"
+            width={160}
+            height={40}
+            priority
+            className="h-9 w-auto rounded"
+          />
         </div>
 
         {/* User Info + Logout */}

@@ -18,8 +18,18 @@ export async function proxy(request: NextRequest) {
 
   // Refresh the session — getClaims() is safe to trust because it
   // validates the JWT signature against published public keys.
-  const { data } = await supabase.auth.getClaims();
+  const { data, error } = await supabase.auth.getClaims();
   const user = data?.claims;
+
+  // If the refresh token is stale/invalid, clear the auth cookies
+  // so we don't keep retrying on every request.
+  if (error) {
+    request.cookies.getAll().forEach(({ name }) => {
+      if (name.startsWith("sb-")) {
+        response.cookies.delete(name);
+      }
+    });
+  }
 
   const { pathname } = request.nextUrl;
 

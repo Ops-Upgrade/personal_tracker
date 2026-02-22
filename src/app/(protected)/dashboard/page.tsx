@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = {
-  title: "Dashboard — Personal Tracker",
+  title: "Dashboard — Ops Upgrade",
   description: "Your personal tracking dashboard.",
 };
 
