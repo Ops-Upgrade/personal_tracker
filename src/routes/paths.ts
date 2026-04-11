@@ -6,6 +6,7 @@ export const ROUTES = {
   HOME: "/",
   LOGIN: "/login",
   DASHBOARD: "/dashboard",
+  CHANGE_PASSWORD: "/settings/change-password",
   // Future feature routes:
   // EXPENSES: "/expenses",
   // TASKS: "/tasks",

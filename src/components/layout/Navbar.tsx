@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { logout } from "@/api/auth";
 import { ROUTES } from "@/routes/paths";
@@ -37,11 +38,17 @@ export default function Navbar({ userEmail }: NavbarProps) {
           />
         </div>
 
-        {/* User Info + Logout */}
+        {/* User Info + Actions */}
         <div className="flex items-center gap-4">
           <span className="hidden text-sm text-zinc-500 dark:text-zinc-400 sm:inline">
             {userEmail}
           </span>
+          <Link
+            href={ROUTES.CHANGE_PASSWORD}
+            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            Settings
+          </Link>
           <button
             onClick={handleLogout}
             className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
