@@ -1,4 +1,4 @@
-import { fetchUserKeys, upsertUserKeys } from "@/api/keys";
+import { fetchUserKeys, upsertUserKeys } from "@/api/auth";
 import {
   deriveKEK,
   generateDEK,
