@@ -75,10 +75,10 @@ export async function logout(): Promise<AuthResult> {
 
 /**
  * Change the user's password. Re-wraps the DEK with the new password
- * FIRST, then updates Supabase auth. If the Supabase update fails the
- * old wrapped DEK row is already overwritten — but the new password is
- * not yet active in auth, so the user must retry. In practice both
- * steps succeed or the user is prompted to contact support.
+ * first, then updates Supabase auth.
+ *
+ * If auth update fails after re-wrap, this function attempts a best-effort
+ * rollback by re-wrapping the DEK back to the old password immediately.
  */
 export async function changePassword(
   oldPassword: string,
@@ -95,6 +95,7 @@ export async function changePassword(
     return { success: false, error: "No active session. Please log in again." };
   }
 
+  // Step 1: Re-wrap DEK to new password material.
   try {
     await rewrapDEK(userId, oldPassword, newPassword);
   } catch (err) {
@@ -107,10 +108,26 @@ export async function changePassword(
     };
   }
 
+  // Step 2: Update Supabase auth password.
   const { error } = await supabase.auth.updateUser({ password: newPassword });
 
   if (error) {
-    return { success: false, error: `Password update failed: ${error.message}` };
+    // Best-effort rollback so wrapped DEK remains aligned with auth password.
+    try {
+      await rewrapDEK(userId, newPassword, oldPassword);
+      return {
+        success: false,
+        error: `Password update failed: ${error.message}. Crypto key changes were rolled back.`,
+      };
+    } catch (rollbackErr) {
+      return {
+        success: false,
+        error:
+          rollbackErr instanceof Error
+            ? `Password update failed: ${error.message}. Automatic key rollback also failed (${rollbackErr.message}). Please contact support immediately.`
+            : `Password update failed: ${error.message}. Automatic key rollback also failed. Please contact support immediately.`,
+      };
+    }
   }
 
   return { success: true };

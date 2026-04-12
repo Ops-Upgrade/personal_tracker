@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
+import { ROUTES } from "@/routes/paths";
 
 export const metadata = {
   title: "Dashboard — Ops Upgrade",
@@ -30,6 +32,39 @@ export default async function DashboardPage() {
 
       {/* Feature Cards Grid */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Task Manager Card */}
+        <Link
+          href={ROUTES.TASK_MANAGER}
+          className="rounded-xl border border-blue-200 bg-white p-6 shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-blue-900/60 dark:bg-zinc-900 dark:hover:border-blue-800"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
+            <svg
+              className="h-5 w-5 text-blue-600 dark:text-blue-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+              />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Task Manager
+          </h3>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Manage encrypted tasks and notes in priority/month views.
+          </p>
+          <div className="mt-4">
+            <span className="inline-block rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+              Open feature
+            </span>
+          </div>
+        </Link>
+
         {/* Expenses Card */}
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
@@ -52,36 +87,6 @@ export default async function DashboardPage() {
           </h3>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Track and categorize your spending.
-          </p>
-          <div className="mt-4">
-            <span className="inline-block rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-              Coming soon
-            </span>
-          </div>
-        </div>
-
-        {/* Tasks Card */}
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-100 dark:bg-blue-900/30">
-            <svg
-              className="h-5 w-5 text-blue-600 dark:text-blue-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-              />
-            </svg>
-          </div>
-          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Tasks
-          </h3>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Manage your to-dos and stay organized.
           </p>
           <div className="mt-4">
             <span className="inline-block rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">

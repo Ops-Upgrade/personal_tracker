@@ -1,13 +1,25 @@
 import type { NextConfig } from "next";
 
-const cspDirectives = [
-  "default-src 'self'",
-  "script-src 'self' 'wasm-unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
-  "connect-src 'self' https://*.supabase.co",
-  "img-src 'self' blob: data:",
-  "frame-ancestors 'none'",
-].join("; ");
+const isProduction = process.env.NODE_ENV === "production";
+
+const cspDirectives = isProduction
+  ? [
+      "default-src 'self'",
+      "script-src 'self' 'wasm-unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src 'self' https://*.supabase.co",
+      "img-src 'self' blob: data:",
+      "frame-ancestors 'none'",
+    ].join("; ")
+  : [
+      // Development CSP is intentionally relaxed for Next.js dev runtime/HMR.
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src 'self' https://*.supabase.co ws://localhost:3000",
+      "img-src 'self' blob: data:",
+      "frame-ancestors 'none'",
+    ].join("; ");
 
 const nextConfig: NextConfig = {
   async headers() {

@@ -12,7 +12,7 @@ Target deployment: Vercel with custom domain `ops-upgrade.com` and subdomains.
 
 ---
 
-## Stack & Versions (as of 2026-04-11)
+## Stack & Versions (as of 2026-04-12)
 
 | Tool               | Version  | Notes                                        |
 |--------------------|----------|----------------------------------------------|
@@ -37,17 +37,24 @@ src/
 │   ├── (protected)/            # Auth-guarded pages
 │   │   ├── layout.tsx          # Session check + Navbar + CryptoProvider
 │   │   ├── dashboard/          # Landing page after login
+│   │   ├── taskmanager/        # Task manager feature page
 │   │   └── settings/
 │   │       └── change-password/ # Change password page
 │   └── api/auth/callback/      # Supabase auth callback endpoint
 ├── api/                        # Service layer (wraps Supabase SDK calls)
-│   ├── auth.ts                 # login, logout, changePassword, getSession
-│   ├── keys.ts                 # fetchUserKeys, upsertUserKeys
+│   ├── auth/
+│   │   ├── auth.ts             # login, logout, changePassword, getSession
+│   │   ├── keys.ts             # fetchUserKeys, upsertUserKeys
+│   │   └── index.ts            # auth sub-barrel
+│   ├── taskmanager/
+│   │   ├── tasks.ts            # encrypted CRUD for tasks table
+│   │   ├── notes.ts            # encrypted CRUD for notes table
+│   │   └── index.ts            # taskmanager sub-barrel
 │   └── index.ts                # Barrel export
 ├── components/                 # Reusable UI
 │   ├── auth/                   # LoginForm, ChangePasswordForm
 │   ├── layout/                 # Navbar
-│   └── ui/                     # Shared UI primitives
+│   └── taskmanager/            # Task manager feature components + helpers
 ├── lib/                        # Core utilities
 │   ├── crypto/                 # Client-side encryption (see below)
 │   │   ├── primitives.ts       # Web Crypto + Argon2id wrappers
@@ -69,6 +76,7 @@ src/
 - Env var is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not legacy `ANON_KEY`).
 - Database schema and RLS are documented in [`schema.md`](./schema.md).
 - Crypto implementation plan and progress tracked in [`PLAN-crypto.md`](./PLAN-crypto.md).
+- Task Manager feature plan and progress tracked in [`docs/PLAN-taskmanager.md`](./docs/PLAN-taskmanager.md).
 - **All pages must be responsive** (laptop + mobile). Use Tailwind breakpoints (`sm`, `md`, `lg`) — no fixed-width layouts.
 
 ---
@@ -94,8 +102,8 @@ src/
 - **Login flow:** Supabase auth → `bootstrapCrypto(userId, password)` → DEK available in IndexedDB.
 - **Logout flow:** `clearDEK(userId)` → IndexedDB wiped → `signOut()`.
 - **Session persistence:** `CryptoProvider` in protected layout checks DEK on mount; redirects to `/login` if missing.
-- **Change password:** `rewrapDEK` re-wraps DEK with new KEK, then `updateUser` changes Supabase auth password.
-- **Data encryption (Phase 7):** not yet wired — built when first feature table ships. Pattern: `encryptField` before insert, `decryptField` after select.
+- **Change password:** `rewrapDEK` re-wraps DEK with new KEK, then `updateUser` changes Supabase auth password, with best-effort rollback (`new -> old`) if auth update fails.
+- **Data encryption (Phase 7):** complete and in production code paths. Task and notes writes call `encryptField(userId, plaintext)`, reads call `decryptField(userId, iv, ciphertext)`.
 
 ---
 
@@ -132,13 +140,15 @@ Applied via `next.config.ts` `headers()` on all routes:
 |------------|-------------------------------------------------------------|
 | 2026-02-08 | Project scaffolded. Login + dashboard pages built. Auth flow complete (proxy, session refresh, persistent cookies). |
 | 2026-04-11 | Crypto KMS: Phases 1–6, 8–9 complete. `user_keys` table + RLS, full crypto module (`src/lib/crypto/`), login/logout integration, CryptoProvider, change password flow, security headers. Phase 7 (data encryption wrappers) deferred until first feature table. Phase 10 (manual testing) pending. |
+| 2026-04-12 | Crypto Phase 7 completed and verified via Task Manager feature integration (encrypted `tasks` + `notes` tables). API layer refactored into feature subdirectories (`src/api/auth/*`, `src/api/taskmanager/*`). |
+| 2026-04-12 | Task Manager feature F1.1–F1.10 completed: `/taskmanager` route, modular UI components, active/completed dual views, hash-modals, task/note CRUD, dashboard-tile entry integration, responsive + loading/error polish. |
+| 2026-04-12 | Password change flow hardened with best-effort key rollback if Supabase auth update fails after DEK re-wrap. |
 
 ---
 
 ## What's Not Built Yet
 
 - Expense tracking (UI + DB schema + encryption wiring)
-- Task tracking (UI + DB schema + encryption wiring)
 - Cross-subdomain deployment (config-only change when ready)
 - Analytics page
 - Phase 10: manual testing of crypto flows
