@@ -27,7 +27,7 @@ export default function Navbar({ userEmail }: NavbarProps) {
 
   return (
     <nav className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+      <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         {/* App Logo */}
         <div className="flex items-center gap-3">
           {showBackToDashboard && (
