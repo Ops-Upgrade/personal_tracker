@@ -8,8 +8,7 @@ export const ROUTES = {
   DASHBOARD: "/dashboard",
   TASK_MANAGER: "/taskmanager",
   CHANGE_PASSWORD: "/settings/change-password",
-  // Future feature routes:
-  // EXPENSES: "/expenses",
+  EXPENSE: "/expense",
 } as const;
 
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];

@@ -7,3 +7,4 @@ export { fetchUserKeys, upsertUserKeys } from "./auth";
 export type { UserKeysRow } from "./auth";
 export { fetchTasks, createTask, updateTask, deleteTask } from "./taskmanager";
 export { fetchNotes, createNote, updateNote, deleteNote } from "./taskmanager";
+export { fetchExpenses, createExpense, updateExpense, deleteExpense } from "./expense";
