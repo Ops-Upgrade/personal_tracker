@@ -277,7 +277,7 @@ export default function ExpenseView() {
 
       {/* Month rows */}
       {!isLoading && (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
           {expensesByMonth.map(({ monthName, monthIndex, expenses: monthExpenses }) => (
             <MonthRow
               key={monthName}
