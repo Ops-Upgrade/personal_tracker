@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getSession } from "@/api/auth";
+import { getServerYear } from "@/api/serverYear";
 import {
   createNote,
   createTask,
@@ -31,6 +32,7 @@ export default function TaskManagerView() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nowYear, setNowYear] = useState<number>(new Date().getFullYear());
 
   const [activeView, setActiveView] = useState<TaskView>("months");
   const [completedView, setCompletedView] = useState<TaskView>("months");
@@ -102,11 +104,15 @@ export default function TaskManagerView() {
 
     async function bootstrap() {
       try {
-        const session = await getSession();
+        const [session, serverYear] = await Promise.all([
+          getSession(),
+          getServerYear(),
+        ]);
         const uid = session?.user.id;
         if (!uid) throw new Error("No active session.");
         if (cancelled) return;
         setUserId(uid);
+        setNowYear(serverYear);
         await refreshData(uid);
       } catch (err) {
         if (cancelled) return;
@@ -234,6 +240,7 @@ export default function TaskManagerView() {
           tasks={activeTasks}
           isLoading={isLoading}
           view={activeView}
+          nowYear={nowYear}
           onViewChange={setActiveView}
           onAdd={() => setTaskModalTarget("create")}
           onSelectTask={(task) => setTaskModalTarget(task)}
@@ -276,6 +283,7 @@ export default function TaskManagerView() {
         <CompletedTasksModal
           tasks={completedTasks}
           view={completedView}
+          nowYear={nowYear}
           onViewChange={setCompletedView}
           onClose={closeExpandedModal}
           onSelectTask={(task) => {

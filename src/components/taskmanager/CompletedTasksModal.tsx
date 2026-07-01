@@ -15,6 +15,7 @@ import {
 interface CompletedTasksModalProps {
   tasks: Task[];
   view: TaskView;
+  nowYear: number;
   onViewChange: (next: TaskView) => void;
   onClose: () => void;
   onSelectTask: (task: Task) => void;
@@ -28,13 +29,14 @@ function prettyPriority(priority: string): string {
 export default function CompletedTasksModal({
   tasks,
   view,
+  nowYear,
   onViewChange,
   onClose,
   onSelectTask,
   onReopenTask,
 }: CompletedTasksModalProps) {
   const priorityGroups = byPriority(tasks.map((task) => ({ ...task })));
-  const monthGroups = completedByMonths(tasks);
+  const monthGroups = completedByMonths(tasks, nowYear);
 
   return (
     <ModalFrame title="Completed Tasks" onClose={onClose}>

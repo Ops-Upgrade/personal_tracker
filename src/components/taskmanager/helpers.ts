@@ -43,8 +43,10 @@ export function byPriority(tasks: Task[]): Record<Priority, Task[]> {
   );
 }
 
-export function activeByMonths(tasks: Task[]): Array<{ label: string; tasks: Task[] }> {
-  const nowYear = new Date().getFullYear();
+export function activeByMonths(
+  tasks: Task[],
+  nowYear: number
+): Array<{ label: string; tasks: Task[] }> {
   const monthMap = new Map<string, Task[]>();
 
   for (const task of tasks) {
@@ -57,7 +59,16 @@ export function activeByMonths(tasks: Task[]): Array<{ label: string; tasks: Tas
 
     const due = new Date(task.due_date);
     const year = due.getFullYear();
-    const label = year > nowYear ? "Next Year" : MONTH_FORMATTER.format(due);
+
+    let label: string;
+    if (year < nowYear) {
+      label = "Past Years";
+    } else if (year > nowYear) {
+      label = "Future Years";
+    } else {
+      label = MONTH_FORMATTER.format(due);
+    }
+
     const bucket = monthMap.get(label) ?? [];
     bucket.push(task);
     monthMap.set(label, bucket);
@@ -65,6 +76,7 @@ export function activeByMonths(tasks: Task[]): Array<{ label: string; tasks: Tas
 
   const orderedMonths = [
     "Unscheduled",
+    "Past Years",
     "January",
     "February",
     "March",
@@ -77,7 +89,7 @@ export function activeByMonths(tasks: Task[]): Array<{ label: string; tasks: Tas
     "October",
     "November",
     "December",
-    "Next Year",
+    "Future Years",
   ];
 
   return orderedMonths.map((label) => ({
@@ -87,18 +99,25 @@ export function activeByMonths(tasks: Task[]): Array<{ label: string; tasks: Tas
 }
 
 export function completedByMonths(
-  tasks: Task[]
+  tasks: Task[],
+  nowYear: number
 ): Array<{ label: string; tasks: Task[]; sortKey: number }> {
-  const nowYear = new Date().getFullYear();
   const monthMap = new Map<string, { tasks: Task[]; sortKey: number }>();
 
   for (const task of tasks) {
     if (!task.completed_at) continue;
     const completed = new Date(task.completed_at);
-    const label =
-      completed.getFullYear() > nowYear
-        ? "Next Year"
-        : MONTH_YEAR_FORMATTER.format(completed);
+    const completedYear = completed.getFullYear();
+
+    let label: string;
+    if (completedYear < nowYear) {
+      label = "Past Years";
+    } else if (completedYear > nowYear) {
+      label = "Future Years";
+    } else {
+      label = MONTH_YEAR_FORMATTER.format(completed);
+    }
+
     const existing = monthMap.get(label);
     const taskTs = completed.getTime();
 

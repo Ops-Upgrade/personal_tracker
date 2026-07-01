@@ -9,6 +9,7 @@ interface ActiveTasksBoxProps {
   tasks: Task[];
   isLoading: boolean;
   view: TaskView;
+  nowYear: number;
   onViewChange: (next: TaskView) => void;
   onAdd: () => void;
   onSelectTask: (task: Task) => void;
@@ -27,13 +28,14 @@ export default function ActiveTasksBox({
   tasks,
   isLoading,
   view,
+  nowYear,
   onViewChange,
   onAdd,
   onSelectTask,
   onMarkComplete,
 }: ActiveTasksBoxProps) {
   const priorityGroups = byPriority(tasks);
-  const monthGroups = activeByMonths(tasks);
+  const monthGroups = activeByMonths(tasks, nowYear);
 
   return (
     <article className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:col-span-2">
