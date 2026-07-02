@@ -7,6 +7,7 @@ interface ModalFrameProps {
   onClose: () => void;
   children: ReactNode;
   maxWidthClassName?: string;
+  sidePanel?: ReactNode;
 }
 
 export default function ModalFrame({
@@ -14,6 +15,7 @@ export default function ModalFrame({
   onClose,
   children,
   maxWidthClassName = "max-w-3xl",
+  sidePanel,
 }: ModalFrameProps) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-zinc-950/60 p-4">
@@ -32,7 +34,14 @@ export default function ModalFrame({
             Close
           </button>
         </header>
-        <div className="p-4">{children}</div>
+        <div className={`flex ${sidePanel ? "flex-col sm:flex-row" : ""}`}>
+          <div className="flex-1 min-w-0 p-4">{children}</div>
+          {sidePanel && (
+            <div className="shrink-0 border-t border-zinc-200 sm:w-[420px] sm:border-l sm:border-t-0 dark:border-zinc-800">
+              {sidePanel}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

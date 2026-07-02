@@ -23,15 +23,6 @@ function ArrowDownTrayIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-    </svg>
-  );
-}
-
 function DocumentIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
@@ -141,103 +132,190 @@ function formatBytes(bytes: number): string {
 }
 
 // ============================================================
-// Invoice Preview Modal (in-app)
+// Invoice Preview Panel (inline side panel)
 // ============================================================
 
-interface InvoicePreviewModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  previewUrl: string | null;
-  previewError: string | null;
+interface InvoicePreviewPanelProps {
+  existingFile: string;
+  existingIv: string;
+  existingMime: string;
+  userId: string;
+  localFile: File | null;
   isDownloading: boolean;
-  mimeType: string;
-  fileName: string;
+  onDownload: () => void;
 }
 
-function InvoicePreviewModal({
-  isOpen,
-  onClose,
-  previewUrl,
-  previewError,
+function InvoicePreviewPanel({
+  existingFile,
+  existingIv,
+  existingMime,
+  userId,
+  localFile,
   isDownloading,
-  mimeType,
-  fileName,
-}: InvoicePreviewModalProps) {
-  if (!isOpen) return null;
+  onDownload,
+}: InvoicePreviewPanelProps) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Generate local preview from File object
+  useEffect(() => {
+    if (localFile) {
+      const url = URL.createObjectURL(localFile);
+      setBlobUrl(url);
+      setLoadError(null);
+      return () => URL.revokeObjectURL(url);
+    }
+    // Reset when localFile is removed
+    setBlobUrl(null);
+    setLoadError(null);
+  }, [localFile]);
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleLoadPreview = async () => {
+    if (!existingFile || !existingIv) return;
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const { downloadInvoice } = await import("@/api/expense/invoiceStorage");
+      const blob = await downloadInvoice(userId, existingFile, existingIv, existingMime);
+      const url = URL.createObjectURL(blob);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      setBlobUrl(url);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to decrypt invoice.";
+      setLoadError(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const displayName = localFile?.name || existingFile.replace(/\.enc$/, "") || "invoice";
+
+  const mimeType = localFile?.type || existingMime || "";
   const isPdf = mimeType === "application/pdf";
   const isImage = mimeType.startsWith("image/");
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
-      <div
-        className="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-zinc-800">
-          <h3 className="text-sm font-semibold text-zinc-200 truncate">
-            Invoice Preview: {fileName}
-          </h3>
+    <div className="flex flex-col h-full max-h-[80vh]">
+      {/* Header: nav arrows, counter, filename, download */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
+        {/* Arrow navigation (future-proof, disabled for single file) */}
+        <button
+          type="button"
+          disabled
+          className="p-1 rounded text-zinc-300 dark:text-zinc-600 cursor-not-allowed"
+          title="Previous file"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+
+        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 tabular-nums">
+          1 / 1
+        </span>
+
+        <button
+          type="button"
+          disabled
+          className="p-1 rounded text-zinc-300 dark:text-zinc-600 cursor-not-allowed"
+          title="Next file"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+          </svg>
+        </button>
+
+        {/* Filename */}
+        <span className="flex-1 text-xs text-zinc-600 dark:text-zinc-400 truncate min-w-0">
+          {displayName}
+        </span>
+
+        {/* Download button */}
+        <button
+          type="button"
+          onClick={onDownload}
+          disabled={isDownloading}
+          className="p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40"
+          title="Download invoice"
+        >
+          <ArrowDownTrayIcon className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* Content area */}
+      <div className="flex-1 overflow-auto flex items-center justify-center p-4">
+        {/* Not yet loaded — show click-to-load for existing encrypted files */}
+        {!blobUrl && !isLoading && !loadError && !localFile && (
           <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors"
+            type="button"
+            onClick={handleLoadPreview}
+            className="flex flex-col items-center gap-2 text-zinc-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 transition-colors"
           >
-            <XMarkIcon className="h-5 w-5" />
+            <DocumentIcon className="h-10 w-10" />
+            <span className="text-sm font-medium">Click to load preview</span>
+            <span className="text-xs text-zinc-400">
+              File is encrypted — decrypt on demand
+            </span>
           </button>
-        </div>
+        )}
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto flex items-center justify-center p-4">
-          {isDownloading && (
-            <div className="flex flex-col items-center gap-3 text-zinc-400">
-              <ArrowPathIcon className="h-8 w-8 animate-spin" />
-              <span className="text-sm">Decrypting invoice...</span>
-            </div>
-          )}
+        {/* Loading spinner */}
+        {isLoading && (
+          <div className="flex flex-col items-center gap-3 text-zinc-400">
+            <ArrowPathIcon className="h-8 w-8 animate-spin" />
+            <span className="text-sm">Decrypting invoice...</span>
+          </div>
+        )}
 
-          {previewError && (
-            <div className="flex flex-col items-center gap-3 text-red-400">
-              <NoSymbolIcon className="h-8 w-8" />
-              <span className="text-sm">{previewError}</span>
-            </div>
-          )}
+        {/* Error */}
+        {loadError && (
+          <div className="flex flex-col items-center gap-3 text-red-400">
+            <NoSymbolIcon className="h-8 w-8" />
+            <span className="text-sm text-center">{loadError}</span>
+          </div>
+        )}
 
-          {previewUrl && isPdf && (
-            <iframe
-              src={previewUrl}
-              className="w-full h-full min-h-[60vh] rounded-lg border border-zinc-700"
-              title="Invoice PDF Preview"
-            />
-          )}
+        {/* PDF preview */}
+        {blobUrl && isPdf && (
+          <iframe
+            src={blobUrl}
+            className="w-full h-full min-h-[400px] rounded-lg border border-zinc-200 dark:border-zinc-700"
+            title="Invoice PDF Preview"
+          />
+        )}
 
-          {previewUrl && isImage && (
-            <img
-              src={previewUrl}
-              alt="Invoice preview"
-              className="max-w-full max-h-[75vh] object-contain rounded-lg"
-            />
-          )}
+        {/* Image preview */}
+        {blobUrl && isImage && (
+          <img
+            src={blobUrl}
+            alt="Invoice preview"
+            className="max-w-full max-h-full object-contain rounded-lg"
+          />
+        )}
 
-          {previewUrl && !isPdf && !isImage && (
-            <div className="flex flex-col items-center gap-3 text-zinc-400">
-              <DocumentIcon className="h-8 w-8" />
-              <span className="text-sm">
-                Preview not available for this file type.
-              </span>
-              <a
-                href={previewUrl}
-                download={fileName}
-                className="text-sm text-emerald-400 hover:text-emerald-300 underline"
-              >
-                Download instead
-              </a>
-            </div>
-          )}
-        </div>
+        {/* Unsupported type */}
+        {blobUrl && !isPdf && !isImage && (
+          <div className="flex flex-col items-center gap-3 text-zinc-400">
+            <DocumentIcon className="h-8 w-8" />
+            <span className="text-sm">Preview not available for this file type.</span>
+            <a
+              href={blobUrl}
+              download={displayName}
+              className="text-sm text-emerald-500 hover:text-emerald-400 underline"
+            >
+              Download instead
+            </a>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -270,20 +348,10 @@ export default function ExpenseModal({
   const [invoiceAction, setInvoiceAction] = useState<InvoiceAction>("keep");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // --- Preview state ---
-  const [isPreviewOpen, setPreviewOpen] = useState(false);
+  // --- Download state ---
   const [isDownloading, setDownloading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const isEditing = Boolean(expense);
-
-  // Cleanup blob URL on unmount
-  useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
 
   // Reset form when modal opens / expense changes
   useEffect(() => {
@@ -336,37 +404,6 @@ export default function ExpenseModal({
       setInvoiceAction("keep");
     }
   };
-
-  const handleView = useCallback(async () => {
-    if (!existingInvoiceFile || !existingInvoiceIv) return;
-    setPreviewOpen(true);
-    setPreviewError(null);
-    setDownloading(true);
-    try {
-      const { downloadInvoice } = await import(
-        "@/api/expense/invoiceStorage"
-      );
-      const blob = await downloadInvoice(
-        userId,
-        existingInvoiceFile,
-        existingInvoiceIv,
-        existingInvoiceMime
-      );
-      const url = URL.createObjectURL(blob);
-      setPreviewUrl(url);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to decrypt invoice.";
-      setPreviewError(message);
-    } finally {
-      setDownloading(false);
-    }
-  }, [
-    existingInvoiceFile,
-    existingInvoiceIv,
-    existingInvoiceMime,
-    userId,
-  ]);
 
   const handleDownload = useCallback(async () => {
     if (!existingInvoiceFile || !existingInvoiceIv) return;
@@ -481,6 +518,22 @@ export default function ExpenseModal({
     }
   }
 
+  // --- Side panel ---
+
+  const hasFile = Boolean(displayFileName);
+
+  const sidePanel = hasFile ? (
+    <InvoicePreviewPanel
+      existingFile={existingInvoiceFile}
+      existingIv={existingInvoiceIv}
+      existingMime={existingInvoiceMime}
+      userId={userId}
+      localFile={invoiceFile}
+      isDownloading={isDownloading}
+      onDownload={handleDownload}
+    />
+  ) : undefined;
+
   // --- Render ---
 
   return (
@@ -488,6 +541,8 @@ export default function ExpenseModal({
       <ModalFrame
         title={isEditing ? "Edit expense" : "Add expense"}
         onClose={onClose}
+        maxWidthClassName={hasFile ? "max-w-6xl" : "max-w-md"}
+        sidePanel={sidePanel}
       >
         <div className="space-y-3">
           {/* Item */}
@@ -581,15 +636,6 @@ export default function ExpenseModal({
                   </span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleView}
-                    disabled={isSaving || isDownloading}
-                    className="p-1 rounded-md text-zinc-400 hover:text-emerald-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40"
-                    title="View invoice"
-                  >
-                    <EyeIcon className="h-4 w-4" />
-                  </button>
                   <button
                     type="button"
                     onClick={handleDownload}
@@ -728,22 +774,6 @@ export default function ExpenseModal({
         />
       )}
 
-      {/* Invoice preview modal */}
-      <InvoicePreviewModal
-        isOpen={isPreviewOpen}
-        onClose={() => {
-          setPreviewOpen(false);
-          if (previewUrl) {
-            URL.revokeObjectURL(previewUrl);
-            setPreviewUrl(null);
-          }
-        }}
-        previewUrl={previewUrl}
-        previewError={previewError}
-        isDownloading={isDownloading}
-        mimeType={existingInvoiceMime}
-        fileName={existingInvoiceFile.replace(/\.enc$/, "")}
-      />
     </>
   );
 }
