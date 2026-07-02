@@ -3,6 +3,7 @@
 import type { Task, TaskView } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
 import ViewToggle from "./ViewToggle";
+import MonthTile from "@/components/common/MonthTile";
 import { activeByMonths, byPriority, trunc } from "./helpers";
 
 interface ActiveTasksBoxProps {
@@ -122,58 +123,58 @@ export default function ActiveTasksBox({
         {!isLoading &&
           view === "months" &&
           monthGroups.map((group) => (
-            <section
+            <MonthTile
               key={group.label}
-              className="rounded-lg border border-zinc-200 p-2 dark:border-zinc-700"
+              title={group.label}
+              alwaysExpanded
+              className="text-sm"
             >
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">
-                {group.label}
-              </h3>
-              {group.tasks.length === 0 && (
+              {group.tasks.length === 0 ? (
                 <div className="text-xs text-zinc-500 dark:text-zinc-400">None</div>
+              ) : (
+                <div className="space-y-2">
+                  {group.tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="group flex items-center justify-between gap-2 rounded-md border border-zinc-200 px-2 py-1.5 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => onSelectTask(task)}
+                        className="grid flex-1 cursor-pointer gap-2 text-left text-xs sm:grid-cols-12"
+                      >
+                        <span className="font-medium text-zinc-800 dark:text-zinc-100 sm:col-span-4">
+                          {trunc(task.name, 34)}
+                        </span>
+                        <span className="text-zinc-600 dark:text-zinc-300 sm:col-span-2">
+                          <span className="mr-1 inline sm:hidden">Priority:</span>
+                          {prettyPriority(task.priority)}
+                        </span>
+                        <span className="text-zinc-600 dark:text-zinc-300 sm:col-span-2">
+                          <span className="mr-1 inline sm:hidden">Due:</span>
+                          {dueDisplay(task.due_date)}
+                        </span>
+                        <span className="text-zinc-600 dark:text-zinc-300 sm:col-span-2">
+                          <span className="mr-1 inline sm:hidden">Mode:</span>
+                          {task.mode}
+                        </span>
+                        <span className="text-zinc-500 dark:text-zinc-400 sm:col-span-2">
+                          <span className="mr-1 inline sm:hidden">Description:</span>
+                          {trunc(task.description, 20)}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onMarkComplete(task)}
+                        className="cursor-pointer whitespace-nowrap px-1 py-1 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        Complete {">"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
               )}
-              <div className="space-y-2">
-                {group.tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="group flex items-center justify-between gap-2 rounded-md border border-zinc-200 px-2 py-1.5 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onSelectTask(task)}
-                      className="grid flex-1 cursor-pointer gap-2 text-left text-xs sm:grid-cols-12"
-                    >
-                      <span className="font-medium text-zinc-800 dark:text-zinc-100 sm:col-span-4">
-                        {trunc(task.name, 34)}
-                      </span>
-                      <span className="text-zinc-600 dark:text-zinc-300 sm:col-span-2">
-                        <span className="mr-1 inline sm:hidden">Priority:</span>
-                        {prettyPriority(task.priority)}
-                      </span>
-                      <span className="text-zinc-600 dark:text-zinc-300 sm:col-span-2">
-                        <span className="mr-1 inline sm:hidden">Due:</span>
-                        {dueDisplay(task.due_date)}
-                      </span>
-                      <span className="text-zinc-600 dark:text-zinc-300 sm:col-span-2">
-                        <span className="mr-1 inline sm:hidden">Mode:</span>
-                        {task.mode}
-                      </span>
-                      <span className="text-zinc-500 dark:text-zinc-400 sm:col-span-2">
-                        <span className="mr-1 inline sm:hidden">Description:</span>
-                        {trunc(task.description, 20)}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onMarkComplete(task)}
-                      className="cursor-pointer whitespace-nowrap px-1 py-1 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
-                    >
-                      Complete {">"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
+            </MonthTile>
           ))}
       </div>
     </article>
