@@ -7,8 +7,10 @@ import {
   deleteExpense,
   fetchExpenses,
   updateExpense,
+  uploadInvoice,
+  deleteInvoice,
 } from "@/api/expense";
-import type { Expense } from "@/types/expense";
+import type { Expense, ExpensePlaintext } from "@/types/expense";
 import { MONTHS } from "@/types/expense";
 import ExpenseModal from "./ExpenseModal";
 import FullMonthModal from "./FullMonthModal";
@@ -24,6 +26,7 @@ export default function ExpenseView() {
   const [userId, setUserId] = useState<string | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -84,7 +87,7 @@ export default function ExpenseView() {
     }
 
     const yearStr = parts[parts.length - 1];
-    const monthStr = parts.slice(0, -1).join("-"); // handle multi-word? unlikely but safe
+    const monthStr = parts.slice(0, -1).join("-");
     const year = parseInt(yearStr, 10);
     if (isNaN(year)) {
       setFullMonthModal(null);
@@ -200,28 +203,92 @@ export default function ExpenseView() {
       reason: string;
       invoice: string;
     },
-    existingExpense: Expense | null
+    existingExpense: Expense | null,
+    fileAction: { action: "upload" | "remove" | "keep"; file?: File }
   ) {
     if (!userId) throw new Error("No active session.");
-    const nowIso = new Date().toISOString();
+    setIsSaving(true);
 
-    const payload = {
-      ...draft,
-      updated_at: nowIso,
-    };
+    try {
+      let invoice_file = existingExpense?.invoice_file ?? "";
+      let invoice_iv = existingExpense?.invoice_iv ?? "";
+      let invoice_mime = existingExpense?.invoice_mime ?? "";
 
-    if (existingExpense) {
-      await updateExpense(userId, existingExpense.id, payload);
-    } else {
-      await createExpense(userId, payload);
+      // Handle file action
+      if (fileAction.action === "remove") {
+        // Delete old file from storage
+        if (invoice_file) {
+          try {
+            await deleteInvoice(invoice_file);
+          } catch {
+            // Swallow — best-effort cleanup
+          }
+        }
+        invoice_file = "";
+        invoice_iv = "";
+        invoice_mime = "";
+      } else if (fileAction.action === "upload" && fileAction.file) {
+        // Delete old file first if exists
+        if (invoice_file) {
+          try {
+            await deleteInvoice(invoice_file);
+          } catch {
+            // Swallow
+          }
+        }
+        // Upload new file
+        const result = await uploadInvoice(userId, fileAction.file);
+        invoice_file = result.fileName;
+        invoice_iv = result.iv;
+        invoice_mime = result.mimeType;
+      }
+      // "keep" — preserve existing values (already set above)
+
+      const nowIso = new Date().toISOString();
+
+      const payload: ExpensePlaintext = {
+        item: draft.item,
+        seller: draft.seller,
+        cost: draft.cost,
+        date: draft.date,
+        reason: draft.reason,
+        invoice: draft.invoice,
+        invoice_file,
+        invoice_iv,
+        invoice_mime,
+        updated_at: nowIso,
+      };
+
+      if (existingExpense) {
+        await updateExpense(userId, existingExpense.id, payload);
+      } else {
+        await createExpense(userId, payload);
+      }
+
+      await refreshData(userId);
+    } finally {
+      setIsSaving(false);
     }
-
-    await refreshData(userId);
   }
 
   async function handleExpenseDelete(expenseId: string) {
     if (!userId) throw new Error("No active session.");
+
+    // Find the expense to get invoice file for cleanup
+    const expense = expenses.find((e) => e.id === expenseId);
+    const invoiceFile = expense?.invoice_file;
+
     await deleteExpense(expenseId);
+
+    // Cleanup storage file if exists
+    if (invoiceFile) {
+      try {
+        await deleteInvoice(invoiceFile);
+      } catch {
+        // Swallow — best-effort cleanup
+      }
+    }
+
     await refreshData(userId);
   }
 
@@ -286,7 +353,6 @@ export default function ExpenseView() {
               year={selectedYear}
               expenses={monthExpenses}
               onAdd={() => {
-                // Pre-fill date to 1st of this month for the selected year
                 const mm = String(monthIndex + 1).padStart(2, "0");
                 setExpenseModalTarget({
                   mode: "create",
@@ -330,6 +396,8 @@ export default function ExpenseView() {
               ? expenseModalTarget.defaultDate
               : undefined
           }
+          userId={userId ?? ""}
+          isSaving={isSaving}
           onClose={() => setExpenseModalTarget(null)}
           onSave={handleExpenseSave}
           onDelete={handleExpenseDelete}

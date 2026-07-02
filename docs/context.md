@@ -152,12 +152,12 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-06-22 | Expense Tracker plan drafted (`PLAN-expense.md`). Minor navbar/layout visual polish. |
 | 2026-06-23 | Expense Tracker feature F2.1–F2.10 completed: `/expense` route, `expenses` table + RLS, encrypted CRUD API layer (`src/api/expense/`), 6 UI components (`ExpenseView`, `MonthRow`, `ExpenseTable`, `ExpenseModal`, `FullMonthModal`, `YearDropdown`), year-grouped calendar view with 12 month rows, inline expand/retract with 5-item preview, hash-based full-month modal, create/edit/delete with `ConfirmDialog`, ₹ formatting, dashboard tile integration, responsive layout, loading/error states. |
 | 2026-07-01 | Expense Tracker: month rows layout changed from vertical stack to 2-column grid (`lg:grid-cols-2`). Task Manager bug fix: fixed past-year tasks showing in current year section + server-side year fetching. |
+| 2026-07-02 | Expense Tracker invoice file upload completed: Added client-side encrypted file uploads for expense attachments, storage bucket RLS, and inline previews. |
 
 ---
 
 ## What's Not Built Yet
 
-- Expense Tracker: encrypted invoice file upload/download/delete (Supabase Storage + client-side encryption) — see [`PLAN-expense_file_upload.md`](./PLAN-expense_file_upload.md)
 - Cross-subdomain deployment (config-only change when ready)
 - Analytics page
 - Phase 10: manual testing of crypto flows

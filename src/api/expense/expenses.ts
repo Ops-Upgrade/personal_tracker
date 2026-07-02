@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { encryptField, decryptField } from "@/lib/crypto";
 import type { Expense, ExpensePlaintext } from "@/types/expense";
+import { deleteInvoice } from "./invoiceStorage";
 
 /**
  * Fetch all expenses for a user, decrypt each row, and return hydrated Expense[].
@@ -18,7 +19,13 @@ export async function fetchExpenses(userId: string): Promise<Expense[]> {
   return Promise.all(
     rows.map(async (row) => {
       const plaintext = await decryptField(userId, row.iv, row.data);
-      const parsed: ExpensePlaintext = JSON.parse(plaintext);
+      const raw = JSON.parse(plaintext);
+      const parsed: ExpensePlaintext = {
+        invoice_file: "",
+        invoice_iv: "",
+        invoice_mime: "",
+        ...raw,
+      };
       return { id: row.id, created_at: row.created_at, ...parsed };
     })
   );
@@ -74,6 +81,10 @@ export async function updateExpense(
 
 /**
  * Permanently delete an expense by ID.
+ *
+ * NOTE: Callers are responsible for cleaning up any associated invoice file
+ * in Supabase Storage (see deleteInvoice). This function only removes the
+ * database row — storage cleanup happens at the UI layer in ExpenseView.
  */
 export async function deleteExpense(expenseId: string): Promise<void> {
   const supabase = createClient();

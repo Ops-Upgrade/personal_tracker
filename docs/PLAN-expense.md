@@ -167,7 +167,10 @@ interface ExpensePlaintext {
   cost: number;           // Amount in ₹ (stored as a number, e.g. 1999.50)
   date: string;           // ISO 8601 date (YYYY-MM-DD) — determines month/year grouping
   reason: string;         // Purpose / reason for the expense
-  invoice: string;        // Free-text invoice ref, URL, or receipt identifier (optional)
+  invoice: string;          // Legacy: free-text reference (may be empty when file is used)
+  invoice_file: string;     // Filename in storage bucket (e.g. "<uuid>.enc"), empty if no file
+  invoice_iv: string;       // Base64 IV used to encrypt the file, empty if no file
+  invoice_mime: string;     // Original MIME type (e.g. "application/pdf"), empty if no file
   updated_at: string;     // ISO 8601 datetime, updated on every edit
 }
 ```
@@ -294,7 +297,7 @@ await supabase.from("expenses").update({ iv: encrypted.iv, data: encrypted.ciphe
 ### Add Item Modal
 
 - Single modal component, opened via any month's `+ Add`.
-- Fields: Item (text), Seller (text), Cost ₹ (number input), Date (date picker, pre-set to 1st of that month), Reason (text), Invoice (text — a free-text reference, not a file upload in v1).
+- Fields: Item (text), Seller (text), Cost ₹ (number input), Date (date picker, pre-set to 1st of that month), Reason (text), Invoice (file upload drop zone).
 - **Save**: encrypt + insert → update client state → close modal → recalculate totals.
 - **Cancel**: close with no changes.
 
@@ -345,7 +348,7 @@ Month names in the hash are lowercase full English names (`january`, `february`,
 
 | # | Question | Answer |
 |---|----------|--------|
-| 1 | `invoice` field type | Free-text string in v1 (URL, receipt code, or note). No file upload. |
+| 1 | `invoice` field type | Free-text string for legacy (URL, receipt code, or note). Now uses `invoice_file` for storage file upload. |
 | 2 | `cost` storage format | Number (float) inside the encrypted blob. Enables client-side summing. |
 | 3 | Month grouping key | `date` field inside the blob (not `created_at`). A January bill entered in February appears in January. |
 | 4 | Multiple months expanded | Yes — each month independently expandable. No accordion (only one open) behaviour. |
@@ -399,6 +402,7 @@ src/
 | **F2.8** | Year dropdown: derive year list from decrypted data + current year, client-side re-filter on change | F2.3 | Pending |
 | **F2.9** | Entry integration: activate dashboard Expense tile as primary route entry | F2.3 | Pending |
 | **F2.10** | Polish: empty states, loading states, error handling, ₹ formatting (e.g. `toLocaleString('en-IN')`), responsive layout | F2.4–F2.7 | Pending |
+| **F2.11** | Invoice Storage: encrypted file upload to Supabase bucket, inline preview, delete integration | F2.5-F2.6 | Pending |
 
 ---
 
