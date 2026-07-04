@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Image from "next/image";
 import type { Expense } from "@/types/expense";
 import ModalFrame from "@/components/taskmanager/ModalFrame";
 import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
@@ -110,6 +111,7 @@ interface ExpenseModalProps {
     fileAction: { action: "upload" | "remove" | "keep"; file?: File }
   ) => Promise<void>;
   onDelete: (expenseId: string) => Promise<void>;
+  zClassName?: string;
 }
 
 // --- Constants ---
@@ -295,11 +297,15 @@ function InvoicePreviewPanel({
 
         {/* Image preview */}
         {blobUrl && isImage && (
-          <img
-            src={blobUrl}
-            alt="Invoice preview"
-            className="max-w-full max-h-full object-contain rounded-lg"
-          />
+          <div className="relative w-full h-full min-h-[200px]">
+            <Image
+              src={blobUrl}
+              alt="Invoice preview"
+              fill
+              unoptimized
+              className="object-contain rounded-lg"
+            />
+          </div>
         )}
 
         {/* Unsupported type */}
@@ -333,6 +339,7 @@ export default function ExpenseModal({
   onClose,
   onSave,
   onDelete,
+  zClassName,
 }: ExpenseModalProps) {
   // --- Form state ---
   const [item, setItem] = useState("");
@@ -543,6 +550,7 @@ export default function ExpenseModal({
         onClose={onClose}
         maxWidthClassName={hasFile ? "max-w-6xl" : "max-w-md"}
         sidePanel={sidePanel}
+        zClassName={zClassName}
       >
         <div className="space-y-3">
           {/* Item */}
@@ -626,8 +634,8 @@ export default function ExpenseModal({
               Invoice Attachment
             </span>
 
-            {/* Existing file bar */}
-            {hasExistingFile && invoiceAction !== "remove" && (
+            {/* Existing file bar (hide when new file selected for replacement) */}
+            {hasExistingFile && invoiceAction !== "remove" && !invoiceFile && (
               <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/60">
                 <div className="flex items-center gap-2 min-w-0">
                   <FileIcon className="h-4 w-4 shrink-0 text-zinc-400" />
@@ -660,14 +668,19 @@ export default function ExpenseModal({
 
             {/* New file bar */}
             {invoiceFile && (
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 dark:border-emerald-800 dark:bg-emerald-900/20">
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-800 dark:bg-amber-900/20">
                 <div className="flex items-center gap-2 min-w-0">
-                  <FileIcon className="h-4 w-4 shrink-0 text-emerald-500" />
+                  <FileIcon className="h-4 w-4 shrink-0 text-amber-500" />
                   <div className="min-w-0">
-                    <span className="text-sm text-emerald-700 dark:text-emerald-300 truncate block">
-                      {invoiceFile.name}
-                    </span>
-                    <span className="text-xs text-emerald-500/70">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-amber-700 dark:text-amber-300 truncate block">
+                        {invoiceFile.name}
+                      </span>
+                      <span className="inline-flex items-center shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:bg-amber-800 dark:text-amber-200">
+                        Unsaved
+                      </span>
+                    </div>
+                    <span className="text-xs text-amber-500/70">
                       {formatBytes(invoiceFile.size)}
                     </span>
                   </div>
@@ -676,7 +689,7 @@ export default function ExpenseModal({
                   type="button"
                   onClick={handleRemoveFile}
                   disabled={isSaving}
-                  className="p-1 rounded-md text-emerald-500 hover:text-red-500 hover:bg-emerald-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40"
+                  className="p-1 rounded-md text-amber-500 hover:text-red-500 hover:bg-amber-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40"
                   title="Remove selected file"
                 >
                   <XMarkIcon className="h-4 w-4" />
@@ -684,31 +697,42 @@ export default function ExpenseModal({
               </div>
             )}
 
-            {/* Upload drop zone (only when no new file selected) */}
-            {!invoiceFile && (
-              <label
-                className={`flex flex-col items-center justify-center gap-1 p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors
-                  ${isSaving
-                    ? "opacity-50 pointer-events-none border-zinc-300 dark:border-zinc-700"
-                    : "border-zinc-300 hover:border-emerald-500 hover:bg-emerald-50 dark:border-zinc-700 dark:hover:border-emerald-600 dark:hover:bg-emerald-900/10"
-                  }`}
-              >
-                <input
-                  type="file"
-                  accept={ALLOWED_EXTENSIONS}
-                  onChange={handleFileChange}
-                  disabled={isSaving}
-                  className="hidden"
-                />
-                <ArrowDownTrayIcon className="h-5 w-5 text-zinc-400" />
-                <span className="text-xs text-zinc-500 text-center">
-                  Drop invoice file or click to browse
-                </span>
-                <span className="text-xs text-zinc-400">
-                  PDF, JPEG, PNG, WEBP • Max 45 MB
-                </span>
-              </label>
-            )}
+            {/* Upload drop zone — always visible, label changes when file exists */}
+            <label
+              className={`flex flex-col items-center justify-center gap-1 p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors
+                ${isSaving
+                  ? "opacity-50 pointer-events-none border-zinc-300 dark:border-zinc-700"
+                  : "border-zinc-300 hover:border-emerald-500 hover:bg-emerald-50 dark:border-zinc-700 dark:hover:border-emerald-600 dark:hover:bg-emerald-900/10"
+                }`}
+            >
+              <input
+                type="file"
+                accept={ALLOWED_EXTENSIONS}
+                onChange={handleFileChange}
+                disabled={isSaving}
+                className="hidden"
+              />
+              <ArrowDownTrayIcon className="h-5 w-5 text-zinc-400" />
+              {invoiceFile || hasExistingFile ? (
+                <>
+                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium text-center">
+                    Replace file
+                  </span>
+                  <span className="text-xs text-zinc-400">
+                    Choose a different file to replace the current one
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-xs text-zinc-500 text-center">
+                    Drop invoice file or click to browse
+                  </span>
+                  <span className="text-xs text-zinc-400">
+                    PDF, JPEG, PNG, WEBP • Max 45 MB
+                  </span>
+                </>
+              )}
+            </label>
 
             {/* Encrypted storage notice */}
             <p className="text-xs text-zinc-400 flex items-center gap-1">

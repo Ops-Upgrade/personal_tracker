@@ -401,6 +401,7 @@ export default function ExpenseView() {
           onClose={() => setExpenseModalTarget(null)}
           onSave={handleExpenseSave}
           onDelete={handleExpenseDelete}
+          zClassName={fullMonthModal ? "z-[60]" : undefined}
         />
       )}
     </div>

@@ -8,6 +8,7 @@ interface ModalFrameProps {
   children: ReactNode;
   maxWidthClassName?: string;
   sidePanel?: ReactNode;
+  zClassName?: string;
 }
 
 export default function ModalFrame({
@@ -16,9 +17,10 @@ export default function ModalFrame({
   children,
   maxWidthClassName = "max-w-3xl",
   sidePanel,
+  zClassName = "z-40",
 }: ModalFrameProps) {
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-zinc-950/60 p-4">
+    <div className={`fixed inset-0 ${zClassName} flex items-center justify-center bg-zinc-950/60 p-4`}>
       <div
         className={`w-full ${maxWidthClassName} rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900`}
       >

@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { encryptField, decryptField } from "@/lib/crypto";
 import type { Expense, ExpensePlaintext } from "@/types/expense";
-import { deleteInvoice } from "./invoiceStorage";
 
 /**
  * Fetch all expenses for a user, decrypt each row, and return hydrated Expense[].
