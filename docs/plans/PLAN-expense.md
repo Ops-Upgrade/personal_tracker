@@ -973,3 +973,123 @@ Behaviour:
 - [ ] PDF preview → iframe renders correctly
 - [ ] Image preview → img renders correctly
 - [ ] `ModalFrame` with no `sidePanel` → identical to current behaviour (no regressions)
+
+# Plan: Expense Tracker — View-All Modal Z-Index, PDF Upload UX, and Column Sort
+
+**Date**: 2026-07-04
+**Status**: Draft
+
+## Goal
+
+Fix four bugs / add one feature in the expense tracker UI:
+
+1. **ExpenseModal hidden behind FullMonthModal** — clicking an expense row in the "View All" full-screen modal opens the ExpenseModal _behind_ it because FullMonthModal is `z-50` and ModalFrame is `z-40`.
+2. **PDF upload "unsaved" indicator** — after selecting a file, nothing tells the user it isn't persisted yet. Show a clear "unsaved" badge so users know they must press Save.
+3. **Upload drop zone disappears** — the upload zone is hidden the moment a file is selected (`!invoiceFile` guard on line 688). It should remain visible (or a "Replace" button should appear) so users can swap the file.
+4. **Column sorting** — neither the inline preview (`MonthRow` → `ExpenseTable`) nor the full-month modal table supports clicking a column header to sort.
+
+---
+
+## Reusable Inventory (from existing codebase)
+
+| Element | Path | How it's reused |
+|---------|------|-----------------|
+| `ModalFrame` | `src/components/taskmanager/ModalFrame.tsx` | Provides the z-index backdrop for ExpenseModal. The z-index will be made configurable. |
+| `ExpenseTable` | `src/components/expense/ExpenseTable.tsx` | The shared table component that will receive sort state/callbacks. |
+| `FullMonthModal` | `src/components/expense/FullMonthModal.tsx` | The z-50 full-screen overlay. Sort state will be managed here and forwarded to ExpenseTable. |
+| `MonthRow` | `src/components/expense/MonthRow.tsx` | The inline preview row. Sort state will be managed here and forwarded to ExpenseTable. |
+| `ExpenseModal` | `src/components/expense/ExpenseModal.tsx` | Where PDF upload UX changes happen. |
+| `Expense` type | `src/types/expense.ts` | Defines sortable fields (item, seller, cost, date, reason). |
+
+## Package Decisions
+
+No new packages required. All changes are pure React/TypeScript/Tailwind within the existing codebase.
+
+## ⚠️ Flagged Observations
+
+None — all four items are straightforward bug fixes / enhancements.
+
+---
+
+## Phases & Tasks
+
+### Phase 1 — Fix ExpenseModal Z-Index Stacking
+
+#### Task 1.1 — Add `zClassName` prop to ModalFrame
+
+- **What**: Add an optional `zClassName` prop (default `"z-40"`) to `ModalFrame`, replacing the hardcoded `z-40` on the outer `<div>`.
+- **Where**: [ModalFrame.tsx](file:///e:/Projects/personal_tracker/src/components/taskmanager/ModalFrame.tsx)
+- **Why**: `FullMonthModal` uses `z-50`. The `ExpenseModal` (via `ModalFrame`) uses `z-40`, so it renders behind. We need a way to push `ExpenseModal` to `z-60` when opened from within `FullMonthModal`.
+- **Reuse**: Existing `ModalFrame` component — backwards-compatible change.
+- **New Artifacts**: None (extending existing component).
+- **Depends on**: Nothing.
+
+#### Task 1.2 — Pass `z-60` from ExpenseModal when FullMonthModal is open
+
+- **What**: In `ExpenseView`, detect when `fullMonthModal` is truthy AND `expenseModalTarget` is set simultaneously. Pass a higher z-index class (`z-60`) to `ExpenseModal` → `ModalFrame` so it renders above `FullMonthModal`.
+- **Where**: [ExpenseView.tsx](file:///e:/Projects/personal_tracker/src/components/expense/ExpenseView.tsx) (lines 388–405) and [ExpenseModal.tsx](file:///e:/Projects/personal_tracker/src/components/expense/ExpenseModal.tsx) (line 541).
+- **Why**: The modal stacking must be dynamic — `z-40` is fine when opened from the main view, but needs `z-60` when opened from within the `z-50` FullMonthModal.
+- **Reuse**: The new `zClassName` prop from Task 1.1.
+- **New Artifacts**: None.
+- **Depends on**: Task 1.1.
+
+---
+
+### Phase 2 — PDF Upload UX Improvements
+
+#### Task 2.1 — Add "Unsaved" indicator badge to the new file bar
+
+- **What**: When `invoiceFile` is set (a new file selected but not yet saved), show a visible amber/yellow "Unsaved" badge or pill next to the file info in the new file bar (line 662–685 of `ExpenseModal.tsx`). This communicates to the user that pressing Save will upload the file.
+- **Where**: [ExpenseModal.tsx](file:///e:/Projects/personal_tracker/src/components/expense/ExpenseModal.tsx) (lines 662–685, the new file bar).
+- **Why**: Users see the file appear in a green-bordered bar but have no visual cue that it hasn't been uploaded yet.
+- **Reuse**: Existing inline SVG icons, Tailwind utility classes.
+- **New Artifacts**: None.
+- **Depends on**: Nothing.
+
+#### Task 2.2 — Keep upload drop zone visible (as "Replace" action) after file selection
+
+- **What**: Remove the `!invoiceFile` guard on the upload drop zone (line 688). Instead, always render the upload zone but change its label to "Replace file" when `invoiceFile` is already set or when an existing file is present. When a new file is picked in "Replace" mode, swap `invoiceFile` state to the new file.
+- **Where**: [ExpenseModal.tsx](file:///e:/Projects/personal_tracker/src/components/expense/ExpenseModal.tsx) (lines 687–711).
+- **Why**: Currently the upload button vanishes once 1 file is selected. The user loses the ability to swap without first removing the file.
+- **Reuse**: Same `handleFileChange` handler.
+- **New Artifacts**: None.
+- **Depends on**: Nothing.
+
+---
+
+### Phase 3 — Column Sort Feature
+
+#### Task 3.1 — Add sort state and sorting logic to ExpenseTable
+
+- **What**: Add `sortColumn` and `sortDirection` state management to `ExpenseTable`. Make each column header (`Item`, `Seller`, `Cost`, `Date`, `Reason`) clickable. Clicking toggles between ascending, descending, and default (no sort). Add a sort indicator arrow (▲/▼) next to the active column header. Sort the expense list in `useMemo` based on the current sort state before rendering rows. The Invoice column is not sortable.
+- **Where**: [ExpenseTable.tsx](file:///e:/Projects/personal_tracker/src/components/expense/ExpenseTable.tsx)
+- **Why**: Users need to quickly find expenses by different attributes without scrolling through unsorted data.
+- **Reuse**: Existing `Expense` type fields for sort keys.
+- **New Artifacts**: None.
+- **Depends on**: Nothing.
+
+#### Task 3.2 — Verify sort works in both MonthRow preview and FullMonthModal
+
+- **What**: Since `ExpenseTable` will now manage its own sort state internally, both `MonthRow` (preview with 5 items) and `FullMonthModal` (all items) will automatically get sort functionality with no extra wiring. The parent components pass in their pre-sorted arrays, and `ExpenseTable` will re-sort based on user clicks. Verify that `MonthRow`'s preview slicing (first 5 by date desc) interacts correctly — the sort should apply _within_ the 5 items shown. This is a verification task, not a code change.
+- **Where**: [MonthRow.tsx](file:///e:/Projects/personal_tracker/src/components/expense/MonthRow.tsx), [FullMonthModal.tsx](file:///e:/Projects/personal_tracker/src/components/expense/FullMonthModal.tsx)
+- **Why**: Confirm the feature works end-to-end in both usage contexts without regressions.
+- **Reuse**: Task 3.1's internal sort state in `ExpenseTable`.
+- **New Artifacts**: None.
+- **Depends on**: Task 3.1.
+
+---
+
+## New Reusable Components Introduced
+
+| Component | Path | Purpose | Reusable for |
+|-----------|------|---------|--------------|
+| `zClassName` prop on `ModalFrame` | `src/components/taskmanager/ModalFrame.tsx` | Dynamic z-index layering | Any future stacked-modal scenario |
+| Sort logic in `ExpenseTable` | `src/components/expense/ExpenseTable.tsx` | Self-contained clickable column sort | Any table that reuses this component |
+
+## Verification Plan
+
+- [ ] **Phase 1**: From the main expense view, open a month's "View All" modal → click an expense row → confirm ExpenseModal renders on top of FullMonthModal, is fully interactive, and closing it returns to the FullMonthModal (not the main view).
+- [ ] **Phase 2a**: Open ExpenseModal (create or edit) → upload a file → confirm an "Unsaved" badge is visible on the file bar → press Save → confirm the badge is gone on re-open.
+- [ ] **Phase 2b**: Open ExpenseModal → upload a file → confirm the upload zone still shows as "Replace file" → pick another file → confirm the first is swapped → confirm for existing files (edit mode) the "Replace" zone is also available.
+- [ ] **Phase 3**: In the inline month preview, click each column header → verify sort toggles (asc → desc → default). In the FullMonthModal, do the same. Confirm the Invoice column is not sortable. Confirm sort indicators are visible.
+- [ ] Run `next build` to ensure no TypeScript or build errors.
