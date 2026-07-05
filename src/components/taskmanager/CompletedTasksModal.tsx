@@ -5,10 +5,13 @@ import { PRIORITIES } from "@/types/taskmanager";
 import ModalFrame from "./ModalFrame";
 import ViewToggle from "./ViewToggle";
 import MonthTile from "@/components/common/MonthTile";
+import PriorityBadge from "./PriorityBadge";
+import Button from "@/components/common/Button";
 import {
   byPriority,
   completedByMonths,
   formatShortDate,
+  getPriorityColor,
   sortByCompletedDesc,
   trunc,
 } from "./helpers";
@@ -21,10 +24,6 @@ interface CompletedTasksModalProps {
   onClose: () => void;
   onSelectTask: (task: Task) => void;
   onReopenTask: (task: Task) => void;
-}
-
-function prettyPriority(priority: string): string {
-  return priority[0].toUpperCase() + priority.slice(1);
 }
 
 export default function CompletedTasksModal({
@@ -54,40 +53,40 @@ export default function CompletedTasksModal({
           PRIORITIES.map((priority) => {
             const group = [...priorityGroups[priority]].sort(sortByCompletedDesc);
             if (group.length === 0) return null;
+            const colors = getPriorityColor(priority);
+
             return (
               <section
                 key={priority}
-                className="rounded-lg border border-zinc-200 p-2 dark:border-zinc-700"
+                className={`rounded-lg border ${colors.border} ${colors.bg} p-2`}
               >
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">
-                  {prettyPriority(priority)}
+                <h3 className="mb-2">
+                  <PriorityBadge priority={priority} />
                 </h3>
                 <div className="space-y-2">
                   {group.map((task) => (
                     <div
                       key={task.id}
-                      className="grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-xs dark:border-zinc-700"
+                      className={`grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm dark:border-zinc-700 border-l-[3px] ${colors.border}`}
                     >
                       <button
                         type="button"
                         onClick={() => onSelectTask(task)}
-                        className="col-span-6 text-left font-medium text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+                        className="col-span-6 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
                       >
                         {trunc(task.name, 52)}
                       </button>
                       <span className="col-span-3 text-zinc-600 dark:text-zinc-300">
                         {formatShortDate(task.completed_at)}
                       </span>
-                      <span className="col-span-2 text-zinc-600 dark:text-zinc-300">
-                        {prettyPriority(task.priority)}
-                      </span>
-                      <button
-                        type="button"
+                      <Button
+                        variant="danger"
+                        size="sm"
                         onClick={() => onReopenTask(task)}
-                        className="col-span-1 cursor-pointer text-right text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+                        className="col-span-3 text-right"
                       >
-                        {"< Reopen"}
-                      </button>
+                        Reopen
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -96,38 +95,46 @@ export default function CompletedTasksModal({
           })}
 
         {view === "months" &&
-          monthGroups.map((group) => (
+          monthGroups.map((group, index) => (
             <MonthTile
               key={group.label}
               title={group.label}
-              alwaysExpanded
+              defaultExpanded={index === 0}
+              accent
               className="text-sm"
             >
               <div className="space-y-2">
-                {group.tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-xs dark:border-zinc-700"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onSelectTask(task)}
-                      className="col-span-7 text-left font-medium text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+                {group.tasks.map((task) => {
+                  const colors = getPriorityColor(task.priority);
+                  return (
+                    <div
+                      key={task.id}
+                      className={`grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm dark:border-zinc-700 border-l-[3px] ${colors.border}`}
                     >
-                      {trunc(task.name, 58)}
-                    </button>
-                    <span className="col-span-3 text-zinc-600 dark:text-zinc-300">
-                      {formatShortDate(task.completed_at)}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onReopenTask(task)}
-                      className="col-span-2 cursor-pointer text-right text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
-                    >
-                      {"< Reopen"}
-                    </button>
-                  </div>
-                ))}
+                      <button
+                        type="button"
+                        onClick={() => onSelectTask(task)}
+                        className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+                      >
+                        {trunc(task.name, 42)}
+                      </button>
+                      <span className="col-span-2">
+                        <PriorityBadge priority={task.priority} />
+                      </span>
+                      <span className="col-span-3 text-zinc-600 dark:text-zinc-300">
+                        {formatShortDate(task.completed_at)}
+                      </span>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => onReopenTask(task)}
+                        className="col-span-3 text-right"
+                      >
+                        Reopen
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             </MonthTile>
           ))}

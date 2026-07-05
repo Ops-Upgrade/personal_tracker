@@ -1,6 +1,7 @@
 "use client";
 
 import type { Expense } from "@/types/expense";
+import Button from "@/components/common/Button";
 import ExpenseTable from "./ExpenseTable";
 import MonthTile from "@/components/common/MonthTile";
 
@@ -47,26 +48,26 @@ export default function MonthRow({
       }
       accent={total > 0}
       headerActions={
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="md"
           onClick={(e) => {
             e.stopPropagation();
             onAdd();
           }}
-          className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
         >
           + Add
-        </button>
+        </Button>
       }
       footerActions={
         expenses.length > 0 ? (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onViewAll}
-            className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
           >
-            {">> View All"}
-          </button>
+            View All
+          </Button>
         ) : undefined
       }
     >

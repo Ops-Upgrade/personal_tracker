@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Note } from "@/types/taskmanager";
+import Button from "@/components/common/Button";
 import ConfirmDialog from "./ConfirmDialog";
 import ModalFrame from "./ModalFrame";
 
@@ -77,31 +78,31 @@ export default function NoteModal({ note, onClose, onSave, onDelete }: NoteModal
 
           <div className="flex justify-end gap-2">
             {note && (
-              <button
-                type="button"
+              <Button
+                variant="danger"
+                size="md"
                 onClick={() => setShowDeleteConfirm(true)}
                 disabled={isSaving}
-                className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"
               >
                 Delete
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="md"
               onClick={onClose}
               disabled={isSaving}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
               onClick={handleSave}
               disabled={isSaving}
-              className="rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
               Save
-            </button>
+            </Button>
           </div>
         </div>
       </ModalFrame>

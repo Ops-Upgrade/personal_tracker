@@ -12,6 +12,8 @@ import {
 } from "@/api/expense";
 import type { Expense, ExpensePlaintext } from "@/types/expense";
 import { MONTHS } from "@/types/expense";
+import Button from "@/components/common/Button";
+import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import ExpenseModal from "./ExpenseModal";
 import FullMonthModal from "./FullMonthModal";
 import MonthRow from "./MonthRow";
@@ -332,38 +334,41 @@ export default function ExpenseView() {
       {error && (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
           <span>{error}</span>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => userId && refreshData(userId)}
-            className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/40"
+            className="border border-red-300 hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/40"
           >
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Month rows */}
       {!isLoading && (
-        <div className="grid grid-cols-1 items-start gap-4">
-          {expensesByMonth.map(({ monthName, monthIndex, expenses: monthExpenses }) => (
-            <MonthRow
-              key={monthName}
-              monthName={monthName}
-              monthIndex={monthIndex}
-              year={selectedYear}
-              expenses={monthExpenses}
-              onAdd={() => {
-                const mm = String(monthIndex + 1).padStart(2, "0");
-                setExpenseModalTarget({
-                  mode: "create",
-                  defaultDate: `${selectedYear}-${mm}-01`,
-                });
-              }}
-              onSelectExpense={(expense) => setExpenseModalTarget(expense)}
-              onViewAll={() => openFullMonthModal(monthIndex)}
-            />
-          ))}
-        </div>
+        <BoxContainer>
+          <div className={`${SCROLLABLE_CLASSES} grid grid-cols-1 items-start gap-4`}>
+            {expensesByMonth.map(({ monthName, monthIndex, expenses: monthExpenses }) => (
+              <MonthRow
+                key={monthName}
+                monthName={monthName}
+                monthIndex={monthIndex}
+                year={selectedYear}
+                expenses={monthExpenses}
+                onAdd={() => {
+                  const mm = String(monthIndex + 1).padStart(2, "0");
+                  setExpenseModalTarget({
+                    mode: "create",
+                    defaultDate: `${selectedYear}-${mm}-01`,
+                  });
+                }}
+                onSelectExpense={(expense) => setExpenseModalTarget(expense)}
+                onViewAll={() => openFullMonthModal(monthIndex)}
+              />
+            ))}
+          </div>
+        </BoxContainer>
       )}
 
       {/* Full Month Modal */}

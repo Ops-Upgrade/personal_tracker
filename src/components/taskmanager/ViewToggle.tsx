@@ -19,7 +19,7 @@ export default function ViewToggle({ value, onChange }: ViewToggleProps) {
         role="tab"
         aria-selected={value === "months"}
         onClick={() => onChange("months")}
-        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+        className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
           value === "months"
             ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
             : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -32,7 +32,7 @@ export default function ViewToggle({ value, onChange }: ViewToggleProps) {
         role="tab"
         aria-selected={value === "priority"}
         onClick={() => onChange("priority")}
-        className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+        className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
           value === "priority"
             ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
             : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"

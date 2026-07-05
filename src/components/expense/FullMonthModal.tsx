@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import type { Expense } from "@/types/expense";
+import Button from "@/components/common/Button";
 import ExpenseTable from "./ExpenseTable";
 
 interface FullMonthModalProps {
@@ -76,7 +77,7 @@ export default function FullMonthModal({
             <button
               type="button"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-300 text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+              className="cursor-pointer flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-300 text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
               aria-label="Close"
             >
               <svg
@@ -112,13 +113,13 @@ export default function FullMonthModal({
           <p className="text-xs text-zinc-500 dark:text-zinc-500">
             Click any row to view or edit · Press Esc to close
           </p>
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="md"
             onClick={onClose}
-            className="rounded-lg border border-zinc-300 px-4 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
             Close
-          </button>
+          </Button>
         </footer>
       </div>
     </div>
