@@ -1,7 +1,9 @@
 "use client";
 
 import type { Task } from "@/types/taskmanager";
-import { formatShortDate, sortByCompletedDesc, trunc } from "./helpers";
+import Button from "@/components/common/Button";
+import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
+import { formatShortDate, getPriorityColor, sortByCompletedDesc, trunc } from "./helpers";
 
 interface CompletedTasksBoxProps {
   tasks: Task[];
@@ -21,21 +23,21 @@ export default function CompletedTasksBox({
   const sorted = [...tasks].sort(sortByCompletedDesc);
 
   return (
-    <article className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <BoxContainer>
       <header className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           Completed
         </h2>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onOpenExpanded}
           disabled={isLoading}
-          className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
         >
-          {">>View all"}
-        </button>
+          View all
+        </Button>
       </header>
-      <div className="h-52 space-y-1 overflow-y-auto rounded-lg border border-zinc-200 p-2 dark:border-zinc-800">
+      <div className={`${SCROLLABLE_CLASSES} space-y-1 rounded-lg border border-zinc-200 p-2 dark:border-zinc-800`}>
         {isLoading && (
           <div className="text-sm text-zinc-500 dark:text-zinc-400">Loading...</div>
         )}
@@ -43,31 +45,40 @@ export default function CompletedTasksBox({
           <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
         )}
         {!isLoading &&
-          sorted.map((task) => (
-          <div
-            key={task.id}
-            className="grid grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-xs dark:border-zinc-700"
-          >
-            <button
-              type="button"
-              onClick={() => onSelectTask(task)}
-              className="col-span-7 text-left font-medium text-zinc-700 hover:text-zinc-900 dark:text-zinc-200 dark:hover:text-zinc-100"
-            >
-              {trunc(task.name, 44)}
-            </button>
-            <div className="col-span-3 text-right text-[11px] text-zinc-500 dark:text-zinc-400">
-              {formatShortDate(task.completed_at)}
-            </div>
-            <button
-              type="button"
-              onClick={() => onReopenTask(task)}
-              className="col-span-2 cursor-pointer whitespace-nowrap text-right text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
-            >
-              {"< Reopen"}
-            </button>
-          </div>
-          ))}
+          sorted.map((task) => {
+            const colors = getPriorityColor(task.priority);
+            return (
+              <div
+                key={task.id}
+                className="grid grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-sm dark:border-zinc-700"
+              >
+                {/* Priority dot */}
+                <span
+                  className={`col-span-1 inline-block h-2 w-2 rounded-full ${colors.dot}`}
+                  aria-hidden="true"
+                />
+                <button
+                  type="button"
+                  onClick={() => onSelectTask(task)}
+                  className="col-span-6 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+                >
+                  {trunc(task.name, 44)}
+                </button>
+                <div className="col-span-3 text-right text-zinc-600 dark:text-zinc-300">
+                  {formatShortDate(task.completed_at)}
+                </div>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => onReopenTask(task)}
+                  className="col-span-2 text-right"
+                >
+                  Reopen
+                </Button>
+              </div>
+            );
+          })}
       </div>
-    </article>
+    </BoxContainer>
   );
 }

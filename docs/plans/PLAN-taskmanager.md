@@ -481,3 +481,31 @@ src/
 | 2026-04-12 | **Task field naming update**: Renamed task `note` to `description` (Task Description) in task data model, task modal, task row rendering, and taskmanager docs. |
 | 2026-04-12 | **Task manager UX update**: Active task priority/month groups now always render (empty groups show `None`), active task rows include quick Complete action, and completed-task compact list now shows completion date alongside task name. |
 | 2026-04-12 | **Task row action polish**: Quick complete action styled as hyperlink (`Complete >`); completed rows now use bordered two-column layout (name/date) and include quick `< Reopen` action in both compact and expanded views. |
+
+---
+
+## Extensions — UX Polish (Font Visibility, Collapsible Months & Priority Color Coding)
+
+### Goal
+Improve the Task Manager's visual clarity and user experience by fixing poor font visibility, making month sections collapsible, and adding impactful priority color coding.
+
+### Reusable Inventory
+- `MonthTile` (`src/components/common/MonthTile.tsx`)
+- `PRIORITIES` const (`src/types/taskmanager.ts`)
+
+### New Components & Utilities
+- `PriorityBadge` (`src/components/taskmanager/PriorityBadge.tsx`)
+- `getPriorityColor()` (`src/components/taskmanager/helpers.ts`)
+
+### Phases & Tasks
+#### Phase 1 — Priority Color System & Badge Component
+- **What**: Create `getPriorityColor()` and `PriorityBadge.tsx` to standardize priority visuals.
+
+#### Phase 2 — Font Visibility Fix
+- **What**: Increase task card font size (`text-xs` → `text-sm`) and color contrast (`text-zinc-500` → `text-zinc-700`) across all Task Manager boxes and modals.
+
+#### Phase 3 — Apply Priority Colour Coding
+- **What**: Replace plain `prettyPriority()` text with `PriorityBadge`. Add colored left-borders (`border-l-[3px]`) to task cards.
+
+#### Phase 4 — Collapsible Month Sections
+- **What**: Stop passing `alwaysExpanded` to `MonthTile`. Use `defaultExpanded` for the current month. Add accent borders to non-empty month tiles.

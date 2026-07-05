@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import type { Expense } from "@/types/expense";
+import Button from "@/components/common/Button";
 import ModalFrame from "@/components/taskmanager/ModalFrame";
 import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
 
@@ -246,7 +247,7 @@ function InvoicePreviewPanel({
           type="button"
           onClick={onDownload}
           disabled={isDownloading}
-          className="p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40"
+          className="cursor-pointer p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40"
           title="Download invoice"
         >
           <ArrowDownTrayIcon className="h-4 w-4" />
@@ -260,7 +261,7 @@ function InvoicePreviewPanel({
           <button
             type="button"
             onClick={handleLoadPreview}
-            className="flex flex-col items-center gap-2 text-zinc-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 transition-colors"
+            className="cursor-pointer flex flex-col items-center gap-2 text-zinc-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 transition-colors"
           >
             <DocumentIcon className="h-10 w-10" />
             <span className="text-sm font-medium">Click to load preview</span>
@@ -648,7 +649,7 @@ export default function ExpenseModal({
                     type="button"
                     onClick={handleDownload}
                     disabled={isSaving || isDownloading}
-                    className="p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40"
+                    className="cursor-pointer p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40"
                     title="Download invoice"
                   >
                     <ArrowDownTrayIcon className="h-4 w-4" />
@@ -657,7 +658,7 @@ export default function ExpenseModal({
                     type="button"
                     onClick={handleRemoveFile}
                     disabled={isSaving}
-                    className="p-1 rounded-md text-zinc-400 hover:text-red-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40"
+                    className="cursor-pointer p-1 rounded-md text-zinc-400 hover:text-red-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40"
                     title="Remove invoice"
                   >
                     <XMarkIcon className="h-4 w-4" />
@@ -689,7 +690,7 @@ export default function ExpenseModal({
                   type="button"
                   onClick={handleRemoveFile}
                   disabled={isSaving}
-                  className="p-1 rounded-md text-amber-500 hover:text-red-500 hover:bg-amber-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40"
+                  className="cursor-pointer p-1 rounded-md text-amber-500 hover:text-red-500 hover:bg-amber-200 dark:hover:bg-zinc-700 transition-colors disabled:opacity-40"
                   title="Remove selected file"
                 >
                   <XMarkIcon className="h-4 w-4" />
@@ -752,28 +753,28 @@ export default function ExpenseModal({
           {/* Action buttons */}
           <div className="flex justify-end gap-2 pt-2">
             {isEditing && (
-              <button
-                type="button"
+              <Button
+                variant="danger"
+                size="md"
                 onClick={() => setShowDeleteConfirm(true)}
                 disabled={isSaving}
-                className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950/30"
               >
                 Delete
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
+            <Button
+              variant="secondary"
+              size="md"
               onClick={onClose}
               disabled={isSaving}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
               Cancel
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
               onClick={handleSave}
               disabled={isSaving}
-              className="rounded-lg border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
             >
               {isSaving ? (
                 <span className="flex items-center gap-1">
@@ -783,7 +784,7 @@ export default function ExpenseModal({
               ) : (
                 "Save"
               )}
-            </button>
+            </Button>
           </div>
         </div>
       </ModalFrame>
