@@ -66,7 +66,10 @@ export default async function DashboardPage() {
         </Link>
 
         {/* Expenses Card */}
-        <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <Link
+          href={ROUTES.EXPENSE}
+          className="rounded-xl border border-emerald-200 bg-white p-6 shadow-sm transition hover:border-emerald-300 hover:shadow-md dark:border-emerald-900/60 dark:bg-zinc-900 dark:hover:border-emerald-800"
+        >
           <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
             <svg
               className="h-5 w-5 text-emerald-600 dark:text-emerald-400"
@@ -89,11 +92,11 @@ export default async function DashboardPage() {
             Track and categorize your spending.
           </p>
           <div className="mt-4">
-            <span className="inline-block rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-              Coming soon
+            <span className="inline-block rounded-full bg-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+              Open feature
             </span>
           </div>
-        </div>
+        </Link>
 
         {/* Analytics Card */}
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

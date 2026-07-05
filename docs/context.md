@@ -38,6 +38,7 @@ src/
 │   │   ├── layout.tsx          # Session check + Navbar + CryptoProvider
 │   │   ├── dashboard/          # Landing page after login
 │   │   ├── taskmanager/        # Task manager feature page
+│   │   ├── expense/            # Expense tracker feature page
 │   │   └── settings/
 │   │       └── change-password/ # Change password page
 │   └── api/auth/callback/      # Supabase auth callback endpoint
@@ -50,11 +51,15 @@ src/
 │   │   ├── tasks.ts            # encrypted CRUD for tasks table
 │   │   ├── notes.ts            # encrypted CRUD for notes table
 │   │   └── index.ts            # taskmanager sub-barrel
+│   ├── expense/
+│   │   ├── expenses.ts         # encrypted CRUD for expenses table
+│   │   └── index.ts            # expense sub-barrel
 │   └── index.ts                # Barrel export
 ├── components/                 # Reusable UI
 │   ├── auth/                   # LoginForm, ChangePasswordForm
 │   ├── layout/                 # Navbar
-│   └── taskmanager/            # Task manager feature components + helpers
+│   ├── taskmanager/            # Task manager feature components + helpers
+│   └── expense/               # Expense tracker feature components
 ├── lib/                        # Core utilities
 │   ├── crypto/                 # Client-side encryption (see below)
 │   │   ├── primitives.ts       # Web Crypto + Argon2id wrappers
@@ -76,7 +81,8 @@ src/
 - Env var is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not legacy `ANON_KEY`).
 - Database schema and RLS are documented in [`schema.md`](./schema.md).
 - Crypto implementation plan and progress tracked in [`PLAN-crypto.md`](./PLAN-crypto.md).
-- Task Manager feature plan and progress tracked in [`docs/PLAN-taskmanager.md`](./docs/PLAN-taskmanager.md).
+- Task Manager feature plan and progress tracked in [`PLAN-taskmanager.md`](./PLAN-taskmanager.md).
+- Expense Tracker feature plan and progress tracked in [`PLAN-expense.md`](./PLAN-expense.md).
 - **All pages must be responsive** (laptop + mobile). Use Tailwind breakpoints (`sm`, `md`, `lg`) — no fixed-width layouts.
 
 ---
@@ -143,12 +149,15 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-04-12 | Crypto Phase 7 completed and verified via Task Manager feature integration (encrypted `tasks` + `notes` tables). API layer refactored into feature subdirectories (`src/api/auth/*`, `src/api/taskmanager/*`). |
 | 2026-04-12 | Task Manager feature F1.1–F1.10 completed: `/taskmanager` route, modular UI components, active/completed dual views, hash-modals, task/note CRUD, dashboard-tile entry integration, responsive + loading/error polish. |
 | 2026-04-12 | Password change flow hardened with best-effort key rollback if Supabase auth update fails after DEK re-wrap. |
+| 2026-06-22 | Expense Tracker plan drafted (`PLAN-expense.md`). Minor navbar/layout visual polish. |
+| 2026-06-23 | Expense Tracker feature F2.1–F2.10 completed: `/expense` route, `expenses` table + RLS, encrypted CRUD API layer (`src/api/expense/`), 6 UI components (`ExpenseView`, `MonthRow`, `ExpenseTable`, `ExpenseModal`, `FullMonthModal`, `YearDropdown`), year-grouped calendar view with 12 month rows, inline expand/retract with 5-item preview, hash-based full-month modal, create/edit/delete with `ConfirmDialog`, ₹ formatting, dashboard tile integration, responsive layout, loading/error states. |
+| 2026-07-01 | Expense Tracker: month rows layout changed from vertical stack to 2-column grid (`lg:grid-cols-2`). Task Manager bug fix: fixed past-year tasks showing in current year section + server-side year fetching. |
+| 2026-07-02 | Expense Tracker invoice file upload completed: Added client-side encrypted file uploads for expense attachments, storage bucket RLS, and inline previews. |
 
 ---
 
 ## What's Not Built Yet
 
-- Expense tracking (UI + DB schema + encryption wiring)
 - Cross-subdomain deployment (config-only change when ready)
 - Analytics page
 - Phase 10: manual testing of crypto flows

@@ -4,6 +4,7 @@ import type { Task, TaskView } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
 import ModalFrame from "./ModalFrame";
 import ViewToggle from "./ViewToggle";
+import MonthTile from "@/components/common/MonthTile";
 import {
   byPriority,
   completedByMonths,
@@ -96,13 +97,12 @@ export default function CompletedTasksModal({
 
         {view === "months" &&
           monthGroups.map((group) => (
-            <section
+            <MonthTile
               key={group.label}
-              className="rounded-lg border border-zinc-200 p-2 dark:border-zinc-700"
+              title={group.label}
+              alwaysExpanded
+              className="text-sm"
             >
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">
-                {group.label}
-              </h3>
               <div className="space-y-2">
                 {group.tasks.map((task) => (
                   <div
@@ -129,7 +129,7 @@ export default function CompletedTasksModal({
                   </div>
                 ))}
               </div>
-            </section>
+            </MonthTile>
           ))}
       </div>
     </ModalFrame>

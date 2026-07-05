@@ -174,6 +174,84 @@ Future encrypted tables (e.g. expenses) should follow this same convention.
 
 ---
 
+## Storage Buckets
+
+### `expenses` bucket
+
+Private storage bucket for encrypted invoice file attachments. Files are client-side encrypted with the user's DEK before upload — Supabase never sees plaintext.
+
+| Setting | Value |
+|---------|-------|
+| **Bucket ID** | `expenses` |
+| **Public** | No (RLS enforced) |
+| **File path convention** | `invoice/<uuid>.enc` |
+| **Content-Type on upload** | `application/octet-stream` |
+| **Max file size** | 45 MB (client-side enforced) |
+
+#### DDL (source of truth — run in Supabase Dashboard SQL Editor)
+
+```sql
+-- 1. Create private storage bucket
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('expenses', 'expenses', false);
+
+-- 2. RLS: Authenticated users can upload to their own folder
+CREATE POLICY "Users upload their own invoices"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (
+    bucket_id = 'expenses'
+    AND auth.uid() IS NOT NULL
+);
+
+-- 3. RLS: Users can only read/download files they own
+CREATE POLICY "Users read their own invoices"
+ON storage.objects
+FOR SELECT
+TO authenticated
+USING (
+    bucket_id = 'expenses'
+    AND owner_id = auth.uid()::text
+);
+
+-- 4. RLS: Users can only delete files they own
+CREATE POLICY "Users delete their own invoices"
+ON storage.objects
+FOR DELETE
+TO authenticated
+USING (
+    bucket_id = 'expenses'
+    AND owner_id = auth.uid()::text
+);
+
+-- 5. RLS: Users can update (overwrite) files they own
+CREATE POLICY "Users update their own invoices"
+ON storage.objects
+FOR UPDATE
+TO authenticated
+USING (
+    bucket_id = 'expenses'
+    AND owner_id = auth.uid()::text
+);
+```
+
+> **Note:** Supabase auto-sets `owner_id` to `auth.uid()` on INSERT into `storage.objects`.
+
+---
+
+### Expense Blob Fields (Invoice Storage)
+
+The `ExpensePlaintext` encrypted blob includes three additional fields for invoice file storage:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `invoice_file` | `string` | Filename in bucket (e.g. `"<uuid>.enc"`), empty if no file attached |
+| `invoice_iv` | `string` | Base64 IV used to encrypt the file, empty if no file |
+| `invoice_mime` | `string` | Original MIME type (e.g. `"application/pdf"`), empty if no file |
+
+---
+
 ## Change log
 
 | Date       | Change |
