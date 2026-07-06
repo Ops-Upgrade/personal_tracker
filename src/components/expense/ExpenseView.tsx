@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ROUTES } from "@/routes/paths";
 import { getSession } from "@/api/auth";
 import {
   createExpense,
@@ -320,13 +322,20 @@ export default function ExpenseView() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-            Expenses
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Track and manage your spending.
-          </p>
+        <div className="flex flex-col items-start gap-4">
+          <Link
+            href={ROUTES.DASHBOARD}
+            className="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            ← Back
+          </Link>
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+              Expenses
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Track and manage your spending.
+            </p>
           {!isLoading && (
             <p className="mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
               Total for {selectedYear}:{" "}
@@ -335,8 +344,8 @@ export default function ExpenseView() {
               </span>
             </p>
           )}
+          </div>
         </div>
-
       </div>
 
       {/* Loading state */}

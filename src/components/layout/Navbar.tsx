@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { logout } from "@/api/auth";
 import { getServerDateIST, formatISTDisplay } from "@/api/serverDate";
 import { ROUTES } from "@/routes/paths";
@@ -22,9 +22,7 @@ interface NavbarProps {
  */
 export default function Navbar({ userEmail }: NavbarProps) {
   const router = useRouter();
-  const pathname = usePathname();
   const { resolvedTheme } = useTheme();
-  const showBackToDashboard = pathname !== ROUTES.DASHBOARD;
   const [dateDisplay, setDateDisplay] = useState<string>("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -64,14 +62,6 @@ export default function Navbar({ userEmail }: NavbarProps) {
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         {/* Left: App Logo */}
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          {showBackToDashboard && (
-            <Link
-              href={ROUTES.DASHBOARD}
-              className="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            >
-              ← Back
-            </Link>
-          )}
           <Link href={ROUTES.DASHBOARD} className="flex shrink-0 items-center">
             <Image
               src={logoSrc}
