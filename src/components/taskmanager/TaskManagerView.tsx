@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocalStorage } from "@/lib/useLocalStorage";
 import { getSession } from "@/api/auth";
 import { getServerYear } from "@/api/serverYear";
 import {
@@ -35,8 +36,8 @@ export default function TaskManagerView() {
   const [error, setError] = useState<string | null>(null);
   const [nowYear, setNowYear] = useState<number>(new Date().getFullYear());
 
-  const [activeView, setActiveView] = useState<TaskView>("months");
-  const [completedView, setCompletedView] = useState<TaskView>("months");
+  const [activeView, setActiveView] = useLocalStorage<TaskView>("taskManagerActiveView", "months");
+  const [completedView, setCompletedView] = useLocalStorage<TaskView>("taskManagerCompletedView", "months");
   const [expandedModal, setExpandedModal] = useState<"completed" | "notes" | null>(
     null
   );

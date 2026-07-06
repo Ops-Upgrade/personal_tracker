@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useLocalStorage } from "@/lib/useLocalStorage";
 import type { Expense } from "@/types/expense";
 
 // --- Inline SVG Icon Component ---
@@ -48,7 +49,11 @@ function SortableHeader({
       <span className="inline-flex items-center gap-1">
         {label}
         <span className="text-[9px] leading-none w-2 inline-block">
-          {isActive ? (sortState.direction === "asc" ? "▲" : "▼") : ""}
+          {isActive
+            ? sortState.direction === "asc"
+              ? "▲"
+              : "▼"
+            : "↕"}
         </span>
       </span>
     </th>
@@ -71,7 +76,7 @@ export default function ExpenseTable({
   expenses,
   onSelectExpense,
 }: ExpenseTableProps) {
-  const [sortState, setSortState] = useState<SortState | null>(null);
+  const [sortState, setSortState] = useLocalStorage<SortState | null>("expenseTableSortState", null);
 
   function handleSort(column: SortColumn) {
     setSortState((prev) => {
