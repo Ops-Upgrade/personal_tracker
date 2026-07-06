@@ -1,39 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+
+function readFromStorage<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw !== null) return JSON.parse(raw) as T;
+  } catch {
+    // Corrupt or unreadable entry – silently fall back to fallback
+  }
+  return fallback;
+}
 
 /**
  * A generic React hook that mimics `useState` but automatically persists the
  * value to `localStorage` whenever it changes.
  *
- * The hook reads the initial value from `localStorage` on mount. If no stored
- * value is found (or parsing fails), it falls back to `initialValue`.
+ * The initial value is read synchronously from `localStorage` via a lazy
+ * initializer – no effects, no cascading renders.
  *
- * Next.js SSR safety: `localStorage` is only accessed inside `useEffect` so
- * the server-rendered HTML always uses `initialValue`, avoiding hydration
+ * Next.js SSR safety: `localStorage` is guarded with a `typeof window` check
+ * so the server-rendered HTML always uses `initialValue`, avoiding hydration
  * mismatches.
  */
 export function useLocalStorage<T>(
   key: string,
   initialValue: T
 ): [T, (value: T | ((prev: T) => T)) => void] {
-  // --- Lazy initializer: always start with the default on first render ---
-  const [value, setValue] = useState<T>(initialValue);
+  const [value, setValue] = useState<T>(() => readFromStorage(key, initialValue));
 
-  // --- On mount (client-only), read the stored value if present ---
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(key);
-      if (raw !== null) {
-        const parsed = JSON.parse(raw) as T;
-        setValue(parsed);
-      }
-    } catch {
-      // Corrupt or unreadable entry – silently fall back to initialValue
-    }
-  }, [key]);
-
-  // --- Persist whenever value changes ---
+  // --- Persist to localStorage on every write ---
   const setStoredValue = useCallback(
     (next: T | ((prev: T) => T)) => {
       setValue((prev) => {

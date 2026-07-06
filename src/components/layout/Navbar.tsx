@@ -8,7 +8,6 @@ import { logout } from "@/api/auth";
 import { getServerDateIST, formatISTDisplay } from "@/api/serverDate";
 import { ROUTES } from "@/routes/paths";
 import { useTheme } from "@wrksz/themes/client";
-import Button, { getButtonClasses } from "@/components/common/Button";
 import ThemeSwitcher from "@/components/common/ThemeSwitcher";
 import { Menu, X } from "lucide-react";
 
