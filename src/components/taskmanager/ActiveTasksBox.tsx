@@ -2,12 +2,18 @@
 
 import type { Task, TaskView } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
-import ViewToggle from "./ViewToggle";
+import ViewToggle from "@/components/common/ViewToggle";
+import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import MonthTile from "@/components/common/MonthTile";
 import PriorityBadge from "./PriorityBadge";
 import Button from "@/components/common/Button";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import { activeByMonths, byPriority, getPriorityColor, trunc } from "./helpers";
+
+const TASK_VIEW_OPTIONS: readonly ViewToggleOption<TaskView>[] = [
+  { value: "months", label: "Months" },
+  { value: "priority", label: "Priority" },
+];
 
 interface ActiveTasksBoxProps {
   tasks: Task[];
@@ -51,7 +57,12 @@ export default function ActiveTasksBox({
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             Tasks
           </h2>
-          <ViewToggle value={view} onChange={onViewChange} />
+          <ViewToggle
+            value={view}
+            onChange={onViewChange}
+            options={TASK_VIEW_OPTIONS}
+            ariaLabel="Task view toggle"
+          />
         </div>
         <Button
           variant="secondary"

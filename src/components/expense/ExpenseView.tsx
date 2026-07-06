@@ -11,14 +11,25 @@ import {
   deleteInvoice,
 } from "@/api/expense";
 import { getServerDateIST, parseISTDate } from "@/api/serverDate";
-import type { Expense, ExpensePlaintext } from "@/types/expense";
+import type { Expense, ExpensePlaintext, ExpenseViewMode } from "@/types/expense";
 import { MONTHS } from "@/types/expense";
+import { useLocalStorage } from "@/lib/useLocalStorage";
+import ViewToggle from "@/components/common/ViewToggle";
+import type { ViewToggleOption } from "@/components/common/ViewToggle";
+import { RectangleVertical, Columns2 } from "lucide-react";
 import Button from "@/components/common/Button";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import ExpenseModal from "./ExpenseModal";
 import FullMonthModal from "./FullMonthModal";
 import MonthRow from "./MonthRow";
 import YearDropdown from "./YearDropdown";
+
+/** SVG icon symbols for the expense view toggle */
+const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
+  { value: "single", label: <RectangleVertical className="h-4 w-4" /> },
+  { value: "multi", label: <Columns2 className="h-4 w-4" /> },
+];
+
 
 /**
  * Expense Tracker feature shell.
@@ -33,6 +44,7 @@ export default function ExpenseView() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [viewMode, setViewMode] = useLocalStorage<ExpenseViewMode>("expenseViewMode", "single");
   const [fullMonthModal, setFullMonthModal] = useState<{
     monthIndex: number;
     year: number;
@@ -325,11 +337,6 @@ export default function ExpenseView() {
           )}
         </div>
 
-        <YearDropdown
-          years={availableYears}
-          selectedYear={selectedYear}
-          onChange={setSelectedYear}
-        />
       </div>
 
       {/* Loading state */}
@@ -357,7 +364,25 @@ export default function ExpenseView() {
       {/* Month rows */}
       {!isLoading && (
         <BoxContainer>
-          <div className={`${SCROLLABLE_CLASSES} grid grid-cols-1 items-start gap-4`}>
+          <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Months
+              </h2>
+              <ViewToggle
+                value={viewMode}
+                onChange={setViewMode}
+                options={EXPENSE_VIEW_OPTIONS}
+                ariaLabel="Expense view toggle"
+              />
+            </div>
+            <YearDropdown
+              years={availableYears}
+              selectedYear={selectedYear}
+              onChange={setSelectedYear}
+            />
+          </header>
+          <div className={`${SCROLLABLE_CLASSES} grid grid-cols-1 items-start gap-4 ${viewMode === "multi" ? "md:grid-cols-2" : ""}`}>
             {expensesByMonth.map(({ monthName, monthIndex, expenses: monthExpenses }) => {
               const isCurrentMonth =
                 istParsed !== null &&

@@ -2,8 +2,14 @@
 
 import type { Task, TaskView } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
+import type { ViewToggleOption } from "@/components/common/ViewToggle";
+
+const TASK_VIEW_OPTIONS: readonly ViewToggleOption<TaskView>[] = [
+  { value: "months", label: "Months" },
+  { value: "priority", label: "Priority" },
+];
 import ModalFrame from "./ModalFrame";
-import ViewToggle from "./ViewToggle";
+import ViewToggle from "@/components/common/ViewToggle";
 import MonthTile from "@/components/common/MonthTile";
 import PriorityBadge from "./PriorityBadge";
 import Button from "@/components/common/Button";
@@ -48,7 +54,12 @@ export default function CompletedTasksModal({
   return (
     <ModalFrame title="Completed Tasks" onClose={onClose}>
       <div className="mb-3">
-        <ViewToggle value={view} onChange={onViewChange} />
+        <ViewToggle
+          value={view}
+          onChange={onViewChange}
+          options={TASK_VIEW_OPTIONS}
+          ariaLabel="Task view toggle"
+        />
       </div>
 
       <div className="max-h-[65vh] space-y-3 overflow-y-auto rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
