@@ -1,5 +1,6 @@
-import Image from "next/image";
 import LoginForm from "@/components/auth/LoginForm";
+import ThemeSwitcher from "@/components/common/ThemeSwitcher";
+import LoginLogo from "./LoginLogo";
 
 export const metadata = {
   title: "Sign In — Ops Upgrade",
@@ -13,17 +14,15 @@ export const metadata = {
 export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
+      {/* Theme Switcher — top-right corner */}
+      <div className="absolute right-4 top-4">
+        <ThemeSwitcher />
+      </div>
+
       <div className="w-full max-w-sm space-y-8">
         {/* Header */}
         <div className="flex flex-col items-center gap-4">
-          <Image
-            src="/images/logo-with-name.png"
-            alt="Ops Upgrade"
-            width={200}
-            height={50}
-            priority
-            className="h-12 w-auto rounded"
-          />
+          <LoginLogo />
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Sign in to your account
           </p>

@@ -11,8 +11,10 @@
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
+    "@wrksz/themes": "^0.9.7",
     "clsx": "^2.1.1",
     "hash-wasm": "^4.12.0",
+    "lucide-react": "^1.23.0",
     "next": "16.2.10",
     "react": "19.2.3",
     "react-dom": "19.2.3"

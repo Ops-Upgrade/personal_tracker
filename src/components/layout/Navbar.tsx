@@ -5,7 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { logout } from "@/api/auth";
 import { ROUTES } from "@/routes/paths";
+import { useTheme } from "@wrksz/themes/client";
 import Button, { getButtonClasses } from "@/components/common/Button";
+import ThemeSwitcher from "@/components/common/ThemeSwitcher";
 
 interface NavbarProps {
   userEmail: string;
@@ -18,7 +20,13 @@ interface NavbarProps {
 export default function Navbar({ userEmail }: NavbarProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { resolvedTheme } = useTheme();
   const showBackToDashboard = pathname !== ROUTES.DASHBOARD;
+
+  const logoSrc =
+    resolvedTheme === "dark"
+      ? "/images/logo-with-name.png"
+      : "/images/logo-with-name-light.png";
 
   async function handleLogout() {
     await logout();
@@ -41,7 +49,7 @@ export default function Navbar({ userEmail }: NavbarProps) {
           )}
           <Link href={ROUTES.DASHBOARD} className="flex items-center">
             <Image
-              src="/images/logo-with-name.png"
+              src={logoSrc}
               alt="Ops Upgrade"
               width={160}
               height={40}
@@ -53,6 +61,7 @@ export default function Navbar({ userEmail }: NavbarProps) {
 
         {/* User Info + Actions */}
         <div className="flex items-center gap-4">
+          <ThemeSwitcher />
           <span className="hidden text-sm text-zinc-500 dark:text-zinc-400 sm:inline">
             {userEmail}
           </span>
