@@ -34,6 +34,8 @@ export interface MonthTileProps {
   alwaysExpanded?: boolean;
   /** Additional CSS class for the outer card */
   className?: string;
+  /** Whether to highlight this tile (e.g., current month) */
+  highlight?: boolean;
 }
 
 /**
@@ -55,6 +57,7 @@ export default function MonthTile({
   accentClassName = "border-l-blue-500 dark:border-l-blue-500",
   alwaysExpanded = false,
   className = "",
+  highlight = false,
 }: MonthTileProps) {
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
   const isControlled = controlledExpanded !== undefined;
@@ -91,7 +94,11 @@ export default function MonthTile({
 
   return (
     <div
-      className={`rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900/40 ${
+      className={`rounded-xl border shadow-sm ${
+        highlight
+          ? "border-yellow-300 bg-yellow-100 dark:border-yellow-500/20 dark:bg-yellow-500/10"
+          : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900/40"
+      } ${
         alwaysExpanded
           ? ""
           : "border-l-[4px] " +

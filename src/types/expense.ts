@@ -38,3 +38,7 @@ export interface Expense extends ExpensePlaintext {
   id: string;
   created_at: string;
 }
+
+// --- View toggle ---
+
+export type ExpenseViewMode = "single" | "multi";

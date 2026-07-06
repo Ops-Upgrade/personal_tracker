@@ -2,18 +2,25 @@
 
 import type { Task, TaskView } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
-import ViewToggle from "./ViewToggle";
+import ViewToggle from "@/components/common/ViewToggle";
+import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import MonthTile from "@/components/common/MonthTile";
 import PriorityBadge from "./PriorityBadge";
 import Button from "@/components/common/Button";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import { activeByMonths, byPriority, getPriorityColor, trunc } from "./helpers";
 
+const TASK_VIEW_OPTIONS: readonly ViewToggleOption<TaskView>[] = [
+  { value: "months", label: "Months" },
+  { value: "priority", label: "Priority" },
+];
+
 interface ActiveTasksBoxProps {
   tasks: Task[];
   isLoading: boolean;
   view: TaskView;
   nowYear: number;
+  nowMonth: number;
   onViewChange: (next: TaskView) => void;
   onAdd: () => void;
   onSelectTask: (task: Task) => void;
@@ -24,15 +31,17 @@ function dueDisplay(dueDate: string | null): string {
   return dueDate ?? "-";
 }
 
-const CURRENT_MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-}).format(new Date());
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 export default function ActiveTasksBox({
   tasks,
   isLoading,
   view,
   nowYear,
+  nowMonth,
   onViewChange,
   onAdd,
   onSelectTask,
@@ -48,7 +57,12 @@ export default function ActiveTasksBox({
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             Tasks
           </h2>
-          <ViewToggle value={view} onChange={onViewChange} />
+          <ViewToggle
+            value={view}
+            onChange={onViewChange}
+            options={TASK_VIEW_OPTIONS}
+            ariaLabel="Task view toggle"
+          />
         </div>
         <Button
           variant="secondary"
@@ -129,7 +143,7 @@ export default function ActiveTasksBox({
         {!isLoading &&
           view === "months" &&
           monthGroups.map((group) => {
-            const isCurrentMonth = group.label === CURRENT_MONTH_LABEL;
+            const isCurrentMonth = MONTH_NAMES[nowMonth] === group.label;
             return (
               <MonthTile
                 key={group.label}
@@ -137,6 +151,7 @@ export default function ActiveTasksBox({
                 defaultExpanded={isCurrentMonth}
                 accent={group.tasks.length > 0}
                 className="text-sm"
+                highlight={isCurrentMonth}
               >
                 {group.tasks.length === 0 ? (
                   <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>

@@ -1,8 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ROUTES } from "@/routes/paths";
+import { useLocalStorage } from "@/lib/useLocalStorage";
 import { getSession } from "@/api/auth";
-import { getServerYear } from "@/api/serverYear";
+import { getServerDateIST, parseISTDate } from "@/api/serverDate";
 import {
   createNote,
   createTask,
@@ -34,14 +37,16 @@ export default function TaskManagerView() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nowYear, setNowYear] = useState<number>(new Date().getFullYear());
+  const [nowMonth, setNowMonth] = useState<number>(new Date().getMonth());
 
-  const [activeView, setActiveView] = useState<TaskView>("months");
-  const [completedView, setCompletedView] = useState<TaskView>("months");
+  const [activeView, setActiveView] = useLocalStorage<TaskView>("taskManagerActiveView", "months");
+  const [completedView, setCompletedView] = useLocalStorage<TaskView>("taskManagerCompletedView", "months");
   const [expandedModal, setExpandedModal] = useState<"completed" | "notes" | null>(
     null
   );
 
   const [taskModalTarget, setTaskModalTarget] = useState<Task | "create" | null>(null);
+  const [taskModalDefaultDate, setTaskModalDefaultDate] = useState<string>("");
   const [noteModalTarget, setNoteModalTarget] = useState<Note | "create" | null>(null);
 
   const activeTasks = useMemo(
@@ -105,15 +110,18 @@ export default function TaskManagerView() {
 
     async function bootstrap() {
       try {
-        const [session, serverYear] = await Promise.all([
+        const [session, istDate] = await Promise.all([
           getSession(),
-          getServerYear(),
+          getServerDateIST(),
         ]);
         const uid = session?.user.id;
         if (!uid) throw new Error("No active session.");
         if (cancelled) return;
         setUserId(uid);
-        setNowYear(serverYear);
+        const parsed = parseISTDate(istDate);
+        setNowYear(parsed.year);
+        setNowMonth(parsed.month);
+        setTaskModalDefaultDate(istDate);
         await refreshData(uid);
       } catch (err) {
         if (cancelled) return;
@@ -227,13 +235,21 @@ export default function TaskManagerView() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-          Task Manager
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Track active tasks, completed tasks, and notes.
-        </p>
+      <div className="flex flex-col items-start gap-4">
+        <Link
+          href={ROUTES.DASHBOARD}
+          className="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          ← Back
+        </Link>
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+            Task Manager
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Track active tasks, completed tasks, and notes.
+          </p>
+        </div>
       </div>
 
       <section className="grid gap-4 lg:grid-cols-3">
@@ -242,6 +258,7 @@ export default function TaskManagerView() {
           isLoading={isLoading}
           view={activeView}
           nowYear={nowYear}
+          nowMonth={nowMonth}
           onViewChange={setActiveView}
           onAdd={() => setTaskModalTarget("create")}
           onSelectTask={(task) => setTaskModalTarget(task)}
@@ -286,6 +303,7 @@ export default function TaskManagerView() {
           tasks={completedTasks}
           view={completedView}
           nowYear={nowYear}
+          nowMonth={nowMonth}
           onViewChange={setCompletedView}
           onClose={closeExpandedModal}
           onSelectTask={(task) => {
@@ -310,7 +328,8 @@ export default function TaskManagerView() {
       {taskModalTarget && (
         <TaskModal
           task={taskModalTarget === "create" ? null : taskModalTarget}
-          onClose={() => setTaskModalTarget(null)}
+          defaultDate={taskModalTarget === "create" ? taskModalDefaultDate : undefined}
+          onClose={() => { setTaskModalTarget(null); setTaskModalDefaultDate(""); }}
           onSave={handleTaskSave}
           onDelete={handleTaskDelete}
         />

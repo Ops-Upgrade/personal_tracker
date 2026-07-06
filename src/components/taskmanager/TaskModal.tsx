@@ -17,6 +17,7 @@ interface TaskDraft {
 
 interface TaskModalProps {
   task: Task | null;
+  defaultDate?: string;
   onClose: () => void;
   onSave: (draft: TaskDraft, existingTask: Task | null) => Promise<void>;
   onDelete: (taskId: string) => Promise<void>;
@@ -24,7 +25,7 @@ interface TaskModalProps {
 
 const PRIORITY_OPTIONS: Priority[] = ["low", "medium", "high", "critical"];
 
-export default function TaskModal({ task, onClose, onSave, onDelete }: TaskModalProps) {
+export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete }: TaskModalProps) {
   const [name, setName] = useState("");
   const [priority, setPriority] = useState<Priority>("medium");
   const [dueDate, setDueDate] = useState("");
@@ -38,13 +39,13 @@ export default function TaskModal({ task, onClose, onSave, onDelete }: TaskModal
   useEffect(() => {
     setName(task?.name ?? "");
     setPriority(task?.priority ?? "medium");
-    setDueDate(task?.due_date ?? "");
+    setDueDate(task?.due_date ?? defaultDate ?? "");
     setMode(task?.mode ?? "online");
     setDescription(task?.description ?? "");
     setIsCompleted(task?.is_completed ?? false);
     setError(null);
     setShowDeleteConfirm(false);
-  }, [task]);
+  }, [task, defaultDate]);
 
   async function handleSave() {
     if (!name.trim()) {

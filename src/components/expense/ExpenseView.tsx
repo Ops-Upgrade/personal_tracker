@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ROUTES } from "@/routes/paths";
 import { getSession } from "@/api/auth";
 import {
   createExpense,
@@ -10,14 +12,26 @@ import {
   uploadInvoice,
   deleteInvoice,
 } from "@/api/expense";
-import type { Expense, ExpensePlaintext } from "@/types/expense";
+import { getServerDateIST, parseISTDate } from "@/api/serverDate";
+import type { Expense, ExpensePlaintext, ExpenseViewMode } from "@/types/expense";
 import { MONTHS } from "@/types/expense";
+import { useLocalStorage } from "@/lib/useLocalStorage";
+import ViewToggle from "@/components/common/ViewToggle";
+import type { ViewToggleOption } from "@/components/common/ViewToggle";
+import { RectangleVertical, Columns2 } from "lucide-react";
 import Button from "@/components/common/Button";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import ExpenseModal from "./ExpenseModal";
 import FullMonthModal from "./FullMonthModal";
 import MonthRow from "./MonthRow";
 import YearDropdown from "./YearDropdown";
+
+/** SVG icon symbols for the expense view toggle */
+const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
+  { value: "single", label: <RectangleVertical className="h-4 w-4" /> },
+  { value: "multi", label: <Columns2 className="h-4 w-4" /> },
+];
+
 
 /**
  * Expense Tracker feature shell.
@@ -32,10 +46,15 @@ export default function ExpenseView() {
   const [error, setError] = useState<string | null>(null);
 
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [viewMode, setViewMode] = useLocalStorage<ExpenseViewMode>("expenseViewMode", "single");
   const [fullMonthModal, setFullMonthModal] = useState<{
     monthIndex: number;
     year: number;
   } | null>(null);
+
+  // IST date state
+  const [istDate, setIstDate] = useState<string>("");
+  const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
 
   // ExpenseModal state: null = closed, "create" = new item, Expense = edit
   const [expenseModalTarget, setExpenseModalTarget] = useState<
@@ -153,17 +172,21 @@ export default function ExpenseView() {
     [loadData]
   );
 
-  // Bootstrap: get session, load data
+  // Bootstrap: get session + IST date, load data
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
       try {
-        const session = await getSession();
+        const [session, dateStr] = await Promise.all([
+          getSession(),
+          getServerDateIST(),
+        ]);
         const uid = session?.user.id;
         if (!uid) throw new Error("No active session.");
         if (cancelled) return;
         setUserId(uid);
+        setIstDate(dateStr);
         await refreshData(uid);
       } catch (err) {
         if (cancelled) return;
@@ -299,13 +322,20 @@ export default function ExpenseView() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-            Expenses
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Track and manage your spending.
-          </p>
+        <div className="flex flex-col items-start gap-4">
+          <Link
+            href={ROUTES.DASHBOARD}
+            className="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            ← Back
+          </Link>
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+              Expenses
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Track and manage your spending.
+            </p>
           {!isLoading && (
             <p className="mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
               Total for {selectedYear}:{" "}
@@ -314,13 +344,8 @@ export default function ExpenseView() {
               </span>
             </p>
           )}
+          </div>
         </div>
-
-        <YearDropdown
-          years={availableYears}
-          selectedYear={selectedYear}
-          onChange={setSelectedYear}
-        />
       </div>
 
       {/* Loading state */}
@@ -348,25 +373,54 @@ export default function ExpenseView() {
       {/* Month rows */}
       {!isLoading && (
         <BoxContainer>
-          <div className={`${SCROLLABLE_CLASSES} grid grid-cols-1 items-start gap-4`}>
-            {expensesByMonth.map(({ monthName, monthIndex, expenses: monthExpenses }) => (
-              <MonthRow
-                key={monthName}
-                monthName={monthName}
-                monthIndex={monthIndex}
-                year={selectedYear}
-                expenses={monthExpenses}
-                onAdd={() => {
-                  const mm = String(monthIndex + 1).padStart(2, "0");
-                  setExpenseModalTarget({
-                    mode: "create",
-                    defaultDate: `${selectedYear}-${mm}-01`,
-                  });
-                }}
-                onSelectExpense={(expense) => setExpenseModalTarget(expense)}
-                onViewAll={() => openFullMonthModal(monthIndex)}
+          <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Months
+              </h2>
+              <ViewToggle
+                value={viewMode}
+                onChange={setViewMode}
+                options={EXPENSE_VIEW_OPTIONS}
+                ariaLabel="Expense view toggle"
               />
-            ))}
+            </div>
+            <YearDropdown
+              years={availableYears}
+              selectedYear={selectedYear}
+              onChange={setSelectedYear}
+            />
+          </header>
+          <div className={`${SCROLLABLE_CLASSES} grid grid-cols-1 items-start gap-4 ${viewMode === "multi" ? "md:grid-cols-2" : ""}`}>
+            {expensesByMonth.map(({ monthName, monthIndex, expenses: monthExpenses }) => {
+              const isCurrentMonth =
+                istParsed !== null &&
+                selectedYear === istParsed.year &&
+                monthIndex === istParsed.month;
+              return (
+                <MonthRow
+                  key={monthName}
+                  monthName={monthName}
+                  monthIndex={monthIndex}
+                  year={selectedYear}
+                  expenses={monthExpenses}
+                  isCurrentMonth={isCurrentMonth}
+                  onAdd={() => {
+                    // Use today's IST date as default if viewing the current month; otherwise month-01
+                    const defaultDate =
+                      isCurrentMonth && istDate
+                        ? istDate
+                        : `${selectedYear}-${String(monthIndex + 1).padStart(2, "0")}-01`;
+                    setExpenseModalTarget({
+                      mode: "create",
+                      defaultDate,
+                    });
+                  }}
+                  onSelectExpense={(expense) => setExpenseModalTarget(expense)}
+                  onViewAll={() => openFullMonthModal(monthIndex)}
+                />
+              );
+            })}
           </div>
         </BoxContainer>
       )}

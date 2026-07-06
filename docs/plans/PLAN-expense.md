@@ -1093,3 +1093,72 @@ None — all four items are straightforward bug fixes / enhancements.
 - [ ] **Phase 2b**: Open ExpenseModal → upload a file → confirm the upload zone still shows as "Replace file" → pick another file → confirm the first is swapped → confirm for existing files (edit mode) the "Replace" zone is also available.
 - [ ] **Phase 3**: In the inline month preview, click each column header → verify sort toggles (asc → desc → default). In the FullMonthModal, do the same. Confirm the Invoice column is not sortable. Confirm sort indicators are visible.
 - [ ] Run `next build` to ensure no TypeScript or build errors.
+
+
+# Plan: Expense Tracker View Toggle
+
+**Date**: 2026-07-06
+**Status**: Draft
+
+## Goal
+Add two view options at the top of the Expense Tracker: a single column view (current implementation) and a multi-column view (6 rows each in 2 columns for 12 months). The view preference will be persisted using the local storage hook. The multi-column view will be responsive, collapsing to a single column on smaller screens.
+
+## Reusable Inventory (from existing codebase)
+| Element | Path | How it's reused |
+|---------|------|-----------------|
+| `useLocalStorage` | `src/lib/useLocalStorage.ts` | Used to persist the selected view mode across sessions on the same device. |
+| View Toggle UI pattern | `src/components/taskmanager/ViewToggle.tsx` | The visual style and layout of the toggle switch will be replicated for the expense view toggle. |
+
+## Package Decisions
+| Package | Version | Decision | Reason |
+|---------|---------|----------|--------|
+| N/A | N/A | N/A | No new external packages are required for this UI feature. |
+
+## ⚠️ Flagged Observations
+- No deviations from standard practice.
+
+## Phases & Tasks
+
+### Phase 1 — State & Component Creation
+#### Task 1.1 — Update Expense Types
+- **What**: Add an `ExpenseViewMode` type to represent the two view options.
+- **Where**: `src/types/expense.ts`
+- **Why**: Strongly type the view options (`"single" | "multi"`).
+- **Reuse**: N/A
+- **New Artifacts**: Exported type `ExpenseViewMode`.
+- **Depends on**: None
+
+#### Task 1.2 — Create ExpenseViewToggle Component
+- **What**: Build a UI toggle component specifically for the expense view options, mirroring the visual style from the task manager's toggle.
+- **Where**: `src/components/expense/ExpenseViewToggle.tsx`
+- **Why**: modular UI component for the toggle buttons.
+- **Reuse**: Visual classes from TaskManager's `ViewToggle.tsx`.
+- **New Artifacts**: `ExpenseViewToggle` component.
+- **Depends on**: Task 1.1
+
+### Phase 2 — Integration & Layout Update
+#### Task 2.1 — Integrate View State and Toggle
+- **What**: Implement `useLocalStorage` in `ExpenseView.tsx` to hold the `ExpenseViewMode` (defaulting to `"single"`). Render the `ExpenseViewToggle` in the header next to the `YearDropdown`.
+- **Where**: `src/components/expense/ExpenseView.tsx`
+- **Why**: Connects the state to the UI toggle.
+- **Reuse**: `useLocalStorage`
+- **New Artifacts**: N/A
+- **Depends on**: Task 1.2
+
+#### Task 2.2 — Update Grid Layout
+- **What**: Adjust the month grid container's Tailwind classes based on the active view mode. When in `"multi"` mode, apply `md:grid-cols-2` while ensuring `grid-cols-1` on mobile.
+- **Where**: `src/components/expense/ExpenseView.tsx`
+- **Why**: Achieves the desired 2-column layout (6 rows each).
+- **Reuse**: N/A
+- **New Artifacts**: N/A
+- **Depends on**: Task 2.1
+
+## New Reusable Components Introduced
+| Component | Path | Purpose | Reusable for |
+|-----------|------|---------|--------------|
+| `ExpenseViewToggle` | `src/components/expense/ExpenseViewToggle.tsx` | UI toggle for view mode | Specific to expense views |
+
+## Verification Plan
+- [ ] Toggle between single and multi-column views in the Expense Tracker -> Grid updates instantly.
+- [ ] When in multi-column view, resize the browser to a mobile width -> Grid collapses to single column.
+- [ ] Select a view, refresh the page -> View is preserved correctly via local storage without hydration mismatch errors.
