@@ -10,6 +10,7 @@ interface MonthRowProps {
   monthIndex: number; // 0-based
   year: number;
   expenses: Expense[];
+  isCurrentMonth?: boolean;
   onAdd: () => void;
   onSelectExpense: (expense: Expense) => void;
   onViewAll: () => void;
@@ -26,6 +27,7 @@ interface MonthRowProps {
 export default function MonthRow({
   monthName,
   expenses,
+  isCurrentMonth,
   onAdd,
   onSelectExpense,
   onViewAll,
@@ -47,6 +49,7 @@ export default function MonthRow({
         </>
       }
       accent={total > 0}
+      highlight={isCurrentMonth}
       headerActions={
         <Button
           variant="secondary"

@@ -14,6 +14,7 @@ interface ActiveTasksBoxProps {
   isLoading: boolean;
   view: TaskView;
   nowYear: number;
+  nowMonth: number;
   onViewChange: (next: TaskView) => void;
   onAdd: () => void;
   onSelectTask: (task: Task) => void;
@@ -24,15 +25,17 @@ function dueDisplay(dueDate: string | null): string {
   return dueDate ?? "-";
 }
 
-const CURRENT_MONTH_LABEL = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-}).format(new Date());
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 export default function ActiveTasksBox({
   tasks,
   isLoading,
   view,
   nowYear,
+  nowMonth,
   onViewChange,
   onAdd,
   onSelectTask,
@@ -129,7 +132,7 @@ export default function ActiveTasksBox({
         {!isLoading &&
           view === "months" &&
           monthGroups.map((group) => {
-            const isCurrentMonth = group.label === CURRENT_MONTH_LABEL;
+            const isCurrentMonth = MONTH_NAMES[nowMonth] === group.label;
             return (
               <MonthTile
                 key={group.label}
@@ -137,6 +140,7 @@ export default function ActiveTasksBox({
                 defaultExpanded={isCurrentMonth}
                 accent={group.tasks.length > 0}
                 className="text-sm"
+                highlight={isCurrentMonth}
               >
                 {group.tasks.length === 0 ? (
                   <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>

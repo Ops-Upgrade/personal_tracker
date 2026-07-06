@@ -10,6 +10,7 @@ import {
   uploadInvoice,
   deleteInvoice,
 } from "@/api/expense";
+import { getServerDateIST, parseISTDate } from "@/api/serverDate";
 import type { Expense, ExpensePlaintext } from "@/types/expense";
 import { MONTHS } from "@/types/expense";
 import Button from "@/components/common/Button";
@@ -36,6 +37,10 @@ export default function ExpenseView() {
     monthIndex: number;
     year: number;
   } | null>(null);
+
+  // IST date state
+  const [istDate, setIstDate] = useState<string>("");
+  const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
 
   // ExpenseModal state: null = closed, "create" = new item, Expense = edit
   const [expenseModalTarget, setExpenseModalTarget] = useState<
@@ -153,17 +158,21 @@ export default function ExpenseView() {
     [loadData]
   );
 
-  // Bootstrap: get session, load data
+  // Bootstrap: get session + IST date, load data
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
       try {
-        const session = await getSession();
+        const [session, dateStr] = await Promise.all([
+          getSession(),
+          getServerDateIST(),
+        ]);
         const uid = session?.user.id;
         if (!uid) throw new Error("No active session.");
         if (cancelled) return;
         setUserId(uid);
+        setIstDate(dateStr);
         await refreshData(uid);
       } catch (err) {
         if (cancelled) return;
@@ -349,24 +358,35 @@ export default function ExpenseView() {
       {!isLoading && (
         <BoxContainer>
           <div className={`${SCROLLABLE_CLASSES} grid grid-cols-1 items-start gap-4`}>
-            {expensesByMonth.map(({ monthName, monthIndex, expenses: monthExpenses }) => (
-              <MonthRow
-                key={monthName}
-                monthName={monthName}
-                monthIndex={monthIndex}
-                year={selectedYear}
-                expenses={monthExpenses}
-                onAdd={() => {
-                  const mm = String(monthIndex + 1).padStart(2, "0");
-                  setExpenseModalTarget({
-                    mode: "create",
-                    defaultDate: `${selectedYear}-${mm}-01`,
-                  });
-                }}
-                onSelectExpense={(expense) => setExpenseModalTarget(expense)}
-                onViewAll={() => openFullMonthModal(monthIndex)}
-              />
-            ))}
+            {expensesByMonth.map(({ monthName, monthIndex, expenses: monthExpenses }) => {
+              const isCurrentMonth =
+                istParsed !== null &&
+                selectedYear === istParsed.year &&
+                monthIndex === istParsed.month;
+              return (
+                <MonthRow
+                  key={monthName}
+                  monthName={monthName}
+                  monthIndex={monthIndex}
+                  year={selectedYear}
+                  expenses={monthExpenses}
+                  isCurrentMonth={isCurrentMonth}
+                  onAdd={() => {
+                    // Use today's IST date as default if viewing the current month; otherwise month-01
+                    const defaultDate =
+                      isCurrentMonth && istDate
+                        ? istDate
+                        : `${selectedYear}-${String(monthIndex + 1).padStart(2, "0")}-01`;
+                    setExpenseModalTarget({
+                      mode: "create",
+                      defaultDate,
+                    });
+                  }}
+                  onSelectExpense={(expense) => setExpenseModalTarget(expense)}
+                  onViewAll={() => openFullMonthModal(monthIndex)}
+                />
+              );
+            })}
           </div>
         </BoxContainer>
       )}

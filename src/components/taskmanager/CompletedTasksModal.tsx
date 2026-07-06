@@ -20,16 +20,23 @@ interface CompletedTasksModalProps {
   tasks: Task[];
   view: TaskView;
   nowYear: number;
+  nowMonth: number;
   onViewChange: (next: TaskView) => void;
   onClose: () => void;
   onSelectTask: (task: Task) => void;
   onReopenTask: (task: Task) => void;
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 export default function CompletedTasksModal({
   tasks,
   view,
   nowYear,
+  nowMonth,
   onViewChange,
   onClose,
   onSelectTask,
@@ -95,13 +102,16 @@ export default function CompletedTasksModal({
           })}
 
         {view === "months" &&
-          monthGroups.map((group, index) => (
+          monthGroups.map((group, index) => {
+            const isCurrentMonth = MONTH_NAMES[nowMonth] === group.label;
+            return (
             <MonthTile
               key={group.label}
               title={group.label}
               defaultExpanded={index === 0}
               accent
               className="text-sm"
+              highlight={isCurrentMonth}
             >
               <div className="space-y-2">
                 {group.tasks.map((task) => {
@@ -137,7 +147,8 @@ export default function CompletedTasksModal({
                 })}
               </div>
             </MonthTile>
-          ))}
+            );
+          })}
       </div>
     </ModalFrame>
   );
