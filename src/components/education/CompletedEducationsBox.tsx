@@ -26,8 +26,8 @@ export default function CompletedEducationsBox({
   const sorted = [...educations].sort(sortByCompletedDesc);
 
   return (
-    <BoxContainer>
-      <header className="mb-3 flex items-center justify-between gap-3">
+    <BoxContainer className="h-full flex flex-col">
+      <header className="mb-3 flex items-center justify-between gap-3 shrink-0">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           Completed
         </h2>
@@ -40,7 +40,7 @@ export default function CompletedEducationsBox({
           View all
         </Button>
       </header>
-      <div className={`${SCROLLABLE_CLASSES} space-y-1 rounded-lg border border-zinc-200 p-2 dark:border-zinc-800`}>
+      <div className={`${SCROLLABLE_CLASSES} flex-1 space-y-1 rounded-lg border border-zinc-200 p-2 dark:border-zinc-800`}>
         {isLoading && (
           <div className="text-sm text-zinc-500 dark:text-zinc-400">Loading...</div>
         )}
@@ -64,29 +64,21 @@ export default function CompletedEducationsBox({
                 <button
                   type="button"
                   onClick={() => onSelectEducation(edu)}
-                  className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+                  className="col-span-6 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
                 >
                   {trunc(edu.name, 30)}
                 </button>
-                <div className="col-span-2 text-zinc-600 dark:text-zinc-300">
+                <div className="col-span-3 text-zinc-600 dark:text-zinc-300">
                   {formatShortDate(edu.completed_at)}
                 </div>
                 {/* Certificate count badge */}
-                <div className="col-span-2 text-center">
+                <div className="col-span-2 text-right">
                   {certCount > 0 && (
                     <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
                       {certCount} cert{certCount !== 1 ? "s" : ""}
                     </span>
                   )}
                 </div>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => onReopenEducation(edu)}
-                  className="col-span-3 text-right"
-                >
-                  Reopen
-                </Button>
               </div>
             );
           })}

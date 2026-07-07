@@ -90,21 +90,13 @@ export default function CompletedEducationsModal({
                       <button
                         type="button"
                         onClick={() => onSelectEducation(edu)}
-                        className="col-span-6 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+                        className="col-span-9 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
                       >
                         {trunc(edu.name, 52)}
                       </button>
-                      <span className="col-span-3 text-zinc-600 dark:text-zinc-300">
+                      <span className="col-span-3 text-right pr-2 text-zinc-600 dark:text-zinc-300">
                         {formatShortDate(edu.completed_at)}
                       </span>
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        onClick={() => onReopenEducation(edu)}
-                        className="col-span-3 text-right"
-                      >
-                        Reopen
-                      </Button>
                     </div>
                   ))}
                 </div>
@@ -135,24 +127,16 @@ export default function CompletedEducationsModal({
                         <button
                           type="button"
                           onClick={() => onSelectEducation(edu)}
-                          className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+                          className="col-span-7 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
                         >
                           {trunc(edu.name, 42)}
                         </button>
                         <span className="col-span-2">
                           {edu.priority ? <PriorityBadge priority={edu.priority} /> : "-"}
                         </span>
-                        <span className="col-span-3 text-zinc-600 dark:text-zinc-300">
+                        <span className="col-span-3 text-right pr-2 text-zinc-600 dark:text-zinc-300">
                           {formatShortDate(edu.completed_at)}
                         </span>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => onReopenEducation(edu)}
-                          className="col-span-3 text-right"
-                        >
-                          Reopen
-                        </Button>
                       </div>
                     );
                   })}

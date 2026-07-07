@@ -22,11 +22,8 @@ import type { Certificate, Education, EducationViewMode } from "@/types/educatio
 import type { Priority } from "@/types/taskmanager";
 import ActiveEducationsBox from "./ActiveEducationsBox";
 import CompletedEducationsBox from "./CompletedEducationsBox";
-import CertificateStoreBox from "./CertificateStoreBox";
 import CompletedEducationsModal from "./CompletedEducationsModal";
-import CertificateStoreModal from "./CertificateStoreModal";
 import EducationModal from "./EducationModal";
-import CertificateModal from "./CertificateModal";
 
 /**
  * Education feature shell.
@@ -39,9 +36,8 @@ export default function EducationView() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [expandedModal, setExpandedModal] = useState<"completed" | "certificates" | null>(null);
+  const [expandedModal, setExpandedModal] = useState<"completed" | null>(null);
   const [eduModalTarget, setEduModalTarget] = useState<Education | "create" | null>(null);
-  const [certModalTarget, setCertModalTarget] = useState<Certificate | "create" | null>(null);
   const [activeView, setActiveView] = useState<EducationViewMode>("months");
 
   const nowYear = new Date().getFullYear();
@@ -60,7 +56,7 @@ export default function EducationView() {
 
   const syncExpandedModalFromHash = useCallback(() => {
     const rawHash = window.location.hash.replace("#", "");
-    if (rawHash === "completed" || rawHash === "certificates") {
+    if (rawHash === "completed") {
       setExpandedModal(rawHash);
       return;
     }
@@ -80,7 +76,7 @@ export default function EducationView() {
     setExpandedModal(null);
   }, []);
 
-  const openExpandedModal = useCallback((kind: "completed" | "certificates") => {
+  const openExpandedModal = useCallback((kind: "completed") => {
     window.location.hash = kind;
   }, []);
 
@@ -158,7 +154,8 @@ export default function EducationView() {
       description: string;
       is_completed: boolean;
     },
-    existingEducation: Education | null
+    existingEducation: Education | null,
+    pendingCert?: { file: File; label: string }
   ) {
     if (!userId) throw new Error("No active session.");
     const nowIso = new Date().toISOString();
@@ -173,10 +170,29 @@ export default function EducationView() {
       updated_at: nowIso,
     };
 
+    let savedEdu: Education;
     if (existingEducation) {
-      await updateEducation(userId, existingEducation.id, payload);
+      savedEdu = await updateEducation(userId, existingEducation.id, payload);
     } else {
-      await createEducation(userId, payload);
+      savedEdu = await createEducation(userId, payload);
+    }
+
+    if (pendingCert) {
+      const { fileName, iv, mimeType } = await uploadCertificateFile(userId, pendingCert.file);
+      const cert = await createCertificate(userId, {
+        label: pendingCert.label,
+        file_name: fileName,
+        file_iv: iv,
+        file_mime: mimeType,
+        education_id: savedEdu.id,
+        updated_at: nowIso,
+      });
+
+      await updateEducation(userId, savedEdu.id, {
+        ...payload,
+        certificate_ids: [...payload.certificate_ids, cert.id],
+        updated_at: new Date().toISOString(),
+      });
     }
 
     await refreshData(userId);
@@ -253,6 +269,7 @@ export default function EducationView() {
     }
 
     await refreshData(userId);
+    return cert;
   }
 
   async function handleRenameCertificate(certificateId: string, newLabel: string) {
@@ -315,82 +332,7 @@ export default function EducationView() {
   }
 
   // ---- Standalone Certificate CRUD (from CertificateModal) ----
-
-  async function handleCertificateSave(
-    label: string,
-    educationId: string,
-    file: File | null,
-    existingCertificate: Certificate | null
-  ) {
-    if (!userId) throw new Error("No active session.");
-    const nowIso = new Date().toISOString();
-
-    if (existingCertificate) {
-      // Update metadata only (file cannot be replaced)
-      await updateCertificate(userId, existingCertificate.id, {
-        ...existingCertificate,
-        label,
-        education_id: educationId,
-        updated_at: nowIso,
-      });
-
-      // Update education linkage if changed
-      const oldEduId = existingCertificate.education_id;
-      if (oldEduId !== educationId) {
-        // Remove from old education
-        if (oldEduId) {
-          const oldEdu = educations.find((e) => e.id === oldEduId);
-          if (oldEdu) {
-            await updateEducation(userId, oldEdu.id, {
-              ...oldEdu,
-              certificate_ids: oldEdu.certificate_ids.filter((id) => id !== existingCertificate.id),
-              updated_at: nowIso,
-            });
-          }
-        }
-        // Add to new education
-        if (educationId) {
-          const newEdu = educations.find((e) => e.id === educationId);
-          if (newEdu) {
-            await updateEducation(userId, newEdu.id, {
-              ...newEdu,
-              certificate_ids: [...newEdu.certificate_ids, existingCertificate.id],
-              updated_at: nowIso,
-            });
-          }
-        }
-      }
-    } else if (file) {
-      // Upload new certificate
-      const { fileName, iv, mimeType } = await uploadCertificateFile(userId, file);
-      const cert = await createCertificate(userId, {
-        label,
-        file_name: fileName,
-        file_iv: iv,
-        file_mime: mimeType,
-        education_id: educationId,
-        updated_at: nowIso,
-      });
-
-      // Link to education if specified
-      if (educationId) {
-        const edu = educations.find((e) => e.id === educationId);
-        if (edu) {
-          await updateEducation(userId, edu.id, {
-            ...edu,
-            certificate_ids: [...edu.certificate_ids, cert.id],
-            updated_at: nowIso,
-          });
-        }
-      }
-    }
-
-    await refreshData(userId);
-  }
-
-  async function handleCertificateDelete(certificate: Certificate) {
-    await handleDeleteCertificateFromEducation(certificate);
-  }
+  // Removed.
 
   return (
     <div className="space-y-4">
@@ -424,25 +366,14 @@ export default function EducationView() {
           onMarkComplete={handleQuickComplete}
         />
 
-        <div className="grid gap-4 lg:grid-rows-2">
-          <CompletedEducationsBox
-            educations={completedEducations}
-            certificates={certificates}
-            isLoading={isLoading}
-            onOpenExpanded={() => openExpandedModal("completed")}
-            onSelectEducation={(edu) => setEduModalTarget(edu)}
-            onReopenEducation={handleQuickReopen}
-          />
-
-          <CertificateStoreBox
-            certificates={certificates}
-            educations={educations}
-            isLoading={isLoading}
-            onAdd={() => setCertModalTarget("create")}
-            onOpenExpanded={() => openExpandedModal("certificates")}
-            onSelectCertificate={(cert) => setCertModalTarget(cert)}
-          />
-        </div>
+        <CompletedEducationsBox
+          educations={completedEducations}
+          certificates={certificates}
+          isLoading={isLoading}
+          onOpenExpanded={() => openExpandedModal("completed")}
+          onSelectEducation={(edu) => setEduModalTarget(edu)}
+          onReopenEducation={handleQuickReopen}
+        />
       </section>
 
       {error && (
@@ -473,18 +404,7 @@ export default function EducationView() {
         />
       )}
 
-      {expandedModal === "certificates" && (
-        <CertificateStoreModal
-          certificates={certificates}
-          educations={educations}
-          userId={userId || ""}
-          onClose={closeExpandedModal}
-          onSelectCertificate={(cert) => {
-            closeExpandedModal();
-            setCertModalTarget(cert);
-          }}
-        />
-      )}
+      {/* Expanded modals (hash-driven) */}
 
       {/* CRUD modals (state-driven) */}
       {eduModalTarget && (
@@ -502,16 +422,7 @@ export default function EducationView() {
         />
       )}
 
-      {certModalTarget && (
-        <CertificateModal
-          certificate={certModalTarget === "create" ? null : certModalTarget}
-          completedEducations={completedEducations}
-          onClose={() => setCertModalTarget(null)}
-          onSave={handleCertificateSave}
-          onDelete={handleCertificateDelete}
-          onDownload={handleDownloadCertificate}
-        />
-      )}
+      {/* CRUD modals (state-driven) */}
     </div>
   );
 }

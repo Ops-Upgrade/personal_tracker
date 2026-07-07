@@ -76,6 +76,14 @@ function DocumentTextIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+function ShieldExclamationIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.75c0 5.592 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.75h-.152c-3.196 0-6.1-1.25-8.25-3.286Zm0 13.036h.008v.008H12v-.008Z" />
+    </svg>
+  );
+}
+
 interface EducationDraft {
   name: string;
   provider: string;
@@ -90,9 +98,9 @@ interface EducationModalProps {
   certificates: Certificate[];
   userId: string;
   onClose: () => void;
-  onSave: (draft: EducationDraft, existingEducation: Education | null) => Promise<void>;
+  onSave: (draft: EducationDraft, existingEducation: Education | null, pendingCert?: { file: File; label: string }) => Promise<void>;
   onDelete: (educationId: string) => Promise<void>;
-  onUploadCertificate: (educationId: string, file: File, label: string) => Promise<void>;
+  onUploadCertificate: (educationId: string, file: File, label: string) => Promise<Certificate>;
   onRenameCertificate: (certificateId: string, newLabel: string) => Promise<void>;
   onDownloadCertificate: (certificate: Certificate) => Promise<void>;
   onDeleteCertificate: (certificate: Certificate) => Promise<void>;
@@ -130,39 +138,41 @@ function CertificatePreviewPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Cleanup blob URL on unmount
   useEffect(() => {
     return () => {
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [blobUrl]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // Load preview immediately when cert changes
+  // Reset when cert changes
   useEffect(() => {
-    let active = true;
-    const loadPreview = async () => {
-      if (!cert.file_name || !cert.file_iv) return;
-      setIsLoading(true);
-      setLoadError(null);
-      setBlobUrl(null);
-      try {
-        const blob = await downloadCertificateFile(userId, cert.file_name, cert.file_iv, cert.file_mime);
-        if (!active) return;
-        const url = URL.createObjectURL(blob);
-        setBlobUrl(url);
-      } catch (err: unknown) {
-        if (!active) return;
-        setLoadError(err instanceof Error ? err.message : "Failed to decrypt certificate.");
-      } finally {
-        if (active) setIsLoading(false);
-      }
-    };
-    loadPreview();
-    return () => { active = false; };
-  }, [cert, userId]);
+    setBlobUrl(null);
+    setLoadError(null);
+    setIsLoading(false);
+  }, [cert]);
+
+  const handleLoadPreview = async () => {
+    if (!cert.file_name || !cert.file_iv) return;
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const blob = await downloadCertificateFile(userId, cert.file_name, cert.file_iv, cert.file_mime);
+      const url = URL.createObjectURL(blob);
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      setBlobUrl(url);
+    } catch (err: unknown) {
+      setLoadError(err instanceof Error ? err.message : "Failed to decrypt certificate.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const mimeType = cert.file_mime || "";
   const isPdf = mimeType === "application/pdf";
   const isImage = mimeType.startsWith("image/");
+  const FileIcon = isPdf ? DocumentIcon : isImage ? PhotoIcon : LinkIcon;
 
   return (
     <div className="flex flex-col h-full max-h-[80vh]">
@@ -209,6 +219,20 @@ function CertificatePreviewPanel({
 
       {/* Content area */}
       <div className="flex-1 overflow-auto flex items-center justify-center p-4">
+        {!blobUrl && !isLoading && !loadError && (
+          <button
+            type="button"
+            onClick={handleLoadPreview}
+            className="cursor-pointer flex flex-col items-center gap-2 text-zinc-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 transition-colors"
+          >
+            <FileIcon className="h-10 w-10" />
+            <span className="text-sm font-medium">Click to load preview</span>
+            <span className="text-xs text-zinc-400">
+              File is encrypted — decrypt on demand
+            </span>
+          </button>
+        )}
+
         {isLoading && (
           <div className="flex flex-col items-center gap-3 text-zinc-400">
             <ArrowPathIcon className="h-8 w-8 animate-spin" />
@@ -284,6 +308,8 @@ export default function EducationModal({
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [showIncompleteConfirm, setShowIncompleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Linked certificates for this education
@@ -301,13 +327,16 @@ export default function EducationModal({
   const [certLabel, setCertLabel] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [newlyUploadedCerts, setNewlyUploadedCerts] = useState<Certificate[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    
     setName(education?.name ?? "");
     setProvider(education?.provider ?? "");
     setPriority(education?.priority ?? "medium");
-    setDueDate(education?.due_date ?? "");
+    setDueDate(education ? (education.due_date ?? "") : todayStr);
     setDescription(education?.description ?? "");
     setIsCompleted(education?.is_completed ?? false);
     setError(null);
@@ -317,6 +346,7 @@ export default function EducationModal({
     setCertFile(null);
     setCertLabel("");
     setUploadError(null);
+    setNewlyUploadedCerts([]);
     setEditingCertId(null);
     setEditingCertLabel("");
     if (linkedCerts.length > 0 && !selectedCertId) {
@@ -350,7 +380,8 @@ export default function EducationModal({
           description: description.trim(),
           is_completed: isCompleted,
         },
-        education
+        education,
+        (certFile && certLabel.trim()) ? { file: certFile, label: certLabel.trim() } : undefined
       );
       onClose();
     } catch (err) {
@@ -389,7 +420,8 @@ export default function EducationModal({
     setIsUploading(true);
     setUploadError(null);
     try {
-      await onUploadCertificate(education.id, certFile, certLabel.trim());
+      const newCert = await onUploadCertificate(education.id, certFile, certLabel.trim());
+      setNewlyUploadedCerts((prev) => [...prev, newCert]);
       setCertFile(null);
       setCertLabel("");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -446,11 +478,19 @@ export default function EducationModal({
     />
   ) : undefined;
 
+  const handleCancel = () => {
+    if (certFile || newlyUploadedCerts.length > 0) {
+      setShowCancelConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
   return (
     <>
       <ModalFrame
         title={education ? "Edit education" : "Add education"}
-        onClose={onClose}
+        onClose={handleCancel}
         maxWidthClassName={showSidePanel ? "max-w-6xl" : "max-w-md"}
         sidePanel={sidePanel}
       >
@@ -538,14 +578,21 @@ export default function EducationModal({
             <input
               type="checkbox"
               checked={isCompleted}
-              onChange={(e) => setIsCompleted(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                if (!checked && linkedCerts.length > 0) {
+                  setShowIncompleteConfirm(true);
+                } else {
+                  setIsCompleted(checked);
+                }
+              }}
               disabled={isSaving}
             />
             Mark complete
           </label>
 
           {/* --- Certificates Upload & Management Zone --- */}
-          {education && isCompleted && (
+          {isCompleted && (
             <div className="space-y-3 pt-2 border-t border-zinc-200 dark:border-zinc-800">
               <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
                 <DocumentTextIcon className="inline h-3.5 w-3.5 mr-1" />
@@ -680,14 +727,20 @@ export default function EducationModal({
                       placeholder="Label (e.g. AWS Certified...)"
                       className="flex-1 rounded border border-zinc-300 px-2 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                     />
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={handleCertificateUpload}
-                      disabled={isUploading || !certLabel.trim()}
-                    >
-                      {isUploading ? "Uploading..." : "Upload"}
-                    </Button>
+                    {!education ? (
+                      <span className="text-xs font-medium text-amber-600 dark:text-amber-400 py-1.5 px-2 bg-amber-50 dark:bg-amber-900/20 rounded">
+                        Will upload upon saving
+                      </span>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleCertificateUpload}
+                        disabled={isUploading || !certLabel.trim()}
+                      >
+                        {isUploading ? "Uploading..." : "Upload"}
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
                       size="sm"
@@ -700,6 +753,12 @@ export default function EducationModal({
                 )}
                 {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
               </div>
+
+              {/* Encrypted storage notice */}
+              <p className="text-xs text-zinc-400 flex items-center gap-1">
+                <ShieldExclamationIcon className="h-3 w-3" />
+                Files are encrypted before upload to Supabase Storage.
+              </p>
             </div>
           )}
 
@@ -720,7 +779,7 @@ export default function EducationModal({
             <Button
               variant="secondary"
               size="md"
-              onClick={onClose}
+              onClick={handleCancel}
               disabled={isSaving}
             >
               Cancel
@@ -743,6 +802,60 @@ export default function EducationModal({
           description="Are you sure? This will also remove all linked certificates. This cannot be undone."
           onCancel={() => setShowDeleteConfirm(false)}
           onConfirm={handleDelete}
+        />
+      )}
+
+      {showCancelConfirm && (
+        <ConfirmDialog
+          title="Unsaved changes"
+          description={
+            newlyUploadedCerts.length > 0
+              ? "You have unsaved changes. All the saved PDFs you uploaded during this session will be lost if you cancel. Do you want to continue?"
+              : "You have unsaved changes. The uploaded file will not be saved if you leave this page. Do you want to continue?"
+          }
+          confirmLabel="Yes, discard"
+          cancelLabel="No, stay"
+          onCancel={() => setShowCancelConfirm(false)}
+          onConfirm={async () => {
+            setShowCancelConfirm(false);
+            if (newlyUploadedCerts.length > 0) {
+              setIsSaving(true);
+              try {
+                for (const c of newlyUploadedCerts) {
+                  await onDeleteCertificate(c);
+                }
+              } catch (e) {
+                console.error("Failed to delete newly uploaded certs", e);
+              }
+              setIsSaving(false);
+            }
+            onClose();
+          }}
+        />
+      )}
+
+      {showIncompleteConfirm && (
+        <ConfirmDialog
+          title="Mark as incomplete?"
+          description="Marking this education as incomplete will permanently remove the uploaded certificate files. Do you want to continue?"
+          confirmLabel="Yes, remove files"
+          cancelLabel="Cancel"
+          onCancel={() => setShowIncompleteConfirm(false)}
+          onConfirm={async () => {
+            setShowIncompleteConfirm(false);
+            setIsSaving(true);
+            setError(null);
+            try {
+              for (const cert of linkedCerts) {
+                await onDeleteCertificate(cert);
+              }
+              setIsCompleted(false);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Failed to delete certificates.");
+            } finally {
+              setIsSaving(false);
+            }
+          }}
         />
       )}
     </>
