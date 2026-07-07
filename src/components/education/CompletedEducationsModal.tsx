@@ -1,69 +1,69 @@
 "use client";
 
-import type { Task, TaskView } from "@/types/taskmanager";
+import { useState } from "react";
+import type { Education, Certificate, EducationViewMode } from "@/types/education";
 import { PRIORITIES } from "@/types/taskmanager";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
-
-const TASK_VIEW_OPTIONS: readonly ViewToggleOption<TaskView>[] = [
-  { value: "months", label: "Months" },
-  { value: "priority", label: "Priority" },
-];
-import ModalFrame from "./ModalFrame";
+import ModalFrame from "@/components/taskmanager/ModalFrame";
 import ViewToggle from "@/components/common/ViewToggle";
 import MonthTile from "@/components/common/MonthTile";
-import PriorityBadge from "./PriorityBadge";
+import PriorityBadge from "@/components/taskmanager/PriorityBadge";
 import Button from "@/components/common/Button";
+import { getPriorityColor } from "@/components/taskmanager/helpers";
 import {
   byPriority,
   completedByMonths,
   formatShortDate,
-  getPriorityColor,
   sortByCompletedDesc,
   trunc,
 } from "./helpers";
 
-interface CompletedTasksModalProps {
-  tasks: Task[];
-  view: TaskView;
-  nowYear: number;
-  nowMonth: number;
-  onViewChange: (next: TaskView) => void;
+interface CompletedEducationsModalProps {
+  educations: Education[];
+  certificates: Certificate[]; // kept for prop signature compatibility if needed, but unused in this layout
   onClose: () => void;
-  onSelectTask: (task: Task) => void;
-  onReopenTask: (task: Task) => void;
+  onSelectEducation: (education: Education) => void;
+  onReopenEducation: (education: Education) => void;
 }
+
+const EDUCATION_VIEW_OPTIONS: readonly ViewToggleOption<EducationViewMode>[] = [
+  { value: "months", label: "Months" },
+  { value: "priority", label: "Priority" },
+];
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
 
-export default function CompletedTasksModal({
-  tasks,
-  view,
-  nowYear,
-  nowMonth,
-  onViewChange,
+export default function CompletedEducationsModal({
+  educations,
   onClose,
-  onSelectTask,
-  onReopenTask,
-}: CompletedTasksModalProps) {
-  const priorityGroups = byPriority(tasks.map((task) => ({ ...task })));
-  const monthGroups = completedByMonths(tasks, nowYear);
+  onSelectEducation,
+  onReopenEducation,
+}: CompletedEducationsModalProps) {
+  const [view, setView] = useState<EducationViewMode>("months");
+
+  const now = new Date();
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth();
+
+  const priorityGroups = byPriority(educations.map((edu) => ({ ...edu })));
+  const monthGroups = completedByMonths(educations, nowYear);
 
   return (
-    <ModalFrame title="Completed Tasks" onClose={onClose}>
+    <ModalFrame title="Completed Educations" onClose={onClose}>
       <div className="mb-3">
         <ViewToggle
           value={view}
-          onChange={onViewChange}
-          options={TASK_VIEW_OPTIONS}
-          ariaLabel="Task view toggle"
+          onChange={setView}
+          options={EDUCATION_VIEW_OPTIONS}
+          ariaLabel="Education view toggle"
         />
       </div>
 
       <div className="max-h-[65vh] space-y-3 overflow-y-auto rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
-        {tasks.length === 0 && (
+        {educations.length === 0 && (
           <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
         )}
 
@@ -82,25 +82,25 @@ export default function CompletedTasksModal({
                   <PriorityBadge priority={priority} />
                 </h3>
                 <div className="space-y-2">
-                  {group.map((task) => (
+                  {group.map((edu) => (
                     <div
-                      key={task.id}
+                      key={edu.id}
                       className={`grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm dark:border-zinc-700 border-l-[3px] ${colors.border}`}
                     >
                       <button
                         type="button"
-                        onClick={() => onSelectTask(task)}
+                        onClick={() => onSelectEducation(edu)}
                         className="col-span-6 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
                       >
-                        {trunc(task.name, 52)}
+                        {trunc(edu.name, 52)}
                       </button>
                       <span className="col-span-3 text-zinc-600 dark:text-zinc-300">
-                        {formatShortDate(task.completed_at)}
+                        {formatShortDate(edu.completed_at)}
                       </span>
                       <Button
                         variant="danger"
                         size="sm"
-                        onClick={() => onReopenTask(task)}
+                        onClick={() => onReopenEducation(edu)}
                         className="col-span-3 text-right"
                       >
                         Reopen
@@ -125,30 +125,30 @@ export default function CompletedTasksModal({
                 highlight={isCurrentMonth}
               >
                 <div className="space-y-2">
-                  {group.tasks.map((task) => {
-                    const colors = getPriorityColor(task.priority);
+                  {group.educations.map((edu) => {
+                    const colors = edu.priority ? getPriorityColor(edu.priority) : { border: "border-zinc-200", bg: "" };
                     return (
                       <div
-                        key={task.id}
+                        key={edu.id}
                         className={`grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm dark:border-zinc-700 border-l-[3px] ${colors.border}`}
                       >
                         <button
                           type="button"
-                          onClick={() => onSelectTask(task)}
+                          onClick={() => onSelectEducation(edu)}
                           className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
                         >
-                          {trunc(task.name, 42)}
+                          {trunc(edu.name, 42)}
                         </button>
                         <span className="col-span-2">
-                          <PriorityBadge priority={task.priority} />
+                          {edu.priority ? <PriorityBadge priority={edu.priority} /> : "-"}
                         </span>
                         <span className="col-span-3 text-zinc-600 dark:text-zinc-300">
-                          {formatShortDate(task.completed_at)}
+                          {formatShortDate(edu.completed_at)}
                         </span>
                         <Button
                           variant="danger"
                           size="sm"
-                          onClick={() => onReopenTask(task)}
+                          onClick={() => onReopenEducation(edu)}
                           className="col-span-3 text-right"
                         >
                           Reopen

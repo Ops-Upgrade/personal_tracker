@@ -9,6 +9,7 @@ export const ROUTES = {
   TASK_MANAGER: "/taskmanager",
   CHANGE_PASSWORD: "/settings/change-password",
   EXPENSE: "/expense",
+  EDUCATION: "/education",
 } as const;
 
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];
