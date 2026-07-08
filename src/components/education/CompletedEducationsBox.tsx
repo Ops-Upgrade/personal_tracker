@@ -12,7 +12,6 @@ interface CompletedEducationsBoxProps {
   isLoading: boolean;
   onOpenExpanded: () => void;
   onSelectEducation: (education: Education) => void;
-  onReopenEducation: (education: Education) => void;
 }
 
 export default function CompletedEducationsBox({
@@ -21,7 +20,6 @@ export default function CompletedEducationsBox({
   isLoading,
   onOpenExpanded,
   onSelectEducation,
-  onReopenEducation,
 }: CompletedEducationsBoxProps) {
   const sorted = [...educations].sort(sortByCompletedDesc);
 

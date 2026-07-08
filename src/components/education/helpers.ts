@@ -157,7 +157,8 @@ export function completedByMonths(
 
 // ---- Text helpers ----
 
-export function trunc(text: string, max = 70): string {
+export function trunc(text: string | null | undefined, max = 70): string {
+  if (!text) return "";
   return text.length <= max ? text : `${text.slice(0, max)}...`;
 }
 

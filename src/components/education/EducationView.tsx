@@ -18,12 +18,20 @@ import {
   deleteCertificateFile,
 } from "@/api/education";
 import Button from "@/components/common/Button";
-import type { Certificate, Education, EducationViewMode } from "@/types/education";
+import type { Certificate, CertificatePlaintext, Education, EducationPlaintext, EducationViewMode } from "@/types/education";
 import type { Priority } from "@/types/taskmanager";
 import ActiveEducationsBox from "./ActiveEducationsBox";
 import CompletedEducationsBox from "./CompletedEducationsBox";
 import CompletedEducationsModal from "./CompletedEducationsModal";
 import EducationModal from "./EducationModal";
+
+function FolderIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
+    </svg>
+  );
+}
 
 /**
  * Education feature shell.
@@ -155,7 +163,8 @@ export default function EducationView() {
       is_completed: boolean;
     },
     existingEducation: Education | null,
-    pendingCert?: { file: File; label: string }
+    pendingCert?: { file: File; label: string },
+    pendingLinkCertId?: string
   ) {
     if (!userId) throw new Error("No active session.");
     const nowIso = new Date().toISOString();
@@ -177,6 +186,9 @@ export default function EducationView() {
       savedEdu = await createEducation(userId, payload);
     }
 
+    let needsUpdate = false;
+    const newCertIds = [...payload.certificate_ids];
+
     if (pendingCert) {
       const { fileName, iv, mimeType } = await uploadCertificateFile(userId, pendingCert.file);
       const cert = await createCertificate(userId, {
@@ -187,10 +199,29 @@ export default function EducationView() {
         education_id: savedEdu.id,
         updated_at: nowIso,
       });
+      newCertIds.push(cert.id);
+      needsUpdate = true;
+    }
 
+    if (pendingLinkCertId) {
+      const pcert = certificates.find(c => c.id === pendingLinkCertId);
+      if (pcert) {
+        await updateCertificate(userId, pendingLinkCertId, {
+          ...pcert,
+          education_id: savedEdu.id,
+          updated_at: nowIso,
+        } as CertificatePlaintext);
+        if (!newCertIds.includes(pendingLinkCertId)) {
+          newCertIds.push(pendingLinkCertId);
+        }
+        needsUpdate = true;
+      }
+    }
+
+    if (needsUpdate) {
       await updateEducation(userId, savedEdu.id, {
         ...payload,
-        certificate_ids: [...payload.certificate_ids, cert.id],
+        certificate_ids: newCertIds,
         updated_at: new Date().toISOString(),
       });
     }
@@ -223,19 +254,53 @@ export default function EducationView() {
     setEduModalTarget({ ...education, is_completed: true });
   }
 
-  async function handleQuickReopen(education: Education) {
+  // ---- Certificate handlers (from EducationModal side panel) ----
+
+  async function handleLinkCertificate(educationId: string, certificateId: string) {
     if (!userId) throw new Error("No active session.");
+    const cert = certificates.find((c) => c.id === certificateId);
+    if (!cert) return;
     const nowIso = new Date().toISOString();
-    await updateEducation(userId, education.id, {
-      ...education,
-      is_completed: false,
-      completed_at: null,
+    
+    await updateCertificate(userId, certificateId, {
+      ...cert,
+      education_id: educationId,
       updated_at: nowIso,
-    });
+    } as CertificatePlaintext);
+    
+    const edu = educations.find(e => e.id === educationId);
+    if (edu && !edu.certificate_ids.includes(certificateId)) {
+      await updateEducation(userId, educationId, {
+        ...edu,
+        certificate_ids: [...edu.certificate_ids, certificateId],
+        updated_at: nowIso
+      } as EducationPlaintext);
+    }
     await refreshData(userId);
   }
 
-  // ---- Certificate handlers (from EducationModal side panel) ----
+  async function handleUnlinkCertificate(educationId: string, certificateId: string) {
+    if (!userId) throw new Error("No active session.");
+    const cert = certificates.find((c) => c.id === certificateId);
+    if (!cert) return;
+    const nowIso = new Date().toISOString();
+    
+    await updateCertificate(userId, certificateId, {
+      ...cert,
+      education_id: "",
+      updated_at: nowIso,
+    } as CertificatePlaintext);
+    
+    const edu = educations.find(e => e.id === educationId);
+    if (edu) {
+      await updateEducation(userId, educationId, {
+        ...edu,
+        certificate_ids: edu.certificate_ids.filter(id => id !== certificateId),
+        updated_at: nowIso
+      } as EducationPlaintext);
+    }
+    await refreshData(userId);
+  }
 
   async function handleUploadCertificateForEducation(
     educationId: string,
@@ -243,12 +308,9 @@ export default function EducationView() {
     label: string
   ) {
     if (!userId) throw new Error("No active session.");
-
-    // Upload file to storage
-    const { fileName, iv, mimeType } = await uploadCertificateFile(userId, file);
-
-    // Create certificate DB row
     const nowIso = new Date().toISOString();
+
+    const { fileName, iv, mimeType } = await uploadCertificateFile(userId, file);
     const cert = await createCertificate(userId, {
       label,
       file_name: fileName,
@@ -258,16 +320,15 @@ export default function EducationView() {
       updated_at: nowIso,
     });
 
-    // Link certificate to education
-    const edu = educations.find((e) => e.id === educationId);
+    const edu = educations.find(e => e.id === educationId);
     if (edu) {
-      await updateEducation(userId, educationId, {
+      await updateEducation(userId, edu.id, {
         ...edu,
         certificate_ids: [...edu.certificate_ids, cert.id],
         updated_at: nowIso,
-      });
+      } as EducationPlaintext);
     }
-
+    
     await refreshData(userId);
     return cert;
   }
@@ -281,7 +342,7 @@ export default function EducationView() {
       ...cert,
       label: newLabel,
       updated_at: new Date().toISOString(),
-    });
+    } as CertificatePlaintext);
     
     await refreshData(userId);
   }
@@ -322,7 +383,7 @@ export default function EducationView() {
           ...edu,
           certificate_ids: edu.certificate_ids.filter((id) => id !== certificate.id),
           updated_at: nowIso,
-        });
+        } as EducationPlaintext);
       }
     }
 
@@ -366,14 +427,23 @@ export default function EducationView() {
           onMarkComplete={handleQuickComplete}
         />
 
-        <CompletedEducationsBox
-          educations={completedEducations}
-          certificates={certificates}
-          isLoading={isLoading}
-          onOpenExpanded={() => openExpandedModal("completed")}
-          onSelectEducation={(edu) => setEduModalTarget(edu)}
-          onReopenEducation={handleQuickReopen}
-        />
+        <div className="flex flex-col gap-4">
+          <Link
+            href="/education/store"
+            className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
+          >
+            <FolderIcon className="h-5 w-5 text-amber-500" />
+            Certificate Store
+          </Link>
+
+          <CompletedEducationsBox
+            educations={completedEducations}
+            certificates={certificates}
+            isLoading={isLoading}
+            onOpenExpanded={() => openExpandedModal("completed")}
+            onSelectEducation={(edu) => setEduModalTarget(edu)}
+          />
+        </div>
       </section>
 
       {error && (
@@ -400,7 +470,6 @@ export default function EducationView() {
             closeExpandedModal();
             setEduModalTarget(edu);
           }}
-          onReopenEducation={handleQuickReopen}
         />
       )}
 
@@ -419,6 +488,8 @@ export default function EducationView() {
           onRenameCertificate={handleRenameCertificate}
           onDownloadCertificate={handleDownloadCertificate}
           onDeleteCertificate={handleDeleteCertificateFromEducation}
+          onLinkCertificate={handleLinkCertificate}
+          onUnlinkCertificate={handleUnlinkCertificate}
         />
       )}
 

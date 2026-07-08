@@ -8,7 +8,6 @@ import ModalFrame from "@/components/taskmanager/ModalFrame";
 import ViewToggle from "@/components/common/ViewToggle";
 import MonthTile from "@/components/common/MonthTile";
 import PriorityBadge from "@/components/taskmanager/PriorityBadge";
-import Button from "@/components/common/Button";
 import { getPriorityColor } from "@/components/taskmanager/helpers";
 import {
   byPriority,
@@ -23,7 +22,6 @@ interface CompletedEducationsModalProps {
   certificates: Certificate[]; // kept for prop signature compatibility if needed, but unused in this layout
   onClose: () => void;
   onSelectEducation: (education: Education) => void;
-  onReopenEducation: (education: Education) => void;
 }
 
 const EDUCATION_VIEW_OPTIONS: readonly ViewToggleOption<EducationViewMode>[] = [
@@ -40,7 +38,6 @@ export default function CompletedEducationsModal({
   educations,
   onClose,
   onSelectEducation,
-  onReopenEducation,
 }: CompletedEducationsModalProps) {
   const [view, setView] = useState<EducationViewMode>("months");
 

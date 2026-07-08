@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import Image from "next/image";
+import { useEffect, useRef, useState, useMemo } from "react";
 import type { Education, Certificate } from "@/types/education";
 import type { Priority } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
@@ -9,7 +8,7 @@ import Button from "@/components/common/Button";
 import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
 import ModalFrame from "@/components/taskmanager/ModalFrame";
 import { certsForEducation, trunc } from "./helpers";
-import { downloadCertificateFile } from "@/api/education";
+import DocPreviewPanel from "@/components/common/DocPreviewPanel";
 
 // --- Inline SVG Icons ---
 function XMarkIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -52,26 +51,10 @@ function LinkIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function ArrowPathIcon(props: React.SVGProps<SVGSVGElement>) {
+function LinkSlashIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m-8.331-8.331a.75.75 0 0 1 1.06 0l4.242 4.242a.75.75 0 0 1 0 1.06l-4.242 4.242a.75.75 0 0 1-1.06-1.06l2.97-2.97H5.25a.75.75 0 0 1 0-1.5h8.19l-2.97-2.97a.75.75 0 0 1 0-1.06Z" />
-    </svg>
-  );
-}
-
-function NoSymbolIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 0 0 5.636 5.636m12.728 12.728A9 9 0 0 1 5.636 5.636m12.728 12.728L5.636 5.636" />
-    </svg>
-  );
-}
-
-function DocumentTextIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244M3 3l18 18" />
     </svg>
   );
 }
@@ -98,12 +81,14 @@ interface EducationModalProps {
   certificates: Certificate[];
   userId: string;
   onClose: () => void;
-  onSave: (draft: EducationDraft, existingEducation: Education | null, pendingCert?: { file: File; label: string }) => Promise<void>;
+  onSave: (draft: EducationDraft, existingEducation: Education | null, pendingCert?: { file: File; label: string }, pendingLinkCertId?: string) => Promise<void>;
   onDelete: (educationId: string) => Promise<void>;
   onUploadCertificate: (educationId: string, file: File, label: string) => Promise<Certificate>;
   onRenameCertificate: (certificateId: string, newLabel: string) => Promise<void>;
   onDownloadCertificate: (certificate: Certificate) => Promise<void>;
   onDeleteCertificate: (certificate: Certificate) => Promise<void>;
+  onLinkCertificate: (educationId: string, certificateId: string) => Promise<void>;
+  onUnlinkCertificate: (educationId: string, certificateId: string) => Promise<void>;
 }
 
 function formatBytes(bytes: number): string {
@@ -112,178 +97,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ============================================================
-// Certificate Preview Panel (matches InvoicePreviewPanel)
-// ============================================================
-function CertificatePreviewPanel({ 
-  cert, 
-  userId, 
-  onDownload, 
-  isDownloading,
-  currentIndex,
-  totalCerts,
-  onPrev,
-  onNext
-}: { 
-  cert: Certificate, 
-  userId: string, 
-  onDownload: () => void, 
-  isDownloading: boolean,
-  currentIndex: number,
-  totalCerts: number,
-  onPrev: () => void,
-  onNext: () => void
-}) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
-  // Cleanup blob URL on unmount
-  useEffect(() => {
-    return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Reset when cert changes
-  useEffect(() => {
-    setBlobUrl(null);
-    setLoadError(null);
-    setIsLoading(false);
-  }, [cert]);
-
-  const handleLoadPreview = async () => {
-    if (!cert.file_name || !cert.file_iv) return;
-    setIsLoading(true);
-    setLoadError(null);
-    try {
-      const blob = await downloadCertificateFile(userId, cert.file_name, cert.file_iv, cert.file_mime);
-      const url = URL.createObjectURL(blob);
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
-      setBlobUrl(url);
-    } catch (err: unknown) {
-      setLoadError(err instanceof Error ? err.message : "Failed to decrypt certificate.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const mimeType = cert.file_mime || "";
-  const isPdf = mimeType === "application/pdf";
-  const isImage = mimeType.startsWith("image/");
-  const FileIcon = isPdf ? DocumentIcon : isImage ? PhotoIcon : LinkIcon;
-
-  return (
-    <div className="flex flex-col h-full max-h-[80vh]">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-zinc-200 dark:border-zinc-800">
-        {/* Navigation */}
-        <button 
-          type="button" 
-          disabled={currentIndex === 0}
-          onClick={onPrev}
-          className="p-1 rounded text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-          </svg>
-        </button>
-        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 tabular-nums">
-          {currentIndex + 1} / {totalCerts}
-        </span>
-        <button 
-          type="button" 
-          disabled={currentIndex === totalCerts - 1}
-          onClick={onNext}
-          className="p-1 rounded text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="h-4 w-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-          </svg>
-        </button>
-
-        <span className="flex-1 text-xs font-medium text-zinc-600 dark:text-zinc-400 truncate min-w-0 pl-2">
-          {cert.label}
-        </span>
-        <button
-          type="button"
-          onClick={onDownload}
-          disabled={isDownloading}
-          className="cursor-pointer p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors disabled:opacity-40"
-          title="Download certificate"
-        >
-          <ArrowDownTrayIcon className="h-4 w-4" />
-        </button>
-      </div>
-
-      {/* Content area */}
-      <div className="flex-1 overflow-auto flex items-center justify-center p-4">
-        {!blobUrl && !isLoading && !loadError && (
-          <button
-            type="button"
-            onClick={handleLoadPreview}
-            className="cursor-pointer flex flex-col items-center gap-2 text-zinc-500 hover:text-emerald-600 dark:text-zinc-400 dark:hover:text-emerald-400 transition-colors"
-          >
-            <FileIcon className="h-10 w-10" />
-            <span className="text-sm font-medium">Click to load preview</span>
-            <span className="text-xs text-zinc-400">
-              File is encrypted — decrypt on demand
-            </span>
-          </button>
-        )}
-
-        {isLoading && (
-          <div className="flex flex-col items-center gap-3 text-zinc-400">
-            <ArrowPathIcon className="h-8 w-8 animate-spin" />
-            <span className="text-sm">Decrypting certificate...</span>
-          </div>
-        )}
-
-        {loadError && (
-          <div className="flex flex-col items-center gap-3 text-red-400">
-            <NoSymbolIcon className="h-8 w-8" />
-            <span className="text-sm text-center">{loadError}</span>
-          </div>
-        )}
-
-        {blobUrl && isPdf && (
-          <iframe
-            src={blobUrl}
-            className="w-full h-full min-h-[400px] rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white"
-            title="Certificate PDF Preview"
-          />
-        )}
-
-        {blobUrl && isImage && (
-          <div className="relative w-full h-full min-h-[200px]">
-            <Image
-              src={blobUrl}
-              alt="Certificate preview"
-              fill
-              unoptimized
-              className="object-contain rounded-lg"
-            />
-          </div>
-        )}
-
-        {blobUrl && !isPdf && !isImage && (
-          <div className="flex flex-col items-center gap-3 text-zinc-400">
-            <DocumentIcon className="h-8 w-8" />
-            <span className="text-sm">Preview not available for this file type.</span>
-            <a
-              href={blobUrl}
-              download={cert.file_name}
-              className="text-sm text-emerald-500 hover:text-emerald-400 underline"
-            >
-              Download instead
-            </a>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ============================================================
 // Main Modal
@@ -299,6 +113,8 @@ export default function EducationModal({
   onRenameCertificate,
   onDownloadCertificate,
   onDeleteCertificate,
+  onLinkCertificate,
+  onUnlinkCertificate,
 }: EducationModalProps) {
   const [name, setName] = useState("");
   const [provider, setProvider] = useState("");
@@ -310,10 +126,16 @@ export default function EducationModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showIncompleteConfirm, setShowIncompleteConfirm] = useState(false);
+  const [showPendingIncompleteConfirm, setShowPendingIncompleteConfirm] = useState(false);
+  const [certToDelete, setCertToDelete] = useState<Certificate | null>(null);
+  const [certToUnlink, setCertToUnlink] = useState<Certificate | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Linked certificates for this education
-  const linkedCerts = education ? certsForEducation(education.id, certificates) : [];
+  const linkedCerts = useMemo(() => education ? certsForEducation(education.id, certificates) : [], [education, certificates]);
+  
+  // Standalone certificates (not linked to any education)
+  const standaloneCerts = certificates.filter(c => !c.education_id);
 
   // Certificate selection & rename
   const [selectedCertId, setSelectedCertId] = useState<string | null>(null);
@@ -329,6 +151,11 @@ export default function EducationModal({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [newlyUploadedCerts, setNewlyUploadedCerts] = useState<Certificate[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Standalone certificates linking state
+  const [selectedStandaloneCertId, setSelectedStandaloneCertId] = useState("");
+  const [isLinking, setIsLinking] = useState(false);
+  const [sessionAddedCertIds, setSessionAddedCertIds] = useState<string[]>([]);
 
   useEffect(() => {
     const todayStr = new Date().toISOString().split("T")[0];
@@ -349,9 +176,7 @@ export default function EducationModal({
     setNewlyUploadedCerts([]);
     setEditingCertId(null);
     setEditingCertLabel("");
-    if (linkedCerts.length > 0 && !selectedCertId) {
-      setSelectedCertId(linkedCerts[0].id);
-    }
+    setSelectedStandaloneCertId("");
   }, [education]);
   
   // Update selected cert if list changes
@@ -381,7 +206,8 @@ export default function EducationModal({
           is_completed: isCompleted,
         },
         education,
-        (certFile && certLabel.trim()) ? { file: certFile, label: certLabel.trim() } : undefined
+        (certFile && certLabel.trim()) ? { file: certFile, label: certLabel.trim() } : undefined,
+        selectedStandaloneCertId || undefined
       );
       onClose();
     } catch (err) {
@@ -432,6 +258,30 @@ export default function EducationModal({
     }
   }
 
+  async function handleStandaloneCertLink() {
+    if (!education || !selectedStandaloneCertId) return;
+    setIsLinking(true);
+    try {
+      await onLinkCertificate(education.id, selectedStandaloneCertId);
+      setSessionAddedCertIds(prev => [...prev, selectedStandaloneCertId]);
+      setSelectedStandaloneCertId("");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to link certificate.");
+    } finally {
+      setIsLinking(false);
+    }
+  }
+
+  async function handleUnlinkCertificateFromEducation(certificate: Certificate) {
+    if (!userId || !education) return;
+    try {
+      await onUnlinkCertificate(education.id, certificate.id);
+      setCertToUnlink(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to unlink certificate.");
+    }
+  }
+
   async function handleRenameSubmit(certId: string) {
     if (!editingCertLabel.trim()) return;
     setIsRenaming(true);
@@ -449,6 +299,8 @@ export default function EducationModal({
     setIsDownloading(true);
     try {
       await onDownloadCertificate(cert);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to download certificate.");
     } finally {
       setIsDownloading(false);
     }
@@ -466,7 +318,7 @@ export default function EducationModal({
   };
 
   const sidePanel = selectedCert ? (
-    <CertificatePreviewPanel 
+    <DocPreviewPanel 
       cert={selectedCert} 
       userId={userId} 
       onDownload={() => handleDownload(selectedCert)}
@@ -478,8 +330,23 @@ export default function EducationModal({
     />
   ) : undefined;
 
+  const hasUnsavedFormChanges = education ? (
+    name !== education.name ||
+    provider !== education.provider ||
+    priority !== education.priority ||
+    dueDate !== (education.due_date ?? "") ||
+    description !== education.description ||
+    isCompleted !== education.is_completed
+  ) : (
+    name !== "" ||
+    provider !== "" ||
+    priority !== "medium" ||
+    description !== "" ||
+    isCompleted !== false
+  );
+
   const handleCancel = () => {
-    if (certFile || newlyUploadedCerts.length > 0) {
+    if (certFile || newlyUploadedCerts.length > 0 || selectedStandaloneCertId || sessionAddedCertIds.length > 0 || hasUnsavedFormChanges) {
       setShowCancelConfirm(true);
     } else {
       onClose();
@@ -494,7 +361,7 @@ export default function EducationModal({
         maxWidthClassName={showSidePanel ? "max-w-6xl" : "max-w-md"}
         sidePanel={sidePanel}
       >
-        <div className="space-y-3">
+        <div className="flex flex-col h-full space-y-3">
           {/* Name */}
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
@@ -573,37 +440,44 @@ export default function EducationModal({
             />
           </label>
 
-          {/* Mark complete */}
-          <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+          <div className="flex items-center gap-2 pt-2">
             <input
               type="checkbox"
+              id="is_completed"
               checked={isCompleted}
               onChange={(e) => {
                 const checked = e.target.checked;
-                if (!checked && linkedCerts.length > 0) {
+                if (!checked && education && linkedCerts.length > 0) {
                   setShowIncompleteConfirm(true);
+                } else if (!checked && certFile) {
+                  setShowPendingIncompleteConfirm(true);
                 } else {
                   setIsCompleted(checked);
                 }
               }}
+              className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-600 dark:border-zinc-600 dark:bg-zinc-800 dark:checked:bg-emerald-500"
               disabled={isSaving}
             />
-            Mark complete
-          </label>
+            <label htmlFor="is_completed" className="text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+              Mark as complete (acquired)
+            </label>
+          </div>
 
-          {/* --- Certificates Upload & Management Zone --- */}
+          {/* Document Section - Only visible when completed */}
           {isCompleted && (
-            <div className="space-y-3 pt-2 border-t border-zinc-200 dark:border-zinc-800">
-              <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                <DocumentTextIcon className="inline h-3.5 w-3.5 mr-1" />
-                Certificates
+            <div className="mt-4 p-3 rounded-lg border border-zinc-200 bg-zinc-50/50 dark:border-zinc-800 dark:bg-zinc-900/50">
+              <span className="block mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
+                Certificates / Documents
+                <span className="text-xs font-normal text-zinc-500 bg-zinc-200 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
+                  {linkedCerts.length} attached
+                </span>
               </span>
 
               {/* Existing Certificates List */}
               {linkedCerts.length > 0 && (
                 <div className="space-y-2">
                   {linkedCerts.map((cert) => {
-                    const isEditing = editingCertId === cert.id;
+                    const isCertEditing = editingCertId === cert.id;
                     const isSelected = selectedCertId === cert.id;
                     const mimeType = cert.file_mime || "";
                     const FileIcon = mimeType === "application/pdf" ? DocumentIcon : mimeType.startsWith("image/") ? PhotoIcon : LinkIcon;
@@ -621,7 +495,7 @@ export default function EducationModal({
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <FileIcon className={`h-4 w-4 shrink-0 ${isSelected ? "text-emerald-500" : "text-zinc-400"}`} />
-                          {isEditing ? (
+                          {isCertEditing ? (
                             <input
                               type="text"
                               autoFocus
@@ -637,12 +511,12 @@ export default function EducationModal({
                             />
                           ) : (
                             <span className="text-sm text-zinc-700 dark:text-zinc-300 truncate">
-                              {trunc(cert.label, 30)}
+                              {trunc(cert.label || cert.file_name || "Unnamed Certificate", 30)}
                             </span>
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          {isEditing ? (
+                          {isCertEditing ? (
                             <>
                               <Button variant="success" size="sm" onClick={() => handleRenameSubmit(cert.id)} disabled={isRenaming}>✓</Button>
                               <Button variant="secondary" size="sm" onClick={() => setEditingCertId(null)} disabled={isRenaming}>✕</Button>
@@ -651,7 +525,7 @@ export default function EducationModal({
                             <>
                               <button
                                 type="button"
-                                onClick={() => { setEditingCertId(cert.id); setEditingCertLabel(cert.label); }}
+                                onClick={() => { setEditingCertId(cert.id); setEditingCertLabel(cert.label || cert.file_name || ""); }}
                                 className="p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
                                 title="Rename"
                               >
@@ -668,12 +542,17 @@ export default function EducationModal({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  if (selectedCertId === cert.id) setSelectedCertId(null);
-                                  onDeleteCertificate(cert);
-                                }}
+                                onClick={() => setCertToUnlink(cert)}
+                                className="p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                                title="Unlink"
+                              >
+                                <LinkSlashIcon className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCertToDelete(cert)}
                                 className="p-1 rounded-md text-zinc-400 hover:text-red-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                                title="Remove"
+                                title="Delete Permanently"
                               >
                                 <XMarkIcon className="h-4 w-4" />
                               </button>
@@ -753,6 +632,44 @@ export default function EducationModal({
                 )}
                 {uploadError && <p className="text-xs text-red-500">{uploadError}</p>}
               </div>
+              
+              {/* Link Existing Standalone Certificate */}
+              <div className="space-y-2 mt-2 pt-2 border-t border-zinc-200 dark:border-zinc-800">
+                <span className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Or link an existing standalone certificate:
+                </span>
+                <div className="flex gap-2">
+                  <select
+                    value={selectedStandaloneCertId}
+                    onChange={(e) => setSelectedStandaloneCertId(e.target.value)}
+                    disabled={isLinking || isSaving || standaloneCerts.length === 0}
+                    className="flex-1 rounded border border-zinc-300 px-2 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50 min-w-0"
+                  >
+                    <option value="" className="truncate">
+                      {standaloneCerts.length === 0 ? "No standalone certificates available" : "Select a certificate..."}
+                    </option>
+                    {standaloneCerts.map(cert => (
+                      <option key={cert.id} value={cert.id} className="truncate">
+                        {trunc(cert.label || cert.file_name || "Unnamed Certificate (Corrupted)", 50)}
+                      </option>
+                    ))}
+                  </select>
+                  {!education && selectedStandaloneCertId ? (
+                    <span className="text-xs font-medium text-amber-600 dark:text-amber-400 py-1.5 px-2 bg-amber-50 dark:bg-amber-900/20 rounded">
+                      Will link upon saving
+                    </span>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleStandaloneCertLink}
+                      disabled={isLinking || isSaving || !selectedStandaloneCertId}
+                    >
+                      {isLinking ? "Linking..." : "Link"}
+                    </Button>
+                  )}
+                </div>
+              </div>
 
               {/* Encrypted storage notice */}
               <p className="text-xs text-zinc-400 flex items-center gap-1">
@@ -765,7 +682,7 @@ export default function EducationModal({
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
           {/* Action buttons */}
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="mt-auto flex justify-end gap-2 pt-4">
             {education && (
               <Button
                 variant="danger"
@@ -805,27 +722,45 @@ export default function EducationModal({
         />
       )}
 
+      {certToUnlink && education && (
+        <ConfirmDialog
+          title="Unlink certificate?"
+          description="This certificate will be unlinked from this education, but it will remain in your Document Vault as a standalone file."
+          confirmLabel="Yes, unlink"
+          cancelLabel="Cancel"
+          onCancel={() => setCertToUnlink(null)}
+          onConfirm={() => handleUnlinkCertificateFromEducation(certToUnlink)}
+        />
+      )}
+
       {showCancelConfirm && (
         <ConfirmDialog
           title="Unsaved changes"
           description={
-            newlyUploadedCerts.length > 0
-              ? "You have unsaved changes. All the saved PDFs you uploaded during this session will be lost if you cancel. Do you want to continue?"
-              : "You have unsaved changes. The uploaded file will not be saved if you leave this page. Do you want to continue?"
+            newlyUploadedCerts.length > 0 || sessionAddedCertIds.length > 0
+              ? "You have unsaved changes. Newly uploaded certificates will be deleted, and linked standalone files will be unlinked. Do you want to continue?"
+              : selectedStandaloneCertId 
+                ? "You have a pending standalone certificate selected. If you cancel without saving, it will not be linked to this education. Do you want to continue?"
+                : "You have unsaved changes. If you cancel without saving, any modifications you made to the details will be lost. Do you want to continue?"
           }
           confirmLabel="Yes, discard"
           cancelLabel="No, stay"
           onCancel={() => setShowCancelConfirm(false)}
           onConfirm={async () => {
             setShowCancelConfirm(false);
-            if (newlyUploadedCerts.length > 0) {
+            if (newlyUploadedCerts.length > 0 || sessionAddedCertIds.length > 0) {
               setIsSaving(true);
               try {
                 for (const c of newlyUploadedCerts) {
                   await onDeleteCertificate(c);
                 }
+                if (education) {
+                  for (const id of sessionAddedCertIds) {
+                    await onUnlinkCertificate(education.id, id);
+                  }
+                }
               } catch (e) {
-                console.error("Failed to delete newly uploaded certs", e);
+                console.error("Failed to cleanup session certs", e);
               }
               setIsSaving(false);
             }
@@ -834,11 +769,11 @@ export default function EducationModal({
         />
       )}
 
-      {showIncompleteConfirm && (
+      {showIncompleteConfirm && education && (
         <ConfirmDialog
           title="Mark as incomplete?"
-          description="Marking this education as incomplete will permanently remove the uploaded certificate files. Do you want to continue?"
-          confirmLabel="Yes, remove files"
+          description="Marking this education as incomplete will unlink the attached certificates (they will remain in your Vault as standalone files). Do you want to continue?"
+          confirmLabel="Yes, unlink files"
           cancelLabel="Cancel"
           onCancel={() => setShowIncompleteConfirm(false)}
           onConfirm={async () => {
@@ -847,11 +782,56 @@ export default function EducationModal({
             setError(null);
             try {
               for (const cert of linkedCerts) {
-                await onDeleteCertificate(cert);
+                await onUnlinkCertificate(education.id, cert.id);
               }
+              setCertFile(null);
+              setCertLabel("");
+              if (fileInputRef.current) fileInputRef.current.value = "";
               setIsCompleted(false);
             } catch (err) {
-              setError(err instanceof Error ? err.message : "Failed to delete certificates.");
+              setError(err instanceof Error ? err.message : "Failed to unlink certificates.");
+            } finally {
+              setIsSaving(false);
+            }
+          }}
+        />
+      )}
+
+      {showPendingIncompleteConfirm && (
+        <ConfirmDialog
+          title="Discard pending upload?"
+          description="Marking this education as incomplete will discard the certificate file you have selected to upload. Do you want to continue?"
+          confirmLabel="Yes, discard"
+          cancelLabel="Cancel"
+          onCancel={() => setShowPendingIncompleteConfirm(false)}
+          onConfirm={() => {
+            setShowPendingIncompleteConfirm(false);
+            setCertFile(null);
+            setCertLabel("");
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            setIsCompleted(false);
+          }}
+        />
+      )}
+
+      {certToDelete && (
+        <ConfirmDialog
+          title="Delete certificate?"
+          description={`Are you sure you want to permanently delete the certificate "${certToDelete.label}"? This action cannot be undone.`}
+          confirmLabel="Yes, delete"
+          cancelLabel="Cancel"
+          onCancel={() => setCertToDelete(null)}
+          onConfirm={async () => {
+            const cert = certToDelete;
+            setCertToDelete(null);
+            setIsSaving(true);
+            try {
+              if (selectedCertId === cert.id) setSelectedCertId(null);
+              await onDeleteCertificate(cert);
+              // Also remove from newlyUploadedCerts if it was just uploaded
+              setNewlyUploadedCerts(prev => prev.filter(c => c.id !== cert.id));
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Failed to delete certificate.");
             } finally {
               setIsSaving(false);
             }

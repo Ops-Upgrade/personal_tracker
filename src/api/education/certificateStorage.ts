@@ -69,10 +69,14 @@ export async function uploadCertificateFile(
  */
 export async function downloadCertificateFile(
   userId: string,
-  fileName: string,
-  iv: string,
-  mimeType: string
+  fileName: string | null | undefined,
+  iv: string | null | undefined,
+  mimeType: string | null | undefined
 ): Promise<Blob> {
+  if (!fileName || !iv) {
+    throw new Error("Missing file information (fileName or iv). Cannot download file.");
+  }
+  
   const supabase = createClient();
 
   // 1. Download encrypted blob from storage
@@ -81,7 +85,8 @@ export async function downloadCertificateFile(
     .download(`${FOLDER}/${fileName}`);
 
   if (error) {
-    throw new Error(`Failed to download certificate: ${error.message}`);
+    const errorDetails = error instanceof Error ? error.message : JSON.stringify(error);
+    throw new Error(`Failed to download certificate: ${errorDetails}`);
   }
   if (!data) {
     throw new Error("Certificate file not found in storage.");
