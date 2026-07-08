@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { getSession } from "@/api/auth";
-import { fetchCertificates, fetchEducations, downloadCertificateFile, deleteCertificateFile, deleteCertificate, updateEducation, updateCertificate, uploadCertificateFile, createCertificate } from "@/api/education";
+import { fetchCertificates, fetchEducations, downloadCertificateFile, deleteCertificateFile, deleteCertificate, updateEducation, updateCertificate, uploadCertificateFile, createCertificate, deleteEducation } from "@/api/education";
 import type { Certificate, CertificatePlaintext, Education, EducationPlaintext } from "@/types/education";
 import TileView, { DocumentTile } from "@/components/common/TileView";
 import BoxContainer from "@/components/common/BoxContainer";
@@ -90,10 +90,48 @@ export default function CertificateStoreView() {
       };
       
       await updateCertificate(userId, existingCertificate.id, payload as CertificatePlaintext);
-      
-      setCertificates(prev => prev.map(c => 
-        c.id === existingCertificate.id ? { ...c, ...payload } : c
-      ));
+
+      // If the linked education changed, update both old and new education records
+      const oldEduId = existingCertificate.education_id;
+      const newEduId = educationId || "";
+
+      if (oldEduId !== newEduId) {
+        // Fetch fresh data to avoid stale state
+        const [freshEdus, freshCerts] = await Promise.all([
+          fetchEducations(userId),
+          fetchCertificates(userId),
+        ]);
+
+        if (oldEduId) {
+          const oldEdu = freshEdus.find(e => e.id === oldEduId);
+          if (oldEdu) {
+            // Count actual certs still linked to this education (the cert we just saved now has the new education_id)
+            const remainingLinkedCerts = freshCerts.filter(c => c.education_id === oldEduId);
+            const isStillCompleted = remainingLinkedCerts.length > 0 ? oldEdu.is_completed : false;
+            await updateEducation(userId, oldEdu.id, {
+              ...oldEdu,
+              certificate_ids: remainingLinkedCerts.map(c => c.id),
+              is_completed: isStillCompleted,
+              completed_at: isStillCompleted ? oldEdu.completed_at : null,
+              updated_at: nowIso,
+            } as EducationPlaintext);
+          }
+        }
+
+        if (newEduId) {
+          const newEdu = freshEdus.find(e => e.id === newEduId);
+          if (newEdu) {
+            const linkedToNew = freshCerts.filter(c => c.education_id === newEduId);
+            await updateEducation(userId, newEdu.id, {
+              ...newEdu,
+              certificate_ids: linkedToNew.map(c => c.id),
+              updated_at: nowIso,
+            } as EducationPlaintext);
+          }
+        }
+      }
+
+      await loadData();
       setEditingCertificate(null);
     } else {
       // Create new
@@ -117,44 +155,45 @@ export default function CertificateStoreView() {
     }
   };
 
-  const handleDeleteConfirmed = async (certId: string) => {
+  async function handleDeleteConfirmed(idToRemove: string, cascadeMode: 'unlink' | 'cascade' = 'unlink') {
     if (!userId) return;
+
     try {
-      const cert = certificates.find((c) => c.id === certId);
+      const cert = certificates.find((c) => c.id === idToRemove);
       if (!cert) return;
-      
-      // 1. Delete storage file
+
+      if (cascadeMode === 'cascade' && cert.education_id) {
+         await deleteEducation(cert.education_id);
+      } else if (cascadeMode === 'unlink' && cert.education_id) {
+         // remove the certificate from the education's certificate_ids array
+         const edu = educations.find((e) => e.id === cert.education_id);
+         if (edu) {
+            const newCertIds = edu.certificate_ids.filter((id) => id !== idToRemove);
+            const isStillCompleted = newCertIds.length > 0 ? edu.is_completed : false;
+            await updateEducation(userId, edu.id, {
+              ...edu,
+              certificate_ids: newCertIds,
+              is_completed: isStillCompleted,
+              completed_at: isStillCompleted ? edu.completed_at : null,
+              updated_at: new Date().toISOString()
+            });
+         }
+      }
+
       if (cert.file_name) {
         try {
           await deleteCertificateFile(cert.file_name);
         } catch {
-          // best-effort
+          // best-effort cleanup
         }
       }
+      await deleteCertificate(idToRemove);
 
-      // 2. Unlink from education
-      if (cert.education_id) {
-        const edu = educations.find((e) => e.id === cert.education_id);
-        if (edu) {
-          const nowIso = new Date().toISOString();
-          const payload = {
-            ...edu,
-            certificate_ids: edu.certificate_ids.filter((id) => id !== cert.id),
-            updated_at: nowIso,
-          };
-          await updateEducation(userId, edu.id, payload as EducationPlaintext);
-        }
-      }
-
-      // 3. Delete DB row
-      await deleteCertificate(cert.id);
-      
-      // Update local state without fetching again
       setCertificates(prev => prev.filter(c => c.id !== cert.id));
     } catch (err) {
       alert("Failed to delete certificate: " + (err instanceof Error ? err.message : "Unknown error"));
     }
-  };
+  }
 
   const documentTiles: DocumentTile[] = certificates.map((cert) => {
     const edu = educations.find((e) => e.id === cert.education_id);
@@ -211,8 +250,8 @@ export default function CertificateStoreView() {
           userId={userId}
           onClose={() => setEditingCertificate(null)}
           onSave={handleSaveCertificate}
-          onDelete={async (cert) => {
-            await handleDeleteConfirmed(cert.id);
+          onDelete={async (cert, cascadeMode) => {
+            await handleDeleteConfirmed(cert.id, cascadeMode);
             setEditingCertificate(null);
           }}
           onDownload={async (cert) => {

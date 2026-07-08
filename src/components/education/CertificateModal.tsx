@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Certificate, Education } from "@/types/education";
 import Button from "@/components/common/Button";
 import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import DeleteOptionsDialog from "@/components/common/DeleteOptionsDialog";
 import ModalFrame from "@/components/taskmanager/ModalFrame";
 import { trunc } from "./helpers";
 import DocPreviewPanel from "@/components/common/DocPreviewPanel";
@@ -35,7 +36,7 @@ interface CertificateModalProps {
     file: File | null,
     existingCertificate: Certificate | null
   ) => Promise<void>;
-  onDelete: (certificate: Certificate) => Promise<void>;
+  onDelete: (certificate: Certificate, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
   onDownload: (certificate: Certificate) => Promise<void>;
 }
 
@@ -92,12 +93,12 @@ export default function CertificateModal({
     }
   }
 
-  async function handleDelete() {
+  async function handleDelete(cascadeMode: 'unlink' | 'cascade') {
     if (!certificate) return;
     setIsSaving(true);
     setError(null);
     try {
-      await onDelete(certificate);
+      await onDelete(certificate, cascadeMode);
       setShowDeleteConfirm(false);
       onClose();
     } catch (err) {
@@ -270,12 +271,23 @@ export default function CertificateModal({
       </ModalFrame>
 
       {showDeleteConfirm && certificate && (
-        <ConfirmDialog
-          title="Delete certificate?"
-          description="This will permanently delete the certificate and its file. This cannot be undone."
-          onCancel={() => setShowDeleteConfirm(false)}
-          onConfirm={handleDelete}
-        />
+        certificate.education_id ? (
+          <DeleteOptionsDialog
+            title="Delete certificate?"
+            description="This certificate is linked to an education. What would you like to do?"
+            unlinkOptionLabel="Delete file only (keep education)"
+            cascadeOptionLabel="Delete file AND education record"
+            onCancel={() => setShowDeleteConfirm(false)}
+            onConfirm={(mode) => handleDelete(mode)}
+          />
+        ) : (
+          <ConfirmDialog
+            title="Delete certificate?"
+            description="This will permanently delete the certificate and its file. This cannot be undone."
+            onCancel={() => setShowDeleteConfirm(false)}
+            onConfirm={() => handleDelete('unlink')}
+          />
+        )
       )}
 
       {showCancelConfirm && (

@@ -9,6 +9,7 @@ import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
 import ModalFrame from "@/components/taskmanager/ModalFrame";
 import { certsForEducation, trunc } from "./helpers";
 import DocPreviewPanel from "@/components/common/DocPreviewPanel";
+import DeleteOptionsDialog from "@/components/common/DeleteOptionsDialog";
 
 // --- Inline SVG Icons ---
 function XMarkIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -82,11 +83,11 @@ interface EducationModalProps {
   userId: string;
   onClose: () => void;
   onSave: (draft: EducationDraft, existingEducation: Education | null, pendingCert?: { file: File; label: string }, pendingLinkCertId?: string) => Promise<void>;
-  onDelete: (educationId: string) => Promise<void>;
+  onDelete: (educationId: string, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
   onUploadCertificate: (educationId: string, file: File, label: string) => Promise<Certificate>;
   onRenameCertificate: (certificateId: string, newLabel: string) => Promise<void>;
   onDownloadCertificate: (certificate: Certificate) => Promise<void>;
-  onDeleteCertificate: (certificate: Certificate) => Promise<void>;
+  onDeleteCertificate: (certificate: Certificate, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
   onLinkCertificate: (educationId: string, certificateId: string) => Promise<void>;
   onUnlinkCertificate: (educationId: string, certificateId: string) => Promise<void>;
 }
@@ -156,6 +157,8 @@ export default function EducationModal({
   const [selectedStandaloneCertId, setSelectedStandaloneCertId] = useState("");
   const [isLinking, setIsLinking] = useState(false);
   const [sessionAddedCertIds, setSessionAddedCertIds] = useState<string[]>([]);
+  // For create mode: staged cert id that will be linked on save
+  const [stagedLinkCertId, setStagedLinkCertId] = useState<string | null>(null);
 
   useEffect(() => {
     const todayStr = new Date().toISOString().split("T")[0];
@@ -192,6 +195,12 @@ export default function EducationModal({
       return;
     }
 
+    const hasFiles = linkedCerts.length > 0 || Boolean(certFile) || Boolean(stagedLinkCertId) || sessionAddedCertIds.length > 0 || newlyUploadedCerts.length > 0;
+    if (isCompleted && !hasFiles) {
+      setError("A file is required to save as completed.");
+      return;
+    }
+
     setIsSaving(true);
     setError(null);
 
@@ -207,7 +216,7 @@ export default function EducationModal({
         },
         education,
         (certFile && certLabel.trim()) ? { file: certFile, label: certLabel.trim() } : undefined,
-        selectedStandaloneCertId || undefined
+        !education && stagedLinkCertId ? stagedLinkCertId : undefined
       );
       onClose();
     } catch (err) {
@@ -217,12 +226,12 @@ export default function EducationModal({
     }
   }
 
-  async function handleDelete() {
+  async function handleDelete(cascadeMode: 'unlink' | 'cascade') {
     if (!education) return;
     setIsSaving(true);
     setError(null);
     try {
-      await onDelete(education.id);
+      await onDelete(education.id, cascadeMode);
       setShowDeleteConfirm(false);
       onClose();
     } catch (err) {
@@ -259,16 +268,24 @@ export default function EducationModal({
   }
 
   async function handleStandaloneCertLink() {
-    if (!education || !selectedStandaloneCertId) return;
-    setIsLinking(true);
-    try {
-      await onLinkCertificate(education.id, selectedStandaloneCertId);
-      setSessionAddedCertIds(prev => [...prev, selectedStandaloneCertId]);
+    if (!selectedStandaloneCertId) return;
+
+    if (education) {
+      // Edit mode: link immediately via API
+      setIsLinking(true);
+      try {
+        await onLinkCertificate(education.id, selectedStandaloneCertId);
+        setSessionAddedCertIds(prev => [...prev, selectedStandaloneCertId]);
+        setSelectedStandaloneCertId("");
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed to link certificate.");
+      } finally {
+        setIsLinking(false);
+      }
+    } else {
+      // Create mode: stage locally, will be linked on save
+      setStagedLinkCertId(selectedStandaloneCertId);
       setSelectedStandaloneCertId("");
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to link certificate.");
-    } finally {
-      setIsLinking(false);
     }
   }
 
@@ -277,6 +294,11 @@ export default function EducationModal({
     try {
       await onUnlinkCertificate(education.id, certificate.id);
       setCertToUnlink(null);
+
+      const remainingCerts = linkedCerts.filter(c => c.id !== certificate.id);
+      if (isCompleted && remainingCerts.length === 0 && !certFile && !selectedStandaloneCertId && newlyUploadedCerts.length === 0 && sessionAddedCertIds.length === 0) {
+        setIsCompleted(false);
+      }
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to unlink certificate.");
     }
@@ -346,7 +368,7 @@ export default function EducationModal({
   );
 
   const handleCancel = () => {
-    if (certFile || newlyUploadedCerts.length > 0 || selectedStandaloneCertId || sessionAddedCertIds.length > 0 || hasUnsavedFormChanges) {
+    if (certFile || newlyUploadedCerts.length > 0 || selectedStandaloneCertId || sessionAddedCertIds.length > 0 || stagedLinkCertId || hasUnsavedFormChanges) {
       setShowCancelConfirm(true);
     } else {
       onClose();
@@ -587,7 +609,15 @@ export default function EducationModal({
                     <Button
                       variant="secondary"
                       size="sm"
-                      onClick={() => { setCertFile(null); setCertLabel(""); if (fileInputRef.current) fileInputRef.current.value = ""; }}
+                      onClick={() => { 
+                        setCertFile(null); 
+                        setCertLabel(""); 
+                        if (fileInputRef.current) fileInputRef.current.value = ""; 
+
+                        if (isCompleted && linkedCerts.length === 0 && !stagedLinkCertId && newlyUploadedCerts.length === 0 && sessionAddedCertIds.length === 0) {
+                          setIsCompleted(false);
+                        }
+                      }}
                       disabled={isUploading}
                     >
                       Cancel
@@ -605,7 +635,12 @@ export default function EducationModal({
                 <div className="flex gap-2">
                   <select
                     value={selectedStandaloneCertId}
-                    onChange={(e) => setSelectedStandaloneCertId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedStandaloneCertId(e.target.value);
+                      if (!e.target.value && isCompleted && linkedCerts.length === 0 && !certFile && newlyUploadedCerts.length === 0 && sessionAddedCertIds.length === 0) {
+                        setIsCompleted(false);
+                      }
+                    }}
                     disabled={isLinking || isSaving || standaloneCerts.length === 0}
                     className="flex-1 rounded border border-zinc-300 px-2 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50 min-w-0"
                   >
@@ -618,20 +653,14 @@ export default function EducationModal({
                       </option>
                     ))}
                   </select>
-                  {!education && selectedStandaloneCertId ? (
-                    <span className="text-xs font-medium text-amber-600 dark:text-amber-400 py-1.5 px-2 bg-amber-50 dark:bg-amber-900/20 rounded">
-                      Will link upon saving
-                    </span>
-                  ) : (
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={handleStandaloneCertLink}
-                      disabled={isLinking || isSaving || !selectedStandaloneCertId}
-                    >
-                      {isLinking ? "Linking..." : "Link"}
-                    </Button>
-                  )}
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleStandaloneCertLink}
+                    disabled={isLinking || isSaving || !selectedStandaloneCertId || Boolean(stagedLinkCertId)}
+                  >
+                    {isLinking ? "Linking..." : "Link"}
+                  </Button>
                 </div>
               </div>
 
@@ -678,12 +707,23 @@ export default function EducationModal({
       </ModalFrame>
 
       {showDeleteConfirm && education && (
-        <ConfirmDialog
-          title="Delete education?"
-          description="Are you sure? This will also remove all linked certificates. This cannot be undone."
-          onCancel={() => setShowDeleteConfirm(false)}
-          onConfirm={handleDelete}
-        />
+        linkedCerts.length > 0 ? (
+          <DeleteOptionsDialog
+            title="Delete education?"
+            description="This education has linked certificates. What would you like to do?"
+            unlinkOptionLabel="Delete education only (keep files standalone)"
+            cascadeOptionLabel="Delete education AND linked files"
+            onCancel={() => setShowDeleteConfirm(false)}
+            onConfirm={(mode) => handleDelete(mode)}
+          />
+        ) : (
+          <ConfirmDialog
+            title="Delete education?"
+            description="Are you sure you want to delete this education? This cannot be undone."
+            onCancel={() => setShowDeleteConfirm(false)}
+            onConfirm={() => handleDelete('cascade')}
+          />
+        )
       )}
 
       {certToUnlink && education && (
@@ -716,7 +756,7 @@ export default function EducationModal({
               setIsSaving(true);
               try {
                 for (const c of newlyUploadedCerts) {
-                  await onDeleteCertificate(c);
+                  await onDeleteCertificate(c, 'cascade');
                 }
                 if (education) {
                   for (const id of sessionAddedCertIds) {
@@ -779,21 +819,25 @@ export default function EducationModal({
       )}
 
       {certToDelete && (
-        <ConfirmDialog
+        <DeleteOptionsDialog
           title="Delete certificate?"
-          description={`Are you sure you want to permanently delete the certificate "${certToDelete.label}"? This action cannot be undone.`}
-          confirmLabel="Yes, delete"
-          cancelLabel="Cancel"
+          description={`This certificate is linked to "${education?.name}". What would you like to do?`}
+          unlinkOptionLabel="Delete file only (keep education)"
+          cascadeOptionLabel="Delete file AND education record"
           onCancel={() => setCertToDelete(null)}
-          onConfirm={async () => {
+          onConfirm={async (cascadeMode) => {
             const cert = certToDelete;
             setCertToDelete(null);
             setIsSaving(true);
             try {
               if (selectedCertId === cert.id) setSelectedCertId(null);
-              await onDeleteCertificate(cert);
-              // Also remove from newlyUploadedCerts if it was just uploaded
+              await onDeleteCertificate(cert, cascadeMode);
               setNewlyUploadedCerts(prev => prev.filter(c => c.id !== cert.id));
+              
+              const remainingCerts = linkedCerts.filter(c => c.id !== cert.id);
+              if (isCompleted && remainingCerts.length === 0 && !certFile && !selectedStandaloneCertId && sessionAddedCertIds.length === 0 && newlyUploadedCerts.filter(c => c.id !== cert.id).length === 0) {
+                setIsCompleted(false);
+              }
             } catch (err) {
               setError(err instanceof Error ? err.message : "Failed to delete certificate.");
             } finally {

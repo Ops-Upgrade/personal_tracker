@@ -12,6 +12,7 @@ import {
   Plus
 } from "lucide-react";
 import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import DeleteOptionsDialog from "@/components/common/DeleteOptionsDialog";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 
@@ -32,7 +33,7 @@ interface TileViewProps {
   documents: DocumentTile[];
   isLoading?: boolean;
   onDownload?: (fileId: string) => void;
-  onDeleteConfirmed?: (fileId: string) => void;
+  onDeleteConfirmed?: (fileId: string, cascadeMode: 'unlink' | 'cascade') => void;
   onAdd?: () => void;
   onActionClick?: (fileId: string) => void;
   title?: React.ReactNode;
@@ -65,7 +66,7 @@ export default function TileView({
     setDocToDelete(doc);
   };
 
-  const confirmDelete = () => {
+  const confirmDeleteWithMode = (cascadeMode: 'unlink' | 'cascade') => {
     if (!docToDelete) return;
     
     // Add to removingIds to trigger fade out animation
@@ -81,7 +82,7 @@ export default function TileView({
     // Give animation time to play before calling parent
     setTimeout(() => {
       if (onDeleteConfirmed) {
-        onDeleteConfirmed(idToRemove);
+        onDeleteConfirmed(idToRemove, cascadeMode);
       }
       // Clean up local state after a while
       setTimeout(() => {
@@ -300,16 +301,25 @@ export default function TileView({
       </div>
 
       {/* Delete Confirmation Modal */}
-      {docToDelete && (
+      {docToDelete && docToDelete.linkedItemName ? (
+        <DeleteOptionsDialog
+          title="Delete document?"
+          description={`This document is linked to '${docToDelete.linkedItemName}'. What would you like to do?`}
+          unlinkOptionLabel="Delete file only (keep education)"
+          cascadeOptionLabel="Delete file AND education record"
+          onCancel={() => setDocToDelete(null)}
+          onConfirm={confirmDeleteWithMode}
+        />
+      ) : docToDelete ? (
         <ConfirmDialog
           title="Delete document?"
           description={defaultGetDeleteWarningText(docToDelete)}
           confirmLabel="Delete"
           cancelLabel="Cancel"
-          onConfirm={confirmDelete}
+          onConfirm={() => confirmDeleteWithMode('unlink')}
           onCancel={() => setDocToDelete(null)}
         />
-      )}
+      ) : null}
     </div>
   );
 }

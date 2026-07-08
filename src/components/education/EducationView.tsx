@@ -167,15 +167,28 @@ export default function EducationView() {
     pendingLinkCertId?: string
   ) {
     if (!userId) throw new Error("No active session.");
+
+    // Fetch fresh state to prevent race conditions where UI state hasn't updated yet after linking/uploading
+    const freshEdus = await fetchEducations(userId);
+    const freshEdu = existingEducation ? freshEdus.find(e => e.id === existingEducation.id) : null;
+    
+    const hasPendingFiles = Boolean(pendingCert || pendingLinkCertId);
+    const existingCertIds = freshEdu?.certificate_ids ?? [];
+    
+    // Enforce rule: cannot be completed without files
+    if (draft.is_completed && !hasPendingFiles && existingCertIds.length === 0) {
+      draft.is_completed = false;
+    }
+
     const nowIso = new Date().toISOString();
     const completedAt = draft.is_completed
-      ? existingEducation?.completed_at ?? nowIso
+      ? freshEdu?.completed_at ?? nowIso
       : null;
 
     const payload = {
       ...draft,
       completed_at: completedAt,
-      certificate_ids: existingEducation?.certificate_ids ?? [],
+      certificate_ids: existingCertIds,
       updated_at: nowIso,
     };
 
@@ -229,20 +242,32 @@ export default function EducationView() {
     await refreshData(userId);
   }
 
-  async function handleEducationDelete(educationId: string) {
+  async function handleEducationDelete(educationId: string, cascadeMode: 'unlink' | 'cascade') {
     if (!userId) throw new Error("No active session.");
 
-    // Clean up all linked certificates and their storage files
-    const linkedCerts = certificates.filter((c) => c.education_id === educationId);
-    for (const cert of linkedCerts) {
-      if (cert.file_name) {
-        try {
-          await deleteCertificateFile(cert.file_name);
-        } catch {
-          // Best-effort storage cleanup — don't block deletion
-        }
+    if (cascadeMode === 'unlink') {
+      const linkedCerts = certificates.filter((c) => c.education_id === educationId);
+      const nowIso = new Date().toISOString();
+      for (const cert of linkedCerts) {
+        await updateCertificate(userId, cert.id, {
+          ...cert,
+          education_id: "",
+          updated_at: nowIso,
+        } as CertificatePlaintext);
       }
-      await deleteCertificate(cert.id);
+    } else {
+      // Clean up all linked certificates and their storage files
+      const linkedCerts = certificates.filter((c) => c.education_id === educationId);
+      for (const cert of linkedCerts) {
+        if (cert.file_name) {
+          try {
+            await deleteCertificateFile(cert.file_name);
+          } catch {
+            // Best-effort storage cleanup — don't block deletion
+          }
+        }
+        await deleteCertificate(cert.id);
+      }
     }
 
     await deleteEducation(educationId);
@@ -293,9 +318,13 @@ export default function EducationView() {
     
     const edu = educations.find(e => e.id === educationId);
     if (edu) {
+      const newCertIds = edu.certificate_ids.filter(id => id !== certificateId);
+      const isStillCompleted = newCertIds.length > 0 ? edu.is_completed : false;
       await updateEducation(userId, educationId, {
         ...edu,
-        certificate_ids: edu.certificate_ids.filter(id => id !== certificateId),
+        certificate_ids: newCertIds,
+        is_completed: isStillCompleted,
+        completed_at: isStillCompleted ? edu.completed_at : null,
         updated_at: nowIso
       } as EducationPlaintext);
     }
@@ -366,25 +395,31 @@ export default function EducationView() {
     URL.revokeObjectURL(url);
   }
 
-  async function handleDeleteCertificateFromEducation(certificate: Certificate) {
+  async function handleDeleteCertificateFromEducation(certificate: Certificate, cascadeMode: 'unlink' | 'cascade') {
     if (!userId) throw new Error("No active session.");
 
-    // Delete storage file
-    if (certificate.file_name) {
-      await deleteCertificateFile(certificate.file_name);
-    }
-
-    // Unlink from education
-    if (certificate.education_id) {
+    if (cascadeMode === 'cascade' && certificate.education_id) {
+       await deleteEducation(certificate.education_id);
+    } else if (cascadeMode === 'unlink' && certificate.education_id) {
+      // Unlink from education before deleting
       const edu = educations.find((e) => e.id === certificate.education_id);
       if (edu) {
         const nowIso = new Date().toISOString();
+        const newCertIds = edu.certificate_ids.filter((id) => id !== certificate.id);
+        const isStillCompleted = newCertIds.length > 0 ? edu.is_completed : false;
         await updateEducation(userId, edu.id, {
           ...edu,
-          certificate_ids: edu.certificate_ids.filter((id) => id !== certificate.id),
+          certificate_ids: newCertIds,
+          is_completed: isStillCompleted,
+          completed_at: isStillCompleted ? edu.completed_at : null,
           updated_at: nowIso,
         } as EducationPlaintext);
       }
+    }
+
+    // Delete storage file
+    if (certificate.file_name) {
+      try { await deleteCertificateFile(certificate.file_name); } catch {}
     }
 
     // Delete DB row
