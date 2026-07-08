@@ -495,69 +495,36 @@ export default function EducationModal({
                       >
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <FileIcon className={`h-4 w-4 shrink-0 ${isSelected ? "text-emerald-500" : "text-zinc-400"}`} />
-                          {isCertEditing ? (
-                            <input
-                              type="text"
-                              autoFocus
-                              value={editingCertLabel}
-                              onChange={(e) => setEditingCertLabel(e.target.value)}
-                              className="flex-1 w-full rounded border border-zinc-300 px-1.5 py-0.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-100"
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleRenameSubmit(cert.id);
-                                if (e.key === "Escape") setEditingCertId(null);
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              disabled={isRenaming}
-                            />
-                          ) : (
-                            <span className="text-sm text-zinc-700 dark:text-zinc-300 truncate">
-                              {trunc(cert.label || cert.file_name || "Unnamed Certificate", 30)}
-                            </span>
-                          )}
+                          <span className="text-sm text-zinc-700 dark:text-zinc-300 truncate">
+                            {trunc(cert.label || cert.file_name || "Unnamed Certificate", 30)}
+                          </span>
                         </div>
                         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                          {isCertEditing ? (
-                            <>
-                              <Button variant="success" size="sm" onClick={() => handleRenameSubmit(cert.id)} disabled={isRenaming}>✓</Button>
-                              <Button variant="secondary" size="sm" onClick={() => setEditingCertId(null)} disabled={isRenaming}>✕</Button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => { setEditingCertId(cert.id); setEditingCertLabel(cert.label || cert.file_name || ""); }}
-                                className="p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                                title="Rename"
-                              >
-                                ✎
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDownload(cert)}
-                                disabled={isDownloading}
-                                className="p-1 rounded-md text-zinc-400 hover:text-emerald-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                                title="Download"
-                              >
-                                <ArrowDownTrayIcon className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setCertToUnlink(cert)}
-                                className="p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                                title="Unlink"
-                              >
-                                <LinkSlashIcon className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setCertToDelete(cert)}
-                                className="p-1 rounded-md text-zinc-400 hover:text-red-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-                                title="Delete Permanently"
-                              >
-                                <XMarkIcon className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(cert)}
+                            disabled={isDownloading}
+                            className="p-1 rounded-md text-zinc-400 hover:text-emerald-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                            title="Download"
+                          >
+                            <ArrowDownTrayIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCertToUnlink(cert)}
+                            className="p-1 rounded-md text-zinc-400 hover:text-amber-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                            title="Unlink"
+                          >
+                            <LinkSlashIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCertToDelete(cert)}
+                            className="p-1 rounded-md text-zinc-400 hover:text-red-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                            title="Delete Permanently"
+                          >
+                            <XMarkIcon className="h-4 w-4" />
+                          </button>
                         </div>
                       </div>
                     );
@@ -581,7 +548,10 @@ export default function EducationModal({
                     accept=".pdf,.jpg,.jpeg,.png,.webp"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
-                      if (f) setCertFile(f);
+                      if (f) {
+                        setCertFile(f);
+                        setCertLabel(f.name);
+                      }
                     }}
                     disabled={isUploading || isSaving}
                     className="hidden"
@@ -598,24 +568,18 @@ export default function EducationModal({
                 </label>
 
                 {certFile && (
-                  <div className="flex gap-2 mt-2">
-                    <input
-                      type="text"
-                      value={certLabel}
-                      onChange={(e) => setCertLabel(e.target.value)}
-                      placeholder="Label (e.g. AWS Certified...)"
-                      className="flex-1 rounded border border-zinc-300 px-2 py-1.5 text-xs outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-                    />
-                    {!education ? (
-                      <span className="text-xs font-medium text-amber-600 dark:text-amber-400 py-1.5 px-2 bg-amber-50 dark:bg-amber-900/20 rounded">
+                  <div className="flex justify-end items-center gap-2 mt-2">
+                    {!education && (
+                      <span className="text-xs font-medium text-amber-600 dark:text-amber-400 py-1.5 px-2 bg-amber-50 dark:bg-amber-900/20 rounded mr-auto">
                         Will upload upon saving
                       </span>
-                    ) : (
+                    )}
+                    {education && (
                       <Button
                         variant="primary"
                         size="sm"
                         onClick={handleCertificateUpload}
-                        disabled={isUploading || !certLabel.trim()}
+                        disabled={isUploading}
                       >
                         {isUploading ? "Uploading..." : "Upload"}
                       </Button>

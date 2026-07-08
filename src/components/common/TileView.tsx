@@ -108,16 +108,20 @@ export default function TileView({
     <div className="flex flex-col h-full w-full space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-          {title}
-        </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0">
+        <div className="flex flex-row items-center gap-3">
+          {title && (
+            <div className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+              {title}
+            </div>
+          )}
           <ViewToggle
             value={viewMode}
             onChange={setViewMode}
             options={STORE_VIEW_OPTIONS}
             ariaLabel="Store view toggle"
           />
+        </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0">
           <div className="relative flex-1 sm:w-64">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
               <Search className="h-4 w-4" />
@@ -167,7 +171,8 @@ export default function TileView({
                 return (
                   <div
                     key={doc.id}
-                    className={`group flex items-center justify-between gap-4 p-4 transition-all duration-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${
+                    onClick={() => onActionClick?.(doc.id)}
+                    className={`group flex items-center justify-between gap-4 p-4 transition-all duration-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${onActionClick ? "cursor-pointer" : ""} ${
                       isRemoving ? "opacity-0 scale-y-95" : "opacity-100 scale-y-100"
                     }`}
                   >
@@ -176,7 +181,7 @@ export default function TileView({
                         {isImage ? (
                           <ImageIcon className="h-5 w-5 text-emerald-500" />
                         ) : isPdf ? (
-                          <FileText className="h-5 w-5 text-blue-500" />
+                          <FileText className="h-5 w-5 text-red-500" />
                         ) : (
                           <File className="h-5 w-5 text-zinc-400" />
                         )}
@@ -195,7 +200,7 @@ export default function TileView({
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => onDownload?.(doc.id)}
                         className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-emerald-600 dark:hover:bg-zinc-800 transition-colors"
@@ -210,15 +215,6 @@ export default function TileView({
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
-                      {onActionClick && (
-                        <button
-                          onClick={() => onActionClick(doc.id)}
-                          className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 transition-colors"
-                          title="Edit"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-                      )}
                     </div>
                   </div>
                 );
@@ -237,7 +233,8 @@ export default function TileView({
               return (
                 <div
                   key={doc.id}
-                  className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md hover:border-emerald-200 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-800 ${
+                  onClick={() => onActionClick?.(doc.id)}
+                  className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md hover:border-emerald-200 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-800 ${onActionClick ? "cursor-pointer" : ""} ${
                     isRemoving ? "opacity-0 scale-95" : "opacity-100 scale-100"
                   }`}
                 >
@@ -249,14 +246,14 @@ export default function TileView({
                     ) : isImage ? (
                       <ImageIcon className="h-10 w-10 text-emerald-500/50" />
                     ) : isPdf ? (
-                      <FileText className="h-10 w-10 text-blue-500/50" />
+                      <FileText className="h-10 w-10 text-red-500/50" />
                     ) : (
                       <File className="h-10 w-10 text-zinc-400/50" />
                     )}
 
                     {/* Overlay Actions */}
                     <div className="absolute inset-x-0 top-0 flex items-start justify-between p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 bg-gradient-to-b from-black/40 to-transparent">
-                      <div className="flex gap-1">
+                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => onDownload?.(doc.id)}
                           className="flex h-7 w-7 items-center justify-center rounded-md bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/40"
@@ -272,15 +269,6 @@ export default function TileView({
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                      {onActionClick && (
-                        <button
-                          onClick={() => onActionClick(doc.id)}
-                          className="flex h-7 w-7 items-center justify-center rounded-md text-white transition-colors hover:bg-white/20 backdrop-blur-sm"
-                          title="More actions"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-                      )}
                     </div>
                   </div>
 

@@ -6,6 +6,7 @@ import { getSession } from "@/api/auth";
 import { fetchCertificates, fetchEducations, downloadCertificateFile, deleteCertificateFile, deleteCertificate, updateEducation, updateCertificate, uploadCertificateFile, createCertificate } from "@/api/education";
 import type { Certificate, CertificatePlaintext, Education, EducationPlaintext } from "@/types/education";
 import TileView, { DocumentTile } from "@/components/common/TileView";
+import BoxContainer from "@/components/common/BoxContainer";
 import CertificateModal from "./CertificateModal";
 
 export default function CertificateStoreView() {
@@ -175,6 +176,14 @@ export default function CertificateStoreView() {
         >
           ← Back to Education
         </Link>
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+            Certificate Store
+          </h1>
+          <p className="mt-1 text-sm font-normal text-zinc-500 dark:text-zinc-400">
+            View all uploaded certificates across all your educations.
+          </p>
+        </div>
       </div>
 
       {error && (
@@ -183,29 +192,22 @@ export default function CertificateStoreView() {
         </div>
       )}
 
-      <TileView
-        documents={documentTiles}
-        isLoading={isLoading}
-        onDownload={handleDownload}
-        onDeleteConfirmed={handleDeleteConfirmed}
-        onActionClick={handleActionClick}
-        onAdd={() => setIsAddingCertificate(true)}
-        title={
-          <div>
-            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-              Certificate Store
-            </h1>
-            <p className="mt-1 text-sm font-normal text-zinc-500 dark:text-zinc-400">
-              View all uploaded certificates across all your educations.
-            </p>
-          </div>
-        }
-      />
+      <BoxContainer>
+        <TileView
+          documents={documentTiles}
+          isLoading={isLoading}
+          onDownload={handleDownload}
+          onDeleteConfirmed={handleDeleteConfirmed}
+          onActionClick={handleActionClick}
+          onAdd={() => setIsAddingCertificate(true)}
+          title=""
+        />
+      </BoxContainer>
 
       {editingCertificate && userId && (
         <CertificateModal
           certificate={editingCertificate}
-          completedEducations={educations}
+          completedEducations={educations.filter(e => e.is_completed)}
           userId={userId}
           onClose={() => setEditingCertificate(null)}
           onSave={handleSaveCertificate}
@@ -221,7 +223,7 @@ export default function CertificateStoreView() {
       {isAddingCertificate && userId && (
         <CertificateModal
           certificate={null}
-          completedEducations={educations}
+          completedEducations={educations.filter(e => e.is_completed)}
           userId={userId}
           onClose={() => setIsAddingCertificate(false)}
           onSave={handleSaveCertificate}

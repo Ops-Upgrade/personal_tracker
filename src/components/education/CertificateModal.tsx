@@ -148,18 +148,7 @@ export default function CertificateModal({
         sidePanel={sidePanel}
       >
         <div className="flex flex-col h-full space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Label
-            </span>
-            <input
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. AWS Solutions Architect"
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-            />
-          </label>
+          {/* Label input removed */}
 
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
@@ -214,8 +203,8 @@ export default function CertificateModal({
                     if (f) {
                       setCertFile(f);
                       if (!label.trim()) {
-                        // Autofill label from file name (without extension) if label is empty
-                        setLabel(f.name.replace(/\.[^/.]+$/, ""));
+                        // Autofill label from file name (with extension) if label is empty
+                        setLabel(f.name);
                       }
                     }
                   }}
