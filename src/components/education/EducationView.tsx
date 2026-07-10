@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
-import { getSession } from "@/api/auth";
+import BackButton from "@/components/common/BackButton";
+import Link from "next/link";
+import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import {
   createEducation,
   deleteEducation,
@@ -17,12 +19,11 @@ import {
   downloadCertificateFile,
   deleteCertificateFile,
 } from "@/api/education";
-import Button from "@/components/common/Button";
+import ErrorBanner from "@/components/common/ErrorBanner";
 import type { Certificate, CertificatePlaintext, Education, EducationPlaintext, EducationViewMode } from "@/types/education";
 import type { Priority } from "@/types/taskmanager";
 import ActiveEducationsBox from "./ActiveEducationsBox";
 import CompletedEducationsBox from "./CompletedEducationsBox";
-import CompletedEducationsModal from "./CompletedEducationsModal";
 import EducationModal from "./EducationModal";
 
 function FolderIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -36,59 +37,12 @@ function FolderIcon(props: React.SVGProps<SVGSVGElement>) {
 /**
  * Education feature shell.
  * Mirrors TaskManagerView: bootstrap, state, CRUD handlers, 3-box layout.
+ * "View All" navigates to dedicated /education/completed route.
  */
 export default function EducationView() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const router = useRouter();
   const [educations, setEducations] = useState<Education[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const [expandedModal, setExpandedModal] = useState<"completed" | null>(null);
-  const [eduModalTarget, setEduModalTarget] = useState<Education | "create" | null>(null);
-  const [activeView, setActiveView] = useState<EducationViewMode>("months");
-
-  const nowYear = new Date().getFullYear();
-  const nowMonth = new Date().getMonth();
-
-  const activeEducations = useMemo(
-    () => educations.filter((e) => !e.is_completed),
-    [educations]
-  );
-  const completedEducations = useMemo(
-    () => educations.filter((e) => e.is_completed),
-    [educations]
-  );
-
-  // ---- Hash-based expanded modal ----
-
-  const syncExpandedModalFromHash = useCallback(() => {
-    const rawHash = window.location.hash.replace("#", "");
-    if (rawHash === "completed") {
-      setExpandedModal(rawHash);
-      return;
-    }
-    setExpandedModal(null);
-  }, []);
-
-  const closeExpandedModal = useCallback(() => {
-    if (!window.location.hash) {
-      setExpandedModal(null);
-      return;
-    }
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${window.location.search}`
-    );
-    setExpandedModal(null);
-  }, []);
-
-  const openExpandedModal = useCallback((kind: "completed") => {
-    window.location.hash = kind;
-  }, []);
-
-  // ---- Data loading ----
 
   const loadAllData = useCallback(async (uid: string) => {
     const [eduRows, certRows] = await Promise.all([
@@ -99,57 +53,77 @@ export default function EducationView() {
     setCertificates(certRows);
   }, []);
 
-  const refreshData = useCallback(
-    async (uid: string) => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        await loadAllData(uid);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to refresh education data.");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [loadAllData]
-  );
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
+    useAuthBootstrap({ loadData: loadAllData, fetchServerDate: false });
 
-  useEffect(() => {
-    let cancelled = false;
+  // Hash-driven: #new-education, #edit-<eduId>
+  const [eduModalTarget, setEduModalTarget] = useState<Education | "create" | null>(() => {
+    if (typeof window === "undefined") return null;
+    const raw = window.location.hash.replace("#", "");
+    if (raw === "new-education") return "create";
+    // For edit-education-<id>, we need educations loaded — handled in useEffect below
+    return null;
+  });
+  const [activeView, setActiveView] = useState<EducationViewMode>("months");
 
-    async function bootstrap() {
-      try {
-        const session = await getSession();
-        const uid = session?.user.id;
-        if (!uid) throw new Error("No active session.");
-        if (cancelled) return;
-        setUserId(uid);
-        await refreshData(uid);
-      } catch (err) {
-        if (cancelled) return;
-        setError(
-          err instanceof Error ? err.message : "Failed to load education data."
-        );
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
+  const clearHash = useCallback(() => {
+    if (window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
     }
+  }, []);
 
-    bootstrap();
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshData]);
+  // Hash change handler (returns derived state, doesn't call setState)
+  const resolveHashState = useCallback((raw: string, currentEdus: Education[]) => {
+    if (!raw) return null;
+    if (raw === "new-education") return "create" as const;
+    if (raw.startsWith("edit-education-")) {
+      const eduId = raw.slice(15);
+      const edu = currentEdus.find(e => e.id === eduId);
+      if (edu) return edu;
+    }
+    return null;
+  }, []);
+
+  // Sync initial hash when educations load (e.g. navigating from CertificateStoreView)
+  useEffect(() => {
+    if (educations.length === 0) return;
+    const raw = window.location.hash.replace("#", "");
+    if (raw.startsWith("edit-education-")) {
+      const eduId = raw.slice(15);
+      const edu = educations.find(e => e.id === eduId);
+      if (edu) setEduModalTarget(edu);
+    }
+    if (raw === "new-education" && eduModalTarget !== "create") {
+      setEduModalTarget("create");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [educations]);
 
   useEffect(() => {
-    syncExpandedModalFromHash();
-    window.addEventListener("hashchange", syncExpandedModalFromHash);
-    return () => {
-      window.removeEventListener("hashchange", syncExpandedModalFromHash);
+    const handler = () => {
+      const raw = window.location.hash.replace("#", "");
+      const resolved = resolveHashState(raw, educations);
+      if (resolved) {
+        setEduModalTarget(resolved);
+      }
     };
-  }, [syncExpandedModalFromHash]);
+    window.addEventListener("hashchange", handler);
+    return () => window.removeEventListener("hashchange", handler);
+  }, [educations, resolveHashState]);
+
+  const closeEduModal = useCallback(() => {
+    setEduModalTarget(null);
+    clearHash();
+  }, [clearHash]);
+
+  const activeEducations = useMemo(
+    () => educations.filter((e) => !e.is_completed),
+    [educations]
+  );
+  const completedEducations = useMemo(
+    () => educations.filter((e) => e.is_completed),
+    [educations]
+  );
 
   // ---- Education CRUD ----
 
@@ -164,31 +138,61 @@ export default function EducationView() {
     },
     existingEducation: Education | null,
     pendingCert?: { file: File; label: string },
-    pendingLinkCertId?: string
+    pendingLinkCertId?: string,
+    pendingUnlinkCertIds?: string[],
+    pendingDeleteCertIds?: string[],
   ) {
     if (!userId) throw new Error("No active session.");
 
-    // Fetch fresh state to prevent race conditions where UI state hasn't updated yet after linking/uploading
+    // Fetch fresh state so we operate on committed DB data
     const freshEdus = await fetchEducations(userId);
+    const freshCerts = await fetchCertificates(userId);
     const freshEdu = existingEducation ? freshEdus.find(e => e.id === existingEducation.id) : null;
-    
-    const hasPendingFiles = Boolean(pendingCert || pendingLinkCertId);
-    const existingCertIds = freshEdu?.certificate_ids ?? [];
-    
-    // Enforce rule: cannot be completed without files
-    if (draft.is_completed && !hasPendingFiles && existingCertIds.length === 0) {
-      draft.is_completed = false;
-    }
+
+    let currentCertIds = [...(freshEdu?.certificate_ids ?? [])];
 
     const nowIso = new Date().toISOString();
     const completedAt = draft.is_completed
       ? freshEdu?.completed_at ?? nowIso
       : null;
 
+    // --- 1. Process unlinks (remove cert association, keep cert in DB) ---
+    if (pendingUnlinkCertIds && pendingUnlinkCertIds.length > 0 && existingEducation) {
+      for (const certId of pendingUnlinkCertIds) {
+        const cert = freshCerts.find(c => c.id === certId);
+        if (cert) {
+          await updateCertificate(userId, certId, {
+            ...cert,
+            education_id: "",
+            updated_at: nowIso,
+          } as CertificatePlaintext);
+        }
+        currentCertIds = currentCertIds.filter(id => id !== certId);
+      }
+    }
+
+    // --- 2. Process deletions (remove cert from education, delete storage + DB row) ---
+    if (pendingDeleteCertIds && pendingDeleteCertIds.length > 0) {
+      for (const certId of pendingDeleteCertIds) {
+        const cert = freshCerts.find(c => c.id === certId);
+        if (cert) {
+          // Unlink from education's cert_ids
+          currentCertIds = currentCertIds.filter(id => id !== certId);
+          // Delete storage file
+          if (cert.file_name) {
+            try { await deleteCertificateFile(cert.file_name); } catch { /* best-effort */ }
+          }
+          // Delete DB row
+          await deleteCertificate(certId);
+        }
+      }
+    }
+
+    // --- 3. Save or create the education ---
     const payload = {
       ...draft,
       completed_at: completedAt,
-      certificate_ids: existingCertIds,
+      certificate_ids: currentCertIds,
       updated_at: nowIso,
     };
 
@@ -200,8 +204,9 @@ export default function EducationView() {
     }
 
     let needsUpdate = false;
-    const newCertIds = [...payload.certificate_ids];
+    const newCertIds = [...currentCertIds];
 
+    // --- 4. Upload new certificate file ---
     if (pendingCert) {
       const { fileName, iv, mimeType } = await uploadCertificateFile(userId, pendingCert.file);
       const cert = await createCertificate(userId, {
@@ -216,8 +221,9 @@ export default function EducationView() {
       needsUpdate = true;
     }
 
+    // --- 5. Link an existing unlinked certificate ---
     if (pendingLinkCertId) {
-      const pcert = certificates.find(c => c.id === pendingLinkCertId);
+      const pcert = freshCerts.find(c => c.id === pendingLinkCertId);
       if (pcert) {
         await updateCertificate(userId, pendingLinkCertId, {
           ...pcert,
@@ -231,6 +237,7 @@ export default function EducationView() {
       }
     }
 
+    // --- 6. Update education with final cert IDs if anything changed ---
     if (needsUpdate) {
       await updateEducation(userId, savedEdu.id, {
         ...payload,
@@ -239,6 +246,7 @@ export default function EducationView() {
       });
     }
 
+    // Single refreshData call at the end — no mid-save re-renders
     await refreshData(userId);
   }
 
@@ -362,20 +370,6 @@ export default function EducationView() {
     return cert;
   }
 
-  async function handleRenameCertificate(certificateId: string, newLabel: string) {
-    if (!userId) throw new Error("No active session.");
-    const cert = certificates.find((c) => c.id === certificateId);
-    if (!cert) return;
-    
-    await updateCertificate(userId, certificateId, {
-      ...cert,
-      label: newLabel,
-      updated_at: new Date().toISOString(),
-    } as CertificatePlaintext);
-    
-    await refreshData(userId);
-  }
-
   async function handleDownloadCertificate(certificate: Certificate) {
     if (!userId) throw new Error("No active session.");
     const blob = await downloadCertificateFile(
@@ -433,12 +427,7 @@ export default function EducationView() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col items-start gap-4">
-        <Link
-          href={ROUTES.DASHBOARD}
-          className="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-        >
-          ← Back
-        </Link>
+        <BackButton href={ROUTES.DASHBOARD}>← Back</BackButton>
         <div>
           <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
             Education
@@ -457,14 +446,14 @@ export default function EducationView() {
           nowYear={nowYear}
           nowMonth={nowMonth}
           onViewChange={setActiveView}
-          onAdd={() => setEduModalTarget("create")}
-          onSelectEducation={(edu) => setEduModalTarget(edu)}
+          onAdd={() => { window.location.hash = "new-education"; }}
+          onSelectEducation={(edu) => { window.location.hash = `edit-education-${edu.id}`; }}
           onMarkComplete={handleQuickComplete}
         />
 
         <div className="flex flex-col gap-4">
           <Link
-            href="/education/store"
+            href={ROUTES.EDUCATION_STORE}
             className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
           >
             <FolderIcon className="h-5 w-5 text-amber-500" />
@@ -475,60 +464,35 @@ export default function EducationView() {
             educations={completedEducations}
             certificates={certificates}
             isLoading={isLoading}
-            onOpenExpanded={() => openExpandedModal("completed")}
-            onSelectEducation={(edu) => setEduModalTarget(edu)}
+            onOpenExpanded={() => router.push(ROUTES.EDUCATION_COMPLETED)}
+            onSelectEducation={(edu) => { window.location.hash = `edit-education-${edu.id}`; }}
           />
         </div>
       </section>
 
       {error && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-          <span>{error}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => userId && refreshData(userId)}
-            className="border border-red-300 hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/40"
-          >
-            Retry
-          </Button>
-        </div>
-      )}
-
-      {/* Expanded modals (hash-driven) */}
-      {expandedModal === "completed" && (
-        <CompletedEducationsModal
-          educations={completedEducations}
-          certificates={certificates}
-          onClose={closeExpandedModal}
-          onSelectEducation={(edu) => {
-            closeExpandedModal();
-            setEduModalTarget(edu);
-          }}
+        <ErrorBanner
+          message={error}
+          onRetry={() => userId && refreshData(userId)}
         />
       )}
 
-      {/* Expanded modals (hash-driven) */}
-
-      {/* CRUD modals (state-driven) */}
+      {/* CRUD modal (hash-driven) */}
       {eduModalTarget && (
         <EducationModal
           education={eduModalTarget === "create" ? null : eduModalTarget}
           certificates={certificates}
           userId={userId || ""}
-          onClose={() => setEduModalTarget(null)}
+          onClose={closeEduModal}
           onSave={handleEducationSave}
           onDelete={handleEducationDelete}
           onUploadCertificate={handleUploadCertificateForEducation}
-          onRenameCertificate={handleRenameCertificate}
           onDownloadCertificate={handleDownloadCertificate}
           onDeleteCertificate={handleDeleteCertificateFromEducation}
           onLinkCertificate={handleLinkCertificate}
           onUnlinkCertificate={handleUnlinkCertificate}
         />
       )}
-
-      {/* CRUD modals (state-driven) */}
     </div>
   );
 }

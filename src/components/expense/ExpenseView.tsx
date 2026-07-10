@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
-import { getSession } from "@/api/auth";
+import BackButton from "@/components/common/BackButton";
+import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import {
   createExpense,
   deleteExpense,
@@ -12,17 +13,17 @@ import {
   uploadInvoice,
   deleteInvoice,
 } from "@/api/expense";
-import { getServerDateIST, parseISTDate } from "@/api/serverDate";
+import { parseISTDate } from "@/api/serverDate";
 import type { Expense, ExpensePlaintext, ExpenseViewMode } from "@/types/expense";
 import { MONTHS } from "@/types/expense";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import { RectangleVertical, Columns2 } from "lucide-react";
-import Button from "@/components/common/Button";
+import ErrorBanner from "@/components/common/ErrorBanner";
+import LoadingSpinner from "@/components/common/LoadingSpinner";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import ExpenseModal from "./ExpenseModal";
-import FullMonthModal from "./FullMonthModal";
 import MonthRow from "./MonthRow";
 import YearDropdown from "./YearDropdown";
 
@@ -35,31 +36,32 @@ const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
 
 /**
  * Expense Tracker feature shell.
- * Orchestrates month list, year dropdown, hash-based full-month modal,
- * and create/edit expense modals.
+ * Orchestrates month list, year dropdown, and create/edit expense modals.
+ * "View All" navigates to the dedicated /expense/all route with month/year params.
  */
 export default function ExpenseView() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const router = useRouter();
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  const loadData = useCallback(async (uid: string) => {
+    const rows = await fetchExpenses(uid);
+    setExpenses(rows);
+  }, []);
+
+  const { userId, istDate, isLoading, error, refreshData } =
+    useAuthBootstrap({ loadData });
+
+  const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
 
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [viewMode, setViewMode] = useLocalStorage<ExpenseViewMode>("expenseViewMode", "single");
-  const [fullMonthModal, setFullMonthModal] = useState<{
-    monthIndex: number;
-    year: number;
-  } | null>(null);
-
-  // IST date state
-  const [istDate, setIstDate] = useState<string>("");
-  const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
 
   // ExpenseModal state: null = closed, "create" = new item, Expense = edit
   const [expenseModalTarget, setExpenseModalTarget] = useState<
-    Expense | { mode: "create"; defaultDate: string } | null
+    Expense | "create" | null
   >(null);
+  const [createDefaultDate, setCreateDefaultDate] = useState<string>("");
 
   // --- Derived data ---
 
@@ -93,41 +95,7 @@ export default function ExpenseView() {
 
   // --- Hash-based navigation ---
 
-  const syncHashModal = useCallback(() => {
-    const raw = window.location.hash.replace("#", "");
-    if (!raw) {
-      setFullMonthModal(null);
-      return;
-    }
-
-    // Expected format: "january-2025"
-    const parts = raw.split("-");
-    if (parts.length < 2) {
-      setFullMonthModal(null);
-      return;
-    }
-
-    const yearStr = parts[parts.length - 1];
-    const monthStr = parts.slice(0, -1).join("-");
-    const year = parseInt(yearStr, 10);
-    if (isNaN(year)) {
-      setFullMonthModal(null);
-      return;
-    }
-
-    const monthIndex = MONTHS.findIndex(
-      (m) => m.toLowerCase() === monthStr.toLowerCase()
-    );
-    if (monthIndex === -1) {
-      setFullMonthModal(null);
-      return;
-    }
-
-    setSelectedYear(year);
-    setFullMonthModal({ monthIndex, year });
-  }, []);
-
-  const closeFullMonthModal = useCallback(() => {
+  const clearHash = useCallback(() => {
     if (window.location.hash) {
       window.history.replaceState(
         null,
@@ -135,80 +103,40 @@ export default function ExpenseView() {
         `${window.location.pathname}${window.location.search}`
       );
     }
-    setFullMonthModal(null);
   }, []);
 
-  const openFullMonthModal = useCallback(
-    (monthIndex: number) => {
-      const monthName = MONTHS[monthIndex].toLowerCase();
-      window.location.hash = `${monthName}-${selectedYear}`;
-    },
-    [selectedYear]
-  );
+  const syncHashModal = useCallback(() => {
+    const raw = window.location.hash.replace("#", "");
+    if (!raw) {
+      setExpenseModalTarget(null);
+      return;
+    }
 
-  // --- Data loading ---
+    // Check for expense edit/create patterns
+    if (raw === "new-expense") {
+      setExpenseModalTarget("create");
+      return;
+    }
 
-  const loadData = useCallback(async (uid: string) => {
-    const rows = await fetchExpenses(uid);
-    setExpenses(rows);
-  }, []);
-
-  const refreshData = useCallback(
-    async (uid: string) => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        await loadData(uid);
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to refresh expense data."
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [loadData]
-  );
-
-  // Bootstrap: get session + IST date, load data
-  useEffect(() => {
-    let cancelled = false;
-
-    async function bootstrap() {
-      try {
-        const [session, dateStr] = await Promise.all([
-          getSession(),
-          getServerDateIST(),
-        ]);
-        const uid = session?.user.id;
-        if (!uid) throw new Error("No active session.");
-        if (cancelled) return;
-        setUserId(uid);
-        setIstDate(dateStr);
-        await refreshData(uid);
-      } catch (err) {
-        if (cancelled) return;
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Failed to load expense data."
-        );
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
+    if (raw.startsWith("edit-expense-")) {
+      const expenseId = raw.slice(13);
+      const expense = expenses.find((e) => e.id === expenseId);
+      if (expense) {
+        setExpenseModalTarget(expense);
+        return;
       }
     }
 
-    bootstrap();
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshData]);
+    // Unknown hash — close any open modal
+    setExpenseModalTarget(null);
+  }, [expenses]);
 
-  // Listen for hash changes
+  const closeExpenseModal = useCallback(() => {
+    setExpenseModalTarget(null);
+    clearHash();
+  }, [clearHash]);
+
+  // --- Hash-based navigation ---
   useEffect(() => {
     syncHashModal();
     window.addEventListener("hashchange", syncHashModal);
@@ -323,12 +251,7 @@ export default function ExpenseView() {
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col items-start gap-4">
-          <Link
-            href={ROUTES.DASHBOARD}
-            className="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            ← Back
-          </Link>
+          <BackButton href={ROUTES.DASHBOARD}>← Back</BackButton>
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
               Expenses
@@ -349,25 +272,14 @@ export default function ExpenseView() {
       </div>
 
       {/* Loading state */}
-      {isLoading && (
-        <div className="flex items-center justify-center py-12">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 dark:border-zinc-700 dark:border-t-zinc-100" />
-        </div>
-      )}
+      {isLoading && <LoadingSpinner />}
 
       {/* Error state */}
       {error && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-          <span>{error}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => userId && refreshData(userId)}
-            className="border border-red-300 hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/40"
-          >
-            Retry
-          </Button>
-        </div>
+        <ErrorBanner
+          message={error}
+          onRetry={() => userId && refreshData(userId)}
+        />
       )}
 
       {/* Month rows */}
@@ -411,13 +323,13 @@ export default function ExpenseView() {
                       isCurrentMonth && istDate
                         ? istDate
                         : `${selectedYear}-${String(monthIndex + 1).padStart(2, "0")}-01`;
-                    setExpenseModalTarget({
-                      mode: "create",
-                      defaultDate,
-                    });
+                    setCreateDefaultDate(defaultDate);
+                    window.location.hash = "new-expense";
                   }}
-                  onSelectExpense={(expense) => setExpenseModalTarget(expense)}
-                  onViewAll={() => openFullMonthModal(monthIndex)}
+                  onSelectExpense={(expense) => {
+                    window.location.hash = `edit-expense-${expense.id}`;
+                  }}
+                  onViewAll={() => router.push(`${ROUTES.EXPENSE_ALL}?month=${monthIndex}&year=${selectedYear}`)}
                 />
               );
             })}
@@ -425,42 +337,16 @@ export default function ExpenseView() {
         </BoxContainer>
       )}
 
-      {/* Full Month Modal */}
-      {fullMonthModal && (
-        <FullMonthModal
-          monthName={MONTHS[fullMonthModal.monthIndex]}
-          year={fullMonthModal.year}
-          expenses={expenses.filter((e) => {
-            const d = new Date(e.date);
-            return (
-              d.getFullYear() === fullMonthModal.year &&
-              d.getMonth() === fullMonthModal.monthIndex
-            );
-          })}
-          onClose={closeFullMonthModal}
-          onSelectExpense={(expense) => {
-            setExpenseModalTarget(expense);
-          }}
-        />
-      )}
-
-      {/* Expense Modal (create / edit) */}
+      {/* Expense Modal (create / edit) — hash-driven */}
       {expenseModalTarget && (
         <ExpenseModal
-          expense={
-            "mode" in expenseModalTarget ? null : expenseModalTarget
-          }
-          defaultDate={
-            "mode" in expenseModalTarget
-              ? expenseModalTarget.defaultDate
-              : undefined
-          }
+          expense={expenseModalTarget === "create" ? null : expenseModalTarget}
+          defaultDate={expenseModalTarget === "create" ? createDefaultDate : undefined}
           userId={userId ?? ""}
           isSaving={isSaving}
-          onClose={() => setExpenseModalTarget(null)}
+          onClose={closeExpenseModal}
           onSave={handleExpenseSave}
           onDelete={handleExpenseDelete}
-          zClassName={fullMonthModal ? "z-[60]" : undefined}
         />
       )}
     </div>

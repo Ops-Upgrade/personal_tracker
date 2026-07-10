@@ -1,0 +1,20 @@
+# Large data / binary files not already covered by .gitignore
+*.csv
+*.xlsx
+*.sqlite
+*.zip
+*.tar.gz
+*.7z
+
+# Generated / minified code
+*.min.js
+*.map
+
+# Test snapshots (can be large)
+**/__snapshots__/
+
+# OS junk not in .gitignore
+Thumbs.db
+
+# Claude Code temporary worktrees
+.claude/worktrees/

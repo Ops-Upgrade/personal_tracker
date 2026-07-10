@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Priority, Task, TaskMode } from "@/types/taskmanager";
-import Button from "@/components/common/Button";
 import ConfirmDialog from "./ConfirmDialog";
-import ModalFrame from "./ModalFrame";
+import GlobalActionModal from "@/components/common/GlobalActionModal";
+import { InputField, SelectField, TextareaField, CheckboxField } from "@/components/common/FormField";
+import ErrorBanner from "@/components/common/ErrorBanner";
 
 interface TaskDraft {
   name: string;
@@ -36,16 +37,36 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Baseline: computed once, used by both reset AND dirty check ──
+  const baseline = useMemo(() => ({
+    name: task?.name ?? "",
+    priority: task?.priority ?? "medium",
+    dueDate: task?.due_date ?? defaultDate ?? "",
+    mode: task?.mode ?? "online",
+    description: task?.description ?? "",
+    isCompleted: task?.is_completed ?? false,
+  }), [task, defaultDate]);
+
+  // Reset form to baseline whenever the record changes
   useEffect(() => {
-    setName(task?.name ?? "");
-    setPriority(task?.priority ?? "medium");
-    setDueDate(task?.due_date ?? defaultDate ?? "");
-    setMode(task?.mode ?? "online");
-    setDescription(task?.description ?? "");
-    setIsCompleted(task?.is_completed ?? false);
+    setName(baseline.name);
+    setPriority(baseline.priority);
+    setDueDate(baseline.dueDate);
+    setMode(baseline.mode);
+    setDescription(baseline.description);
+    setIsCompleted(baseline.isCompleted);
     setError(null);
     setShowDeleteConfirm(false);
-  }, [task, defaultDate]);
+  }, [baseline]);
+
+  // Dirty check: compare current state against the same baseline object
+  const isDirty =
+    name !== baseline.name ||
+    priority !== baseline.priority ||
+    dueDate !== baseline.dueDate ||
+    mode !== baseline.mode ||
+    description !== baseline.description ||
+    isCompleted !== baseline.isCompleted;
 
   async function handleSave() {
     if (!name.trim()) {
@@ -91,120 +112,47 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
     }
   }
 
+  async function handleDeleteClick() {
+    setShowDeleteConfirm(true);
+  }
+
   return (
     <>
-      <ModalFrame title={task ? "Edit task" : "Add task"} onClose={onClose}>
+      <GlobalActionModal
+        title={task ? "Edit task" : "Add task"}
+        onClose={onClose}
+        isDirty={isDirty}
+        onSave={handleSave}
+        isSaving={isSaving}
+        onDelete={task ? handleDeleteClick : undefined}
+        deleteLabel="Delete"
+      >
         <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Task Name
-            </span>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-            />
-          </label>
+          <InputField label="Task Name" value={name} onChange={setName} />
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Priority
-              </span>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as Priority)}
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-              >
-                {PRIORITY_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option[0].toUpperCase() + option.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Due Date
-              </span>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-              />
-            </label>
-
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                Mode
-              </span>
-              <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value as TaskMode)}
-                className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-              >
-                <option value="online">Online</option>
-                <option value="offline">Offline</option>
-              </select>
-            </label>
+            <SelectField
+              label="Priority"
+              value={priority}
+              onChange={(v) => setPriority(v as Priority)}
+              options={PRIORITY_OPTIONS.map((p) => ({ value: p, label: p[0].toUpperCase() + p.slice(1) }))}
+            />
+            <InputField label="Due Date" type="date" value={dueDate} onChange={setDueDate} />
+            <SelectField
+              label="Mode"
+              value={mode}
+              onChange={(v) => setMode(v as TaskMode)}
+              options={[{ value: "online", label: "Online" }, { value: "offline", label: "Offline" }]}
+            />
           </div>
 
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Task Description
-            </span>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={4}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-            />
-          </label>
+          <TextareaField label="Task Description" value={description} onChange={setDescription} rows={4} />
 
-          <label className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-            <input
-              type="checkbox"
-              checked={isCompleted}
-              onChange={(e) => setIsCompleted(e.target.checked)}
-            />
-            Mark complete
-          </label>
+          <CheckboxField label="Mark complete" checked={isCompleted} onChange={setIsCompleted} />
 
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-
-          <div className="flex justify-end gap-2">
-            {task && (
-              <Button
-                variant="danger"
-                size="md"
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={isSaving}
-              >
-                Delete
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={onClose}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleSave}
-              disabled={isSaving}
-            >
-              Save
-            </Button>
-          </div>
+          {error && <ErrorBanner message={error} />}
         </div>
-      </ModalFrame>
+      </GlobalActionModal>
 
       {showDeleteConfirm && task && (
         <ConfirmDialog

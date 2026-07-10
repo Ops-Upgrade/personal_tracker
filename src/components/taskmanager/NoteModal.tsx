@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Note } from "@/types/taskmanager";
-import Button from "@/components/common/Button";
 import ConfirmDialog from "./ConfirmDialog";
-import ModalFrame from "./ModalFrame";
+import GlobalActionModal from "@/components/common/GlobalActionModal";
+import { TextareaField } from "@/components/common/FormField";
+import ErrorBanner from "@/components/common/ErrorBanner";
 
 interface NoteModalProps {
   note: Note | null;
@@ -19,11 +20,18 @@ export default function NoteModal({ note, onClose, onSave, onDelete }: NoteModal
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── Baseline: computed once, used by both reset AND dirty check ──
+  const baseline = useMemo(() => ({
+    content: note?.content ?? "",
+  }), [note]);
+
   useEffect(() => {
-    setContent(note?.content ?? "");
+    setContent(baseline.content);
     setError(null);
     setShowDeleteConfirm(false);
-  }, [note]);
+  }, [baseline]);
+
+  const isDirty = content !== baseline.content;
 
   async function handleSave() {
     if (!content.trim()) {
@@ -58,54 +66,26 @@ export default function NoteModal({ note, onClose, onSave, onDelete }: NoteModal
     }
   }
 
+  async function handleDeleteClick() {
+    setShowDeleteConfirm(true);
+  }
+
   return (
     <>
-      <ModalFrame title={note ? "Edit note" : "Add note"} onClose={onClose}>
+      <GlobalActionModal
+        title={note ? "Edit note" : "Add note"}
+        onClose={onClose}
+        isDirty={isDirty}
+        onSave={handleSave}
+        isSaving={isSaving}
+        onDelete={note ? handleDeleteClick : undefined}
+        deleteLabel="Delete"
+      >
         <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-              Content
-            </span>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={8}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-            />
-          </label>
-
-          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-
-          <div className="flex justify-end gap-2">
-            {note && (
-              <Button
-                variant="danger"
-                size="md"
-                onClick={() => setShowDeleteConfirm(true)}
-                disabled={isSaving}
-              >
-                Delete
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              size="md"
-              onClick={onClose}
-              disabled={isSaving}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              size="md"
-              onClick={handleSave}
-              disabled={isSaving}
-            >
-              Save
-            </Button>
-          </div>
+          <TextareaField label="Content" value={content} onChange={setContent} rows={8} />
+          {error && <ErrorBanner message={error} />}
         </div>
-      </ModalFrame>
+      </GlobalActionModal>
 
       {showDeleteConfirm && note && (
         <ConfirmDialog

@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
+import BackButton from "@/components/common/BackButton";
 import { useLocalStorage } from "@/lib/useLocalStorage";
-import { getSession } from "@/api/auth";
-import { getServerDateIST, parseISTDate } from "@/api/serverDate";
+import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import {
   createNote,
   createTask,
@@ -16,38 +16,108 @@ import {
   updateNote,
   updateTask,
 } from "@/api/taskmanager";
-import Button from "@/components/common/Button";
+import ErrorBanner from "@/components/common/ErrorBanner";
 import type { Note, Task, TaskView } from "@/types/taskmanager";
 import ActiveTasksBox from "./ActiveTasksBox";
 import CompletedTasksBox from "./CompletedTasksBox";
-import CompletedTasksModal from "./CompletedTasksModal";
 import NoteModal from "./NoteModal";
 import NotesBox from "./NotesBox";
-import NotesModal from "./NotesModal";
 import TaskModal from "./TaskModal";
 
 /**
  * Task Manager feature shell.
- * Phases 1.5-1.8: active/completed/notes boxes, modals, view toggles, and CRUD wiring.
+ * Refactored: hash-driven modals (#new-task, #edit-<id>, #edit-note-<id>),
+ * "View all" → dedicated routes.
  */
 export default function TaskManagerView() {
-  const [userId, setUserId] = useState<string | null>(null);
+  const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [nowYear, setNowYear] = useState<number>(new Date().getFullYear());
-  const [nowMonth, setNowMonth] = useState<number>(new Date().getMonth());
+
+  const loadAllData = useCallback(async (uid: string) => {
+    const [taskRows, noteRows] = await Promise.all([fetchTasks(uid), fetchNotes(uid)]);
+    setTasks(taskRows);
+    setNotes(noteRows);
+  }, []);
+
+  const { userId, istDate, nowYear, nowMonth, isLoading, error, refreshData } =
+    useAuthBootstrap({ loadData: loadAllData });
 
   const [activeView, setActiveView] = useLocalStorage<TaskView>("taskManagerActiveView", "months");
-  const [completedView, setCompletedView] = useLocalStorage<TaskView>("taskManagerCompletedView", "months");
-  const [expandedModal, setExpandedModal] = useState<"completed" | "notes" | null>(
-    null
-  );
 
   const [taskModalTarget, setTaskModalTarget] = useState<Task | "create" | null>(null);
-  const [taskModalDefaultDate, setTaskModalDefaultDate] = useState<string>("");
   const [noteModalTarget, setNoteModalTarget] = useState<Note | "create" | null>(null);
+
+  // --- Hash-driven modal triggers ---
+  // Supported hashes: #new-task, #edit-<taskId>, #edit-note-<noteId>
+
+  const clearHash = useCallback(() => {
+    if (window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, []);
+
+  // Hash change handler (does NOT call setState itself — returns the derived state)
+  const resolveHashState = useCallback((raw: string, currentTasks: Task[], currentNotes: Note[]) => {
+    if (raw === "new-task") {
+      return { taskTarget: "create" as const, noteTarget: null };
+    }
+    if (raw.startsWith("edit-note-")) {
+      const noteId = raw.slice(10);
+      const note = currentNotes.find((n) => n.id === noteId);
+      if (note) return { taskTarget: null, noteTarget: note };
+    }
+    if (raw.startsWith("edit-task-")) {
+      const taskId = raw.slice(10);
+      const task = currentTasks.find((t) => t.id === taskId);
+      if (task) return { taskTarget: task, noteTarget: null };
+    }
+    return null;
+  }, []);
+
+  // Listen for hash changes
+  useEffect(() => {
+    const handler = () => {
+      const raw = window.location.hash.replace("#", "");
+      const resolved = resolveHashState(raw, tasks, notes);
+      if (resolved) {
+        if (resolved.taskTarget !== null) setTaskModalTarget(resolved.taskTarget);
+        if (resolved.noteTarget !== null) setNoteModalTarget(resolved.noteTarget);
+      }
+    };
+    window.addEventListener("hashchange", handler);
+    return () => window.removeEventListener("hashchange", handler);
+  }, [tasks, notes, resolveHashState]);
+
+  // --- Helpers to set hash from UI clicks ---
+
+  const openNewTask = () => {
+    window.location.hash = "new-task";
+  };
+
+  const openEditTask = (task: Task) => {
+    window.location.hash = `edit-task-${task.id}`;
+  };
+
+  const openEditNote = (note: Note) => {
+    window.location.hash = `edit-note-${note.id}`;
+  };
+
+  const openNewNote = () => {
+    setNoteModalTarget("create");
+  };
+
+  const closeTaskModal = () => {
+    setTaskModalTarget(null);
+    clearHash();
+  };
+
+  const closeNoteModal = () => {
+    setNoteModalTarget(null);
+    clearHash();
+  };
+
+  // --- Derived ---
 
   const activeTasks = useMemo(
     () => tasks.filter((task) => !task.is_completed),
@@ -58,96 +128,7 @@ export default function TaskManagerView() {
     [tasks]
   );
 
-  const syncExpandedModalFromHash = useCallback(() => {
-    const rawHash = window.location.hash.replace("#", "");
-    if (rawHash === "completed" || rawHash === "notes") {
-      setExpandedModal(rawHash);
-      return;
-    }
-    setExpandedModal(null);
-  }, []);
-
-  const closeExpandedModal = useCallback(() => {
-    if (!window.location.hash) {
-      setExpandedModal(null);
-      return;
-    }
-    window.history.replaceState(
-      null,
-      "",
-      `${window.location.pathname}${window.location.search}`
-    );
-    setExpandedModal(null);
-  }, []);
-
-  const openExpandedModal = useCallback((kind: "completed" | "notes") => {
-    window.location.hash = kind;
-  }, []);
-
-  const loadAllData = useCallback(async (uid: string) => {
-    const [taskRows, noteRows] = await Promise.all([fetchTasks(uid), fetchNotes(uid)]);
-    setTasks(taskRows);
-    setNotes(noteRows);
-  }, []);
-
-  const refreshData = useCallback(
-    async (uid: string) => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        await loadAllData(uid);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to refresh task manager data.");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [loadAllData]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function bootstrap() {
-      try {
-        const [session, istDate] = await Promise.all([
-          getSession(),
-          getServerDateIST(),
-        ]);
-        const uid = session?.user.id;
-        if (!uid) throw new Error("No active session.");
-        if (cancelled) return;
-        setUserId(uid);
-        const parsed = parseISTDate(istDate);
-        setNowYear(parsed.year);
-        setNowMonth(parsed.month);
-        setTaskModalDefaultDate(istDate);
-        await refreshData(uid);
-      } catch (err) {
-        if (cancelled) return;
-        setError(
-          err instanceof Error ? err.message : "Failed to load task manager data."
-        );
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    bootstrap();
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshData]);
-
-  useEffect(() => {
-    syncExpandedModalFromHash();
-    window.addEventListener("hashchange", syncExpandedModalFromHash);
-    return () => {
-      window.removeEventListener("hashchange", syncExpandedModalFromHash);
-    };
-  }, [syncExpandedModalFromHash]);
+  // --- CRUD handlers ---
 
   async function handleTaskSave(
     draft: {
@@ -233,15 +214,12 @@ export default function TaskManagerView() {
     await refreshData(userId);
   }
 
+  // --- Render ---
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col items-start gap-4">
-        <Link
-          href={ROUTES.DASHBOARD}
-          className="shrink-0 rounded-lg border border-zinc-300 px-2.5 py-1 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-        >
-          ← Back
-        </Link>
+        <BackButton href={ROUTES.DASHBOARD}>← Back</BackButton>
         <div>
           <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
             Task Manager
@@ -260,8 +238,8 @@ export default function TaskManagerView() {
           nowYear={nowYear}
           nowMonth={nowMonth}
           onViewChange={setActiveView}
-          onAdd={() => setTaskModalTarget("create")}
-          onSelectTask={(task) => setTaskModalTarget(task)}
+          onAdd={openNewTask}
+          onSelectTask={openEditTask}
           onMarkComplete={handleQuickComplete}
         />
 
@@ -269,67 +247,34 @@ export default function TaskManagerView() {
           <CompletedTasksBox
             tasks={completedTasks}
             isLoading={isLoading}
-            onOpenExpanded={() => openExpandedModal("completed")}
-            onSelectTask={(task) => setTaskModalTarget(task)}
+            onOpenExpanded={() => router.push(ROUTES.TASK_MANAGER_COMPLETED)}
+            onSelectTask={openEditTask}
             onReopenTask={handleQuickReopen}
           />
 
           <NotesBox
             notes={notes}
             isLoading={isLoading}
-            onAdd={() => setNoteModalTarget("create")}
-            onOpenExpanded={() => openExpandedModal("notes")}
-            onSelectNote={(note) => setNoteModalTarget(note)}
+            onAdd={openNewNote}
+            onOpenExpanded={() => router.push(ROUTES.TASK_MANAGER_NOTES)}
+            onSelectNote={openEditNote}
           />
         </div>
       </section>
 
       {error && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-          <span>{error}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => userId && refreshData(userId)}
-            className="border border-red-300 hover:bg-red-100 dark:border-red-800 dark:hover:bg-red-900/40"
-          >
-            Retry
-          </Button>
-        </div>
-      )}
-
-      {expandedModal === "completed" && (
-        <CompletedTasksModal
-          tasks={completedTasks}
-          view={completedView}
-          nowYear={nowYear}
-          nowMonth={nowMonth}
-          onViewChange={setCompletedView}
-          onClose={closeExpandedModal}
-          onSelectTask={(task) => {
-            closeExpandedModal();
-            setTaskModalTarget(task);
-          }}
-          onReopenTask={handleQuickReopen}
+        <ErrorBanner
+          message={error}
+          onRetry={() => userId && refreshData(userId)}
         />
       )}
 
-      {expandedModal === "notes" && (
-        <NotesModal
-          notes={notes}
-          onClose={closeExpandedModal}
-          onSelectNote={(note) => {
-            closeExpandedModal();
-            setNoteModalTarget(note);
-          }}
-        />
-      )}
-
+      {/* Hash-driven modals */}
       {taskModalTarget && (
         <TaskModal
           task={taskModalTarget === "create" ? null : taskModalTarget}
-          defaultDate={taskModalTarget === "create" ? taskModalDefaultDate : undefined}
-          onClose={() => { setTaskModalTarget(null); setTaskModalDefaultDate(""); }}
+          defaultDate={taskModalTarget === "create" ? istDate : undefined}
+          onClose={closeTaskModal}
           onSave={handleTaskSave}
           onDelete={handleTaskDelete}
         />
@@ -338,7 +283,7 @@ export default function TaskManagerView() {
       {noteModalTarget && (
         <NoteModal
           note={noteModalTarget === "create" ? null : noteModalTarget}
-          onClose={() => setNoteModalTarget(null)}
+          onClose={closeNoteModal}
           onSave={handleNoteSave}
           onDelete={handleNoteDelete}
         />

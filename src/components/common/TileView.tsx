@@ -1,18 +1,17 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { 
-  Search, 
-  Download, 
-  Trash2, 
-  MoreVertical, 
-  File, 
+import {
+  Search,
+  Download,
+  Trash2,
+  File,
   FileText,
   Image as ImageIcon,
-  Plus
+  Plus,
 } from "lucide-react";
+import { LinkSlashIcon, LinkIcon } from "@/components/common/Icons";
 import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
-import DeleteOptionsDialog from "@/components/common/DeleteOptionsDialog";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 
@@ -27,6 +26,8 @@ export interface DocumentTile {
   fileUrl?: string;
   thumbnailUrl?: string | null;
   linkedItemName?: string | null;
+  /** MIME type (e.g. "application/pdf"). When provided, used for icon resolution instead of filename extension. */
+  mime?: string;
 }
 
 interface TileViewProps {
@@ -34,6 +35,7 @@ interface TileViewProps {
   isLoading?: boolean;
   onDownload?: (fileId: string) => void;
   onDeleteConfirmed?: (fileId: string, cascadeMode: 'unlink' | 'cascade') => void;
+  onUnlinkConfirmed?: (fileId: string) => void;
   onAdd?: () => void;
   onActionClick?: (fileId: string) => void;
   title?: React.ReactNode;
@@ -45,6 +47,7 @@ export default function TileView({
   isLoading = false,
   onDownload,
   onDeleteConfirmed,
+  onUnlinkConfirmed,
   onAdd,
   onActionClick,
   title = "Document Vault",
@@ -53,6 +56,7 @@ export default function TileView({
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"tiles" | "list">("tiles");
   const [docToDelete, setDocToDelete] = useState<DocumentTile | null>(null);
+  const [docToUnlink, setDocToUnlink] = useState<DocumentTile | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
 
   const filteredDocs = useMemo(() => {
@@ -166,8 +170,8 @@ export default function TileView({
             <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {filteredDocs.map((doc) => {
                 const isRemoving = removingIds.has(doc.id);
-                const isImage = doc.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-                const isPdf = doc.fileName.match(/\.pdf$/i);
+                const isImage = doc.mime ? doc.mime.startsWith("image/") : doc.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                const isPdf = doc.mime ? doc.mime === "application/pdf" : doc.fileName.match(/\.pdf$/i);
 
                 return (
                   <div
@@ -187,21 +191,26 @@ export default function TileView({
                           <File className="h-5 w-5 text-zinc-400" />
                         )}
                       </div>
-                      <div className="flex min-w-0 flex-1 flex-col">
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
                         <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={doc.fileName}>
                           {doc.fileName}
                         </span>
-                        <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                          {doc.linkedItemName ? (
-                            <span className="text-emerald-600 dark:text-emerald-400">Linked to: {doc.linkedItemName}</span>
-                          ) : (
-                            "Standalone"
-                          )}
-                        </span>
+                        {doc.linkedItemName && (
+                          <LinkIcon className="h-4 w-4 shrink-0 text-emerald-500" />
+                        )}
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      {doc.linkedItemName && onUnlinkConfirmed && (
+                        <button
+                          onClick={() => setDocToUnlink(doc)}
+                          className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30 transition-colors"
+                          title="Unlink"
+                        >
+                          <LinkSlashIcon className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => onDownload?.(doc.id)}
                         className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-emerald-600 dark:hover:bg-zinc-800 transition-colors"
@@ -227,9 +236,9 @@ export default function TileView({
             {filteredDocs.map((doc) => {
               const isRemoving = removingIds.has(doc.id);
               
-              // Basic logic to determine icon based on extension if thumbnailUrl is missing
-              const isImage = doc.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-              const isPdf = doc.fileName.match(/\.pdf$/i);
+              // Prefer MIME type for icon resolution, fall back to filename extension
+              const isImage = doc.mime ? doc.mime.startsWith("image/") : doc.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+              const isPdf = doc.mime ? doc.mime === "application/pdf" : doc.fileName.match(/\.pdf$/i);
 
               return (
                 <div
@@ -252,9 +261,18 @@ export default function TileView({
                       <File className="h-10 w-10 text-zinc-400/50" />
                     )}
 
-                    {/* Overlay Actions */}
-                    <div className="absolute inset-x-0 top-0 flex items-start justify-between p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 bg-gradient-to-b from-black/40 to-transparent">
+                    {/* Overlay Actions — top-right */}
+                    <div className="absolute inset-x-0 top-0 flex items-start justify-end p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 bg-gradient-to-b from-black/40 to-transparent">
                       <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                        {doc.linkedItemName && onUnlinkConfirmed && (
+                          <button
+                            onClick={() => setDocToUnlink(doc)}
+                            className="flex h-7 w-7 items-center justify-center rounded-md bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-amber-500/80"
+                            title="Unlink"
+                          >
+                            <LinkSlashIcon className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => onDownload?.(doc.id)}
                           className="flex h-7 w-7 items-center justify-center rounded-md bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/40"
@@ -275,24 +293,20 @@ export default function TileView({
 
                   {/* Footer Area */}
                   <div className="flex flex-col p-3">
-                    <span 
-                      className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" 
+                    <span
+                      className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
                       title={doc.fileName}
                     >
                       {doc.fileName}
                     </span>
-                    <span className="mt-0.5 truncate text-xs">
-                      {doc.linkedItemName ? (
-                        <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                          Linked to: {doc.linkedItemName}
-                        </span>
-                      ) : (
-                        <span className="text-zinc-500 dark:text-zinc-400">
-                          Standalone
-                        </span>
-                      )}
-                    </span>
                   </div>
+
+                  {/* Linked indicator — bottom-right */}
+                  {doc.linkedItemName && (
+                    <div className="absolute bottom-2 right-2">
+                      <LinkIcon className="h-4 w-4 text-emerald-500" />
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -300,15 +314,33 @@ export default function TileView({
         )}
       </div>
 
+      {/* Unlink Confirmation Modal */}
+      {docToUnlink && (
+        <ConfirmDialog
+          title="Unlink certificate?"
+          description={`This will unlink '${docToUnlink.fileName}' from '${docToUnlink.linkedItemName}'. The certificate file will be kept in the store as a standalone file.`}
+          confirmLabel="Unlink"
+          cancelLabel="Cancel"
+          onConfirm={() => {
+            const id = docToUnlink.id;
+            setDocToUnlink(null);
+            onUnlinkConfirmed?.(id);
+          }}
+          onCancel={() => setDocToUnlink(null)}
+        />
+      )}
+
       {/* Delete Confirmation Modal */}
       {docToDelete && docToDelete.linkedItemName ? (
-        <DeleteOptionsDialog
+        <ConfirmDialog
           title="Delete document?"
-          description={`This document is linked to '${docToDelete.linkedItemName}'. What would you like to do?`}
-          unlinkOptionLabel="Delete file only (keep education)"
-          cascadeOptionLabel="Delete file AND education record"
+          description={`This document is linked to '${docToDelete.linkedItemName}'.`}
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          showDeleteFilesCheckbox
+          deleteFilesLabel="Delete associated record (if linked)"
+          onConfirm={(deleteRecord) => confirmDeleteWithMode(deleteRecord ? 'cascade' : 'unlink')}
           onCancel={() => setDocToDelete(null)}
-          onConfirm={confirmDeleteWithMode}
         />
       ) : docToDelete ? (
         <ConfirmDialog
