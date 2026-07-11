@@ -9,11 +9,14 @@ Update this file whenever you add or change tables, columns, indexes, or policie
 
 ## Schema overview
 
-| Schema  | Object        | Purpose |
-|---------|---------------|---------|
-| `public` | `user_keys`   | Per-user wrapped DEK (client-side envelope encryption). |
-| `public` | `tasks`       | Encrypted task blobs (task manager feature). |
-| `public` | `notes`       | Encrypted note blobs (task manager feature). |
+| Schema  | Object          | Purpose |
+|---------|-----------------|----------|
+| `public` | `user_keys`    | Per-user wrapped DEK (client-side envelope encryption). |
+| `public` | `tasks`        | Encrypted task blobs (task manager feature). |
+| `public` | `notes`        | Encrypted note blobs (task manager feature). |
+| `public` | `expenses`     | Encrypted expense blobs (expense tracker feature). |
+| `public` | `educations`   | Encrypted education/course blobs (education feature). |
+| `public` | `certificates` | Encrypted certificate metadata blobs (education feature). |
 
 ---
 
@@ -166,11 +169,151 @@ CREATE POLICY "Users manage their own notes"
 
 ---
 
+## `public.expenses`
+
+Encrypted expense data. Each row stores one expense as an opaque AES-GCM ciphertext blob. All fields (title, amount, date, category, notes, invoice attachment metadata) live inside the encrypted `data` JSON — no plaintext columns.
+
+| Column       | Type          | Nullable | Default              | Notes |
+|--------------|---------------|----------|----------------------|-------|
+| `id`         | `UUID`        | NO       | `gen_random_uuid()`  | PK |
+| `user_id`    | `UUID`        | NO       | —                    | FK → `auth.users(id)` |
+| `iv`         | `TEXT`        | NO       | —                    | Per-record AES-GCM IV (Base64) |
+| `data`       | `TEXT`        | NO       | —                    | Base64 ciphertext (encrypted JSON blob) |
+| `created_at` | `TIMESTAMPTZ` | YES      | `now()`              | Row creation timestamp |
+
+### DDL (source of truth)
+
+```sql
+CREATE TABLE public.expenses (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES auth.users(id),
+    iv         TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+### Row Level Security
+
+- **RLS:** `ENABLE ROW LEVEL SECURITY` on `public.expenses`.
+
+| Policy name | Command | `USING` | `WITH CHECK` |
+|-------------|---------|---------|----------------|
+| `Users manage their own expenses` | `ALL` | `auth.uid() = user_id` | `auth.uid() = user_id` |
+
+```sql
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users manage their own expenses"
+    ON public.expenses
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+```
+
+### Indexes
+
+- Primary key on `id` (implicit unique index).
+
+---
+
+## `public.educations`
+
+Encrypted education/course data. Each row stores one education record as an opaque AES-GCM ciphertext blob. Fields (course name, provider, status, start/end dates, notes, linked certificate IDs) live inside the encrypted `data` JSON.
+
+| Column       | Type          | Nullable | Default              | Notes |
+|--------------|---------------|----------|----------------------|-------|
+| `id`         | `UUID`        | NO       | `gen_random_uuid()`  | PK |
+| `user_id`    | `UUID`        | NO       | —                    | FK → `auth.users(id)` |
+| `iv`         | `TEXT`        | NO       | —                    | Per-record AES-GCM IV (Base64) |
+| `data`       | `TEXT`        | NO       | —                    | Base64 ciphertext (encrypted JSON blob) |
+| `created_at` | `TIMESTAMPTZ` | NO       | `now()`              | Row creation timestamp |
+
+### DDL (source of truth)
+
+```sql
+CREATE TABLE public.educations (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES auth.users(id),
+    iv         TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+### Row Level Security
+
+- **RLS:** `ENABLE ROW LEVEL SECURITY` on `public.educations`.
+
+| Policy name | Command | `USING` | `WITH CHECK` |
+|-------------|---------|---------|----------------|
+| `Users can manage their own educations` | `ALL` | `auth.uid() = user_id` | — |
+
+```sql
+ALTER TABLE public.educations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own educations"
+    ON public.educations
+    FOR ALL USING (auth.uid() = user_id);
+```
+
+### Indexes
+
+- Primary key on `id` (implicit unique index).
+
+---
+
+## `public.certificates`
+
+Encrypted certificate metadata. Each row represents one certificate file attached to an education record or uploaded independently to the Certificate Store. File content is stored encrypted in the `certificates` storage bucket; this table stores encrypted metadata (filename, MIME type, IV, linked education ID).
+
+| Column       | Type          | Nullable | Default              | Notes |
+|--------------|---------------|----------|----------------------|-------|
+| `id`         | `UUID`        | NO       | `gen_random_uuid()`  | PK |
+| `user_id`    | `UUID`        | NO       | —                    | FK → `auth.users(id)` |
+| `iv`         | `TEXT`        | NO       | —                    | Per-record AES-GCM IV (Base64) |
+| `data`       | `TEXT`        | NO       | —                    | Base64 ciphertext (encrypted JSON blob) |
+| `created_at` | `TIMESTAMPTZ` | NO       | `now()`              | Row creation timestamp |
+
+### DDL (source of truth)
+
+```sql
+CREATE TABLE public.certificates (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES auth.users(id),
+    iv         TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+### Row Level Security
+
+- **RLS:** `ENABLE ROW LEVEL SECURITY` on `public.certificates`.
+
+| Policy name | Command | `USING` | `WITH CHECK` |
+|-------------|---------|---------|----------------|
+| `Users can manage their own certificates` | `ALL` | `auth.uid() = user_id` | — |
+
+```sql
+ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own certificates"
+    ON public.certificates
+    FOR ALL USING (auth.uid() = user_id);
+```
+
+### Indexes
+
+- Primary key on `id` (implicit unique index).
+
+---
+
 ## Encrypted blob convention
 
-All encrypted feature tables follow the same shape: `id`, `user_id`, `iv`, `data`, `created_at`. The `iv` + `data` columns hold the per-record AES-GCM payload. No plaintext columns. See [`PLAN-crypto.md`](./docs/PLAN-crypto.md) Phase 7 for the encrypt/decrypt patterns.
+All encrypted feature tables follow the same shape: `id`, `user_id`, `iv`, `data`, `created_at`. The `iv` + `data` columns hold the per-record AES-GCM payload. No plaintext columns. See [`PLAN-crypto.md`](./plans/PLAN-crypto.md) Phase 7 for the encrypt/decrypt patterns.
 
-Future encrypted tables (e.g. expenses) should follow this same convention.
+---
 
 ---
 
@@ -240,6 +383,24 @@ USING (
 
 ---
 
+### `certificates` bucket
+
+Private storage bucket for encrypted certificate file attachments (education feature). Files are client-side encrypted with the user's DEK before upload.
+
+| Setting | Value |
+|---------|-------|
+| **Bucket ID** | `certificates` |
+| **Public** | No (RLS enforced) |
+| **File path convention** | `<uuid>.enc` |
+| **Content-Type on upload** | `application/octet-stream` |
+| **Max file size** | 45 MB (client-side enforced) |
+
+#### RLS policies
+
+Users can insert, select, update, and delete files where `bucket_id = 'certificates'` and they are the owner (Supabase sets `owner_id` automatically on INSERT).
+
+---
+
 ### Expense Blob Fields (Invoice Storage)
 
 The `ExpensePlaintext` encrypted blob includes three additional fields for invoice file storage:
@@ -260,3 +421,6 @@ The `ExpensePlaintext` encrypted blob includes three additional fields for invoi
 | 2026-04-12 | Added `public.tasks` + `public.notes` tables + RLS (Task Manager F1.1). |
 | 2026-04-12 | Clarified task encrypted blob field wording from `note` to `description` for task content naming consistency. |
 | 2026-04-12 | Confirmed no SQL/DDL change required for quick-complete/reopen actions and completion-date display; all use existing encrypted fields (`is_completed`, `completed_at`) in task `data` blob. |
+| 2026-06-23 | Added `public.expenses` table + RLS + `expenses` storage bucket (Expense Tracker feature). |
+| 2026-07-07 | Added `public.educations` + `public.certificates` tables + RLS + `certificates` storage bucket (Education feature). |
+| 2026-07-08 | Schema doc brought up to date: documented all 3 previously undocumented tables and the certificates bucket. |

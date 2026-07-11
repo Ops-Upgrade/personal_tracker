@@ -12,17 +12,19 @@ Target deployment: Vercel with custom domain `ops-upgrade.com` and subdomains.
 
 ---
 
-## Stack & Versions (as of 2026-04-12)
+## Stack & Versions (as of 2026-07-08)
 
 | Tool               | Version  | Notes                                        |
 |--------------------|----------|----------------------------------------------|
-| Next.js            | 16.1.6   | App Router, `src/` directory                 |
+| Next.js            | 16.2.10  | App Router, `src/` directory                 |
 | React              | 19.2.3   |                                              |
 | TypeScript         | ^5       | Strict mode                                  |
 | Tailwind CSS       | ^4       | Via `@tailwindcss/postcss`                   |
 | @supabase/ssr      | ^0.8.0   | Replaces deprecated `auth-helpers`           |
 | @supabase/supabase-js | ^2.95.3 |                                           |
 | hash-wasm          | ^4.12.0  | Argon2id WASM (~11 KB). Used only in `primitives.ts` |
+| @wrksz/themes      | ^0.9.7   | Theme provider (light/dark/system). Fixes React 19 hydration issues present in `next-themes`. |
+| lucide-react       | ^1.23.0  | Icon library (Sun/Moon for theme toggle, etc.) |
 | Node.js            | 22+      | Required by Next.js 16                       |
 | clsx               | ^2.1.1   | Class name utility                           |
 
@@ -39,6 +41,8 @@ src/
 │   │   ├── dashboard/          # Landing page after login
 │   │   ├── taskmanager/        # Task manager feature page
 │   │   ├── expense/            # Expense tracker feature page
+│   │   ├── education/          # Education manager feature page
+│   │   │   └── store/          # Certificate Store sub-page
 │   │   └── settings/
 │   │       └── change-password/ # Change password page
 │   └── api/auth/callback/      # Supabase auth callback endpoint
@@ -53,13 +57,37 @@ src/
 │   │   └── index.ts            # taskmanager sub-barrel
 │   ├── expense/
 │   │   ├── expenses.ts         # encrypted CRUD for expenses table
+│   │   ├── invoiceStorage.ts   # encrypted file upload/download for expenses bucket
 │   │   └── index.ts            # expense sub-barrel
+│   ├── education/
+│   │   ├── educations.ts       # encrypted CRUD for educations table
+│   │   ├── certificates.ts     # encrypted CRUD for certificates table
+│   │   ├── certificateStorage.ts # encrypted file upload/download for certificates bucket
+│   │   └── index.ts            # education sub-barrel
+│   ├── serverDate.ts           # getServerDateIST() — IST date from Supabase RPC
 │   └── index.ts                # Barrel export
 ├── components/                 # Reusable UI
 │   ├── auth/                   # LoginForm, ChangePasswordForm
-│   ├── layout/                 # Navbar
+│   ├── layout/                 # Navbar, ThemeProvider
+│   ├── common/                 # Shared primitives
+│   │   ├── Button.tsx          # Variant-based button (primary/secondary/danger/ghost)
+│   │   ├── BoxContainer.tsx    # Standardized scrollable box wrapper
+│   │   ├── ThemeSwitcher.tsx   # Light/Dark/System theme toggle
+│   │   ├── MonthTile.tsx       # Month tile with current-month highlight support
+│   │   ├── DocPreviewPanel.tsx # Encrypted file preview panel (PDF/image)
+│   │   ├── TileView.tsx        # Tile grid view for certificate store
+│   │   └── ViewToggle.tsx      # Toggle between list/tile views
 │   ├── taskmanager/            # Task manager feature components + helpers
-│   └── expense/               # Expense tracker feature components
+│   ├── expense/                # Expense tracker feature components
+│   └── education/              # Education manager feature components
+│       ├── EducationView.tsx   # Main controller for education page
+│       ├── ActiveEducationsBox.tsx
+│       ├── CompletedEducationsBox.tsx
+│       ├── CompletedEducationsModal.tsx
+│       ├── EducationModal.tsx  # Create/edit education + certificate attachment
+│       ├── CertificateModal.tsx
+│       ├── CertificateStoreView.tsx # Certificate Store sub-page controller
+│       └── helpers.ts
 ├── lib/                        # Core utilities
 │   ├── crypto/                 # Client-side encryption (see below)
 │   │   ├── primitives.ts       # Web Crypto + Argon2id wrappers
@@ -67,9 +95,12 @@ src/
 │   │   ├── manager.ts          # High-level orchestrator
 │   │   ├── CryptoProvider.tsx  # React context — DEK readiness gate
 │   │   └── index.ts            # Barrel export
-│   └── supabase/               # 3 client factories: client.ts, server.ts, proxy.ts
+│   ├── supabase/               # 3 client factories: client.ts, server.ts, proxy.ts
+│   └── useLocalStorage.ts      # Generic hook: state synced with localStorage
 ├── routes/                     # Centralized route paths + config
 ├── types/                      # Shared TypeScript types
+│   ├── education.ts            # Education + Certificate types
+│   └── ...                     # Other feature types
 └── proxy.ts                    # Next.js proxy (auth guard + session refresh)
 ```
 
@@ -80,10 +111,13 @@ src/
 - Auth session refresh uses `getClaims()` (not `getUser()` or `getSession()`).
 - Env var is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not legacy `ANON_KEY`).
 - Database schema and RLS are documented in [`schema.md`](./schema.md).
-- Crypto implementation plan and progress tracked in [`PLAN-crypto.md`](./PLAN-crypto.md).
-- Task Manager feature plan and progress tracked in [`PLAN-taskmanager.md`](./PLAN-taskmanager.md).
-- Expense Tracker feature plan and progress tracked in [`PLAN-expense.md`](./PLAN-expense.md).
+- Crypto implementation plan and progress tracked in [`plans/PLAN-crypto.md`](./plans/PLAN-crypto.md).
+- Task Manager feature plan and progress tracked in [`plans/PLAN-taskmanager.md`](./plans/PLAN-taskmanager.md).
+- Expense Tracker feature plan and progress tracked in [`plans/PLAN-expense.md`](./plans/PLAN-expense.md).
+- Education feature plan tracked in [`plans/PLAN-education.md`](./plans/PLAN-education.md).
+- Global QoL (buttons, boxcontainer, date) plan in [`plans/PLAN-qol-global.md`](./plans/PLAN-qol-global.md).
 - **All pages must be responsive** (laptop + mobile). Use Tailwind breakpoints (`sm`, `md`, `lg`) — no fixed-width layouts.
+- UI preferences (view modes, sort state) are persisted via `useLocalStorage` hook — no server-side changes needed.
 
 ---
 
@@ -149,10 +183,15 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-04-12 | Crypto Phase 7 completed and verified via Task Manager feature integration (encrypted `tasks` + `notes` tables). API layer refactored into feature subdirectories (`src/api/auth/*`, `src/api/taskmanager/*`). |
 | 2026-04-12 | Task Manager feature F1.1–F1.10 completed: `/taskmanager` route, modular UI components, active/completed dual views, hash-modals, task/note CRUD, dashboard-tile entry integration, responsive + loading/error polish. |
 | 2026-04-12 | Password change flow hardened with best-effort key rollback if Supabase auth update fails after DEK re-wrap. |
-| 2026-06-22 | Expense Tracker plan drafted (`PLAN-expense.md`). Minor navbar/layout visual polish. |
+| 2026-06-22 | Expense Tracker plan drafted (`plans/PLAN-expense.md`). Minor navbar/layout visual polish. |
 | 2026-06-23 | Expense Tracker feature F2.1–F2.10 completed: `/expense` route, `expenses` table + RLS, encrypted CRUD API layer (`src/api/expense/`), 6 UI components (`ExpenseView`, `MonthRow`, `ExpenseTable`, `ExpenseModal`, `FullMonthModal`, `YearDropdown`), year-grouped calendar view with 12 month rows, inline expand/retract with 5-item preview, hash-based full-month modal, create/edit/delete with `ConfirmDialog`, ₹ formatting, dashboard tile integration, responsive layout, loading/error states. |
 | 2026-07-01 | Expense Tracker: month rows layout changed from vertical stack to 2-column grid (`lg:grid-cols-2`). Task Manager bug fix: fixed past-year tasks showing in current year section + server-side year fetching. |
 | 2026-07-02 | Expense Tracker invoice file upload completed: Added client-side encrypted file uploads for expense attachments, storage bucket RLS, and inline previews. |
+| 2026-07-06 | Global QoL improvements: Global `Button` component + variants, `BoxContainer` for uniform scrollable areas, `useLocalStorage` hook for persisting UI prefs (view modes, sort state). Expense Table columns now have sort indicators. |
+| 2026-07-06 | Light/Dark/System theme switch added: `@wrksz/themes` + `lucide-react` installed, `ThemeProvider` + `ThemeSwitcher` components, Navbar integration, CSS updated to `.dark` class selector. |
+| 2026-07-06 | IST date integration: `serverDate.ts` (`getServerDateIST`) replacing `serverYear.ts`, Navbar displays current IST date, current month highlighted in Task Manager + Expense views, modals pre-fill today's date. |
+| 2026-07-07 | Education feature plan drafted (`plans/PLAN-education.md`). `educations` + `certificates` tables + RLS + `certificates` storage bucket created in Supabase. |
+| 2026-07-08 | Education Manager feature completed: `/education` route (3-box layout: Active, Completed, Certificate Store), `/education/store` sub-page (tile view), encrypted CRUD for educations + certificates, multi-file certificate upload/download with `DocPreviewPanel` and `TileView`, full modal flows for Education + Certificate + Certificate Store. Dashboard tile integration. |
 
 ---
 

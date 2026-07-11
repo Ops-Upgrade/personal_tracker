@@ -1,7 +1,7 @@
 "use client";
 
 import type { Note } from "@/types/taskmanager";
-import ModalFrame from "./ModalFrame";
+import ModalFrame from "@/components/common/ModalFrame";
 import { sortedNotes, trunc } from "./helpers";
 
 interface NotesModalProps {

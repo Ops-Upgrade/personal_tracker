@@ -1,194 +1,31 @@
-import { PRIORITIES, type Note, type Priority, type Task } from "@/types/taskmanager";
+import type { Task, Note, Priority } from "@/types/taskmanager";
+import { PRIORITIES } from "@/types/taskmanager";
 
-// ---- Priority colour system (single source of truth) ----
+// Re-export shared utilities (except byPriority which we wrap)
+export {
+  sortByCompletedDesc,
+  sortByCreatedAtDesc,
+  sortByDueDateAsc,
+  activeByMonths,
+  completedByMonths,
+  trunc,
+} from "@/lib/viewHelpers";
 
-export interface PriorityColorSet {
-  text: string;
-  bg: string;
-  border: string;
-  dot: string;
-}
+export { formatShortDate } from "@/lib/format";
 
-const PRIORITY_COLORS: Record<Priority, PriorityColorSet> = {
-  critical: {
-    text: "text-red-700 dark:text-red-300",
-    bg: "bg-red-50 dark:bg-red-950/30",
-    border: "border-red-300 dark:border-red-800",
-    dot: "bg-red-500",
-  },
-  high: {
-    text: "text-amber-700 dark:text-amber-300",
-    bg: "bg-amber-50 dark:bg-amber-950/30",
-    border: "border-amber-300 dark:border-amber-800",
-    dot: "bg-amber-500",
-  },
-  medium: {
-    text: "text-blue-700 dark:text-blue-300",
-    bg: "bg-blue-50 dark:bg-blue-950/30",
-    border: "border-blue-300 dark:border-blue-800",
-    dot: "bg-blue-500",
-  },
-  low: {
-    text: "text-zinc-600 dark:text-zinc-400",
-    bg: "bg-zinc-50 dark:bg-zinc-800/30",
-    border: "border-zinc-300 dark:border-zinc-700",
-    dot: "bg-zinc-400",
-  },
-};
+// Re-export priority colors from shared location
+export { getPriorityColor } from "@/lib/priorityColors";
+export type { PriorityColorSet } from "@/lib/priorityColors";
 
-export function getPriorityColor(priority: Priority): PriorityColorSet {
-  return PRIORITY_COLORS[priority];
-}
-
-const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", { month: "long" });
-const MONTH_YEAR_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  month: "long",
-  year: "numeric",
-});
-
-export function sortByDueDateAsc(a: Task, b: Task): number {
-  if (!a.due_date && !b.due_date) return 0;
-  if (!a.due_date) return 1;
-  if (!b.due_date) return -1;
-  return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-}
-
-export function sortByCompletedDesc(a: Task, b: Task): number {
-  const aTs = a.completed_at ? new Date(a.completed_at).getTime() : 0;
-  const bTs = b.completed_at ? new Date(b.completed_at).getTime() : 0;
-  return bTs - aTs;
-}
-
-export function sortByCreatedAtDesc<T extends { created_at: string }>(
-  a: T,
-  b: T
-): number {
-  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-}
+// Re-import byPriority from shared for wrapping
+import { byPriority as sharedByPriority } from "@/lib/viewHelpers";
 
 export function byPriority(tasks: Task[]): Record<Priority, Task[]> {
-  return PRIORITIES.reduce(
-    (acc, priority) => {
-      acc[priority] = tasks
-        .filter((task) => task.priority === priority)
-        .sort(sortByDueDateAsc);
-      return acc;
-    },
-    {
-      critical: [],
-      high: [],
-      medium: [],
-      low: [],
-    } as Record<Priority, Task[]>
-  );
-}
-
-export function activeByMonths(
-  tasks: Task[],
-  nowYear: number
-): Array<{ label: string; tasks: Task[] }> {
-  const monthMap = new Map<string, Task[]>();
-
-  for (const task of tasks) {
-    if (!task.due_date) {
-      const unscheduled = monthMap.get("Unscheduled") ?? [];
-      unscheduled.push(task);
-      monthMap.set("Unscheduled", unscheduled);
-      continue;
-    }
-
-    const due = new Date(task.due_date);
-    const year = due.getFullYear();
-
-    let label: string;
-    if (year < nowYear) {
-      label = "Past Years";
-    } else if (year > nowYear) {
-      label = "Future Years";
-    } else {
-      label = MONTH_FORMATTER.format(due);
-    }
-
-    const bucket = monthMap.get(label) ?? [];
-    bucket.push(task);
-    monthMap.set(label, bucket);
-  }
-
-  const orderedMonths = [
-    "Unscheduled",
-    "Past Years",
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-    "Future Years",
-  ];
-
-  return orderedMonths.map((label) => ({
-    label,
-    tasks: (monthMap.get(label) ?? []).sort(sortByDueDateAsc),
-  }));
-}
-
-export function completedByMonths(
-  tasks: Task[],
-  nowYear: number
-): Array<{ label: string; tasks: Task[]; sortKey: number }> {
-  const monthMap = new Map<string, { tasks: Task[]; sortKey: number }>();
-
-  for (const task of tasks) {
-    if (!task.completed_at) continue;
-    const completed = new Date(task.completed_at);
-    const completedYear = completed.getFullYear();
-
-    let label: string;
-    if (completedYear < nowYear) {
-      label = "Past Years";
-    } else if (completedYear > nowYear) {
-      label = "Future Years";
-    } else {
-      label = MONTH_YEAR_FORMATTER.format(completed);
-    }
-
-    const existing = monthMap.get(label);
-    const taskTs = completed.getTime();
-
-    if (!existing) {
-      monthMap.set(label, { tasks: [task], sortKey: taskTs });
-      continue;
-    }
-
-    existing.tasks.push(task);
-    existing.sortKey = Math.max(existing.sortKey, taskTs);
-    monthMap.set(label, existing);
-  }
-
-  return Array.from(monthMap.entries())
-    .map(([label, value]) => ({
-      label,
-      tasks: value.tasks.sort(sortByCompletedDesc),
-      sortKey: value.sortKey,
-    }))
-    .sort((a, b) => b.sortKey - a.sortKey);
-}
-
-export function trunc(text: string, max = 70): string {
-  return text.length <= max ? text : `${text.slice(0, max)}...`;
+  return sharedByPriority(tasks, PRIORITIES) as Record<Priority, Task[]>;
 }
 
 export function sortedNotes(notes: Note[]): Note[] {
-  return [...notes].sort(sortByCreatedAtDesc);
-}
-
-export function formatShortDate(value: string | null): string {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString();
+  return [...notes].sort((a, b) =>
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
 }

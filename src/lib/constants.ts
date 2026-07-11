@@ -9,3 +9,9 @@ export const COOKIE_OPTIONS = {
   sameSite: "lax" as const,
   secure: process.env.NODE_ENV === "production",
 };
+
+/** Ordered month names used by grouping/sorting helpers across domains. */
+export const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+] as const;
