@@ -76,7 +76,7 @@ export async function updateCertificate(
  * Permanently delete a certificate by ID.
  *
  * NOTE: Callers are responsible for cleaning up the associated file
- * in Supabase Storage (see deleteCertificateFile). This function only removes the
+ * in R2 storage (see deleteCertificateFile). This function only removes the
  * database row — storage cleanup happens at the UI layer.
  */
 export async function deleteCertificate(certificateId: string): Promise<void> {

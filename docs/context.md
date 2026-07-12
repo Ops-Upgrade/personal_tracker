@@ -24,6 +24,8 @@ Target deployment: Vercel with custom domain `ops-upgrade.com` and subdomains.
 | @supabase/supabase-js | ^2.95.3 |                                           |
 | hash-wasm          | ^4.12.0  | Argon2id WASM (~11 KB). Used only in `primitives.ts` |
 | @wrksz/themes      | ^0.9.7   | Theme provider (light/dark/system). Fixes React 19 hydration issues present in `next-themes`. |
+| @aws-sdk/client-s3 | ^3.1085.0 | AWS S3 SDK for Cloudflare R2-compatible object storage |
+| @aws-sdk/s3-request-presigner | ^3.1079.0 | Presigned URL generation for R2 direct upload/download |
 | lucide-react       | ^1.23.0  | Icon library (Sun/Moon for theme toggle, etc.) |
 | Node.js            | 22+      | Required by Next.js 16                       |
 | clsx               | ^2.1.1   | Class name utility                           |
@@ -45,7 +47,12 @@ src/
 │   │   │   └── store/          # Certificate Store sub-page
 │   │   └── settings/
 │   │       └── change-password/ # Change password page
-│   └── api/auth/callback/      # Supabase auth callback endpoint
+│   ├── api/auth/callback/      # Supabase auth callback endpoint
+│   └── api/storage/            # R2 storage API routes (presigned URLs + delete)
+│       ├── _helpers/auth.ts    # Shared auth check for storage routes
+│       ├── upload/             # POST — presigned PUT URL
+│       ├── download/           # POST — presigned GET URL
+│       └── delete/             # POST — server-side delete
 ├── api/                        # Service layer (wraps Supabase SDK calls)
 │   ├── auth/
 │   │   ├── auth.ts             # login, logout, changePassword, getSession
@@ -94,6 +101,9 @@ src/
 │   │   ├── store.ts            # IndexedDB DEK persistence
 │   │   ├── manager.ts          # High-level orchestrator
 │   │   ├── CryptoProvider.tsx  # React context — DEK readiness gate
+│   │   └── index.ts            # Barrel export
+│   ├── r2/                     # Cloudflare R2 client (S3-compatible)
+│   │   ├── client.ts           # S3Client singleton + R2_BUCKET constant
 │   │   └── index.ts            # Barrel export
 │   ├── supabase/               # 3 client factories: client.ts, server.ts, proxy.ts
 │   └── useLocalStorage.ts      # Generic hook: state synced with localStorage
@@ -153,7 +163,7 @@ Applied via `next.config.ts` `headers()` on all routes:
 
 | Header | Value |
 |--------|-------|
-| Content-Security-Policy | `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co; img-src 'self' blob: data:; frame-ancestors 'none'` |
+| Content-Security-Policy | `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com; img-src 'self' blob: data:; frame-ancestors 'none'` |
 | X-Content-Type-Options | `nosniff` |
 | X-Frame-Options | `DENY` |
 | Referrer-Policy | `strict-origin-when-cross-origin` |
@@ -171,6 +181,10 @@ Applied via `next.config.ts` `headers()` on all routes:
 | `NEXT_PUBLIC_SUPABASE_URL`            | Supabase project URL          | `https://xxx.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`| Supabase publishable API key  | `sb_publishable_...` |
 | `NEXT_PUBLIC_COOKIE_DOMAIN`           | Cookie domain scope           | `localhost`     |
+| `R2_ACCOUNT_ID`                       | Cloudflare account ID (server-only) | —               |
+| `R2_ACCESS_KEY_ID`                    | R2 API token access key (server-only) | —               |
+| `R2_SECRET_ACCESS_KEY`                | R2 API token secret key (server-only) | —               |
+| `R2_BUCKET_NAME`                      | R2 bucket name (server-only, default: `personal-tracker`) | —               |
 
 ---
 
@@ -192,6 +206,7 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-07-06 | IST date integration: `serverDate.ts` (`getServerDateIST`) replacing `serverYear.ts`, Navbar displays current IST date, current month highlighted in Task Manager + Expense views, modals pre-fill today's date. |
 | 2026-07-07 | Education feature plan drafted (`plans/PLAN-education.md`). `educations` + `certificates` tables + RLS + `certificates` storage bucket created in Supabase. |
 | 2026-07-08 | Education Manager feature completed: `/education` route (3-box layout: Active, Completed, Certificate Store), `/education/store` sub-page (tile view), encrypted CRUD for educations + certificates, multi-file certificate upload/download with `DocPreviewPanel` and `TileView`, full modal flows for Education + Certificate + Certificate Store. Dashboard tile integration. |
+| 2026-07-12 | Migrated file storage from Supabase Storage to Cloudflare R2. Added `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`, R2 client singleton (`src/lib/r2/`), presigned-URL API routes (`src/app/api/storage/`), rewrote `encryptedFileStorage.ts` to use R2 via API routes. Removed all `supabase.storage` SDK calls. Updated CSP, docs, and UI text. |
 
 ---
 

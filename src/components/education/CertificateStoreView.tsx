@@ -320,7 +320,7 @@ export default function CertificateStoreView() {
       }
       if (certificate.file_name) {
         try {
-          await deleteCertificateFile(certificate.file_name);
+          await deleteCertificateFile(userId, certificate.file_name);
         } catch {
           /* best-effort */
         }
@@ -391,7 +391,7 @@ export default function CertificateStoreView() {
           currentCertIds = currentCertIds.filter((id) => id !== certId);
           if (cert.file_name) {
             try {
-              await deleteCertificateFile(cert.file_name);
+              await deleteCertificateFile(userId, cert.file_name);
             } catch {
               /* best-effort */
             }
@@ -490,7 +490,7 @@ export default function CertificateStoreView() {
       for (const cert of linkedCerts) {
         if (cert.file_name) {
           try {
-            await deleteCertificateFile(cert.file_name);
+            await deleteCertificateFile(userId, cert.file_name);
           } catch {
             /* best-effort */
           }
@@ -586,7 +586,7 @@ export default function CertificateStoreView() {
 
     if (certificate.file_name) {
       try {
-        await deleteCertificateFile(certificate.file_name);
+        await deleteCertificateFile(userId, certificate.file_name);
       } catch {
         /* best-effort */
       }
