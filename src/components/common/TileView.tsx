@@ -9,6 +9,7 @@ import {
   FileText,
   Image as ImageIcon,
   Plus,
+  Pencil,
 } from "lucide-react";
 import { LinkSlashIcon, LinkIcon } from "@/components/common/Icons";
 import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
@@ -40,6 +41,14 @@ interface TileViewProps {
   onActionClick?: (fileId: string) => void;
   title?: React.ReactNode;
   getDeleteWarningText?: (doc: DocumentTile) => string;
+  onRenameConfirmed?: (fileId: string, newName: string) => void;
+  // Bulk selection
+  selectionEnabled?: boolean;
+  selectedIds?: Set<string>;
+  onSelectionChange?: (id: string, checked: boolean) => void;
+  onSelectAll?: (checked: boolean) => void;
+  /** Rendered in place of the search bar when items are selected */
+  bulkActions?: React.ReactNode;
 }
 
 export default function TileView({
@@ -52,12 +61,44 @@ export default function TileView({
   onActionClick,
   title = "Document Vault",
   getDeleteWarningText,
+  onRenameConfirmed,
+  selectionEnabled = false,
+  selectedIds,
+  onSelectionChange,
+  onSelectAll,
+  bulkActions,
 }: TileViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"tiles" | "list">("tiles");
   const [docToDelete, setDocToDelete] = useState<DocumentTile | null>(null);
   const [docToUnlink, setDocToUnlink] = useState<DocumentTile | null>(null);
   const [removingIds, setRemovingIds] = useState<Set<string>>(new Set());
+
+  // Inline rename state
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState("");
+
+  const startRename = (doc: DocumentTile) => {
+    setRenamingId(doc.id);
+    setRenameText(doc.fileName);
+  };
+
+  const commitRename = () => {
+    if (renamingId && renameText.trim() && onRenameConfirmed) {
+      onRenameConfirmed(renamingId, renameText.trim());
+    }
+    setRenamingId(null);
+    setRenameText("");
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      commitRename();
+    } else if (e.key === "Escape") {
+      setRenamingId(null);
+      setRenameText("");
+    }
+  };
 
   const filteredDocs = useMemo(() => {
     if (!searchQuery) return documents;
@@ -72,7 +113,7 @@ export default function TileView({
 
   const confirmDeleteWithMode = (cascadeMode: 'unlink' | 'cascade') => {
     if (!docToDelete) return;
-    
+
     // Add to removingIds to trigger fade out animation
     setRemovingIds((prev) => {
       const newSet = new Set(prev);
@@ -90,11 +131,11 @@ export default function TileView({
       }
       // Clean up local state after a while
       setTimeout(() => {
-         setRemovingIds((prev) => {
-           const newSet = new Set(prev);
-           newSet.delete(idToRemove);
-           return newSet;
-         });
+        setRemovingIds((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(idToRemove);
+          return newSet;
+        });
       }, 500);
     }, 300);
   };
@@ -125,28 +166,42 @@ export default function TileView({
             options={STORE_VIEW_OPTIONS}
             ariaLabel="Store view toggle"
           />
+          {selectionEnabled && selectedIds && selectedIds.size > 0 && (
+            <button
+              onClick={() => onSelectAll?.(selectedIds.size < filteredDocs.length)}
+              className="text-xs font-medium text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+            >
+              {selectedIds.size < filteredDocs.length ? `Select all (${filteredDocs.length})` : "Deselect all"}
+            </button>
+          )}
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0">
-          <div className="relative flex-1 sm:w-64">
-            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
-              <Search className="h-4 w-4" />
-            </div>
-            <input
-              type="text"
-              placeholder="Search files..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="block w-full rounded-md border-0 py-2 pl-9 pr-3 text-zinc-900 ring-1 ring-inset ring-zinc-300 placeholder:text-zinc-400 focus:ring-2 focus:ring-inset focus:ring-emerald-600 sm:text-sm sm:leading-6 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700 dark:focus:ring-emerald-500"
-            />
-          </div>
-          {onAdd && (
-            <button
-              onClick={onAdd}
-              className="inline-flex items-center justify-center gap-x-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
-            >
-              <Plus className="-ml-0.5 h-4 w-4" />
-              Add
-            </button>
+          {selectionEnabled && selectedIds && selectedIds.size > 0 && bulkActions ? (
+            bulkActions
+          ) : (
+            <>
+              <div className="relative flex-1 sm:w-64">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
+                  <Search className="h-4 w-4" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search files..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full rounded-md border-0 py-2 pl-9 pr-3 text-zinc-900 ring-1 ring-inset ring-zinc-300 placeholder:text-zinc-400 focus:ring-2 focus:ring-inset focus:ring-emerald-600 sm:text-sm sm:leading-6 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700 dark:focus:ring-emerald-500"
+                />
+              </div>
+              {onAdd && (
+                <button
+                  onClick={onAdd}
+                  className="inline-flex items-center justify-center gap-x-1.5 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                >
+                  <Plus className="-ml-0.5 h-4 w-4" />
+                  Add
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -167,6 +222,27 @@ export default function TileView({
           </div>
         ) : viewMode === "list" ? (
           <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            {selectionEnabled && selectedIds && selectedIds.size > 0 && (
+              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/50">
+                <input
+                  type="checkbox"
+                  checked={filteredDocs.length > 0 && selectedIds.size === filteredDocs.length}
+                  onChange={(e) => onSelectAll?.(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-600 dark:border-zinc-600 dark:bg-zinc-800"
+                />
+                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  {selectedIds.size === filteredDocs.length
+                    ? "All selected"
+                    : `${selectedIds.size} of ${filteredDocs.length} selected`}
+                </span>
+                <button
+                  onClick={() => onSelectAll?.(false)}
+                  className="ml-auto text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
             <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {filteredDocs.map((doc) => {
                 const isRemoving = removingIds.has(doc.id);
@@ -177,11 +253,26 @@ export default function TileView({
                   <div
                     key={doc.id}
                     onClick={() => onActionClick?.(doc.id)}
-                    className={`group flex items-center justify-between gap-4 p-4 transition-all duration-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${onActionClick ? "cursor-pointer" : ""} ${
-                      isRemoving ? "opacity-0 scale-y-95" : "opacity-100 scale-y-100"
-                    }`}
+                    className={`group flex items-center justify-between gap-4 p-4 transition-all duration-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${onActionClick ? "cursor-pointer" : ""} ${isRemoving ? "opacity-0 scale-y-95" : "opacity-100 scale-y-100"
+                      }`}
                   >
                     <div className="flex flex-1 items-center gap-4 min-w-0">
+                      {selectionEnabled && (
+                        <input
+                          type="checkbox"
+                          checked={selectedIds?.has(doc.id) ?? false}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            onSelectionChange?.(doc.id, e.target.checked);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className={`h-4 w-4 shrink-0 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-600 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${
+                            selectedIds?.has(doc.id)
+                              ? "opacity-100"
+                              : "opacity-0 group-hover:opacity-100"
+                          }`}
+                        />
+                      )}
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
                         {isImage ? (
                           <ImageIcon className="h-5 w-5 text-emerald-500" />
@@ -192,9 +283,34 @@ export default function TileView({
                         )}
                       </div>
                       <div className="flex min-w-0 flex-1 items-center gap-2">
-                        <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={doc.fileName}>
-                          {doc.fileName}
-                        </span>
+                        {renamingId === doc.id ? (
+                          <input
+                            type="text"
+                            value={renameText}
+                            onChange={(e) => setRenameText(e.target.value)}
+                            onBlur={commitRename}
+                            onKeyDown={handleRenameKeyDown}
+                            className="min-w-0 flex-1 rounded border border-emerald-400 px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100 dark:border-emerald-600"
+                            autoFocus
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={doc.fileName}>
+                            {doc.fileName}
+                          </span>
+                        )}
+                        {onRenameConfirmed && renamingId !== doc.id && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startRename(doc);
+                            }}
+                            className="shrink-0 p-0.5 rounded text-zinc-400 opacity-0 group-hover:opacity-100 hover:text-emerald-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
+                            title="Rename"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         {doc.linkedItemName && (
                           <LinkIcon className="h-4 w-4 shrink-0 text-emerald-500" />
                         )}
@@ -235,7 +351,7 @@ export default function TileView({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
             {filteredDocs.map((doc) => {
               const isRemoving = removingIds.has(doc.id);
-              
+
               // Prefer MIME type for icon resolution, fall back to filename extension
               const isImage = doc.mime ? doc.mime.startsWith("image/") : doc.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
               const isPdf = doc.mime ? doc.mime === "application/pdf" : doc.fileName.match(/\.pdf$/i);
@@ -244,10 +360,27 @@ export default function TileView({
                 <div
                   key={doc.id}
                   onClick={() => onActionClick?.(doc.id)}
-                  className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md hover:border-emerald-200 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-800 ${onActionClick ? "cursor-pointer" : ""} ${
-                    isRemoving ? "opacity-0 scale-95" : "opacity-100 scale-100"
-                  }`}
+                  className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md hover:border-emerald-200 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-800 ${onActionClick ? "cursor-pointer" : ""} ${isRemoving ? "opacity-0 scale-95" : "opacity-100 scale-100"
+                    }`}
                 >
+                  {/* Selection checkbox — top-left */}
+                  {selectionEnabled && (
+                    <div
+                      className={`absolute top-2 left-2 z-10 transition-opacity ${
+                        selectedIds?.has(doc.id)
+                          ? "opacity-100"
+                          : "opacity-0 group-hover:opacity-100"
+                      }`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds?.has(doc.id) ?? false}
+                        onChange={(e) => onSelectionChange?.(doc.id, e.target.checked)}
+                        className="h-4 w-4 rounded border-zinc-300 bg-white/80 text-emerald-600 focus:ring-emerald-600 dark:border-zinc-600 dark:bg-zinc-800/80"
+                      />
+                    </div>
+                  )}
                   {/* Thumbnail Area */}
                   <div className="relative flex h-32 w-full items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800 overflow-hidden">
                     {doc.thumbnailUrl ? (
@@ -293,12 +426,39 @@ export default function TileView({
 
                   {/* Footer Area */}
                   <div className="flex flex-col p-3">
-                    <span
-                      className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
-                      title={doc.fileName}
-                    >
-                      {doc.fileName}
-                    </span>
+                    {renamingId === doc.id ? (
+                      <input
+                        type="text"
+                        value={renameText}
+                        onChange={(e) => setRenameText(e.target.value)}
+                        onBlur={commitRename}
+                        onKeyDown={handleRenameKeyDown}
+                        className="w-full rounded border border-emerald-400 px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100 dark:border-emerald-600"
+                        autoFocus
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : (
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span
+                          className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
+                          title={doc.fileName}
+                        >
+                          {doc.fileName}
+                        </span>
+                        {onRenameConfirmed && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startRename(doc);
+                            }}
+                            className="shrink-0 p-0.5 rounded text-zinc-400 opacity-0 group-hover:opacity-100 hover:text-emerald-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all"
+                            title="Rename"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Linked indicator — bottom-right */}
@@ -338,7 +498,7 @@ export default function TileView({
           confirmLabel="Delete"
           cancelLabel="Cancel"
           showDeleteFilesCheckbox
-          deleteFilesLabel="Delete associated record (if linked)"
+          deleteFilesLabel="Delete associated record"
           onConfirm={(deleteRecord) => confirmDeleteWithMode(deleteRecord ? 'cascade' : 'unlink')}
           onCancel={() => setDocToDelete(null)}
         />

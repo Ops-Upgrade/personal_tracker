@@ -14,6 +14,7 @@ import {
   ArrowPathIcon,
   DocumentIcon,
 } from "@/components/common/Icons";
+import { Pencil } from "lucide-react";
 
 // --- Types ---
 
@@ -26,6 +27,7 @@ export interface ModalFile {
   file?: File | null;
   isNew?: boolean;
   isMarkedForDeletion?: boolean;
+  isMarkedForUnlink?: boolean;
 }
 
 export interface GlobalActionModalProps {
@@ -45,6 +47,7 @@ export interface GlobalActionModalProps {
   onFileDelete?: (fileId: string) => void;
   onFileUnlink?: (fileId: string) => void;
   onFileDownload?: (fileId: string) => void;
+  onFileRename?: (fileId: string, newName: string) => void;
 
   // --- Upload / Link ---
   onFileUpload?: (file: File) => void;
@@ -83,6 +86,7 @@ export default function GlobalActionModal({
   onFileDelete,
   onFileUnlink,
   onFileDownload,
+  onFileRename,
   onFileUpload,
   onLinkFile,
   isUploading = false,
@@ -97,6 +101,32 @@ export default function GlobalActionModal({
 }: GlobalActionModalProps) {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [fileDropdownOpen, setFileDropdownOpen] = useState(false);
+
+  // Inline rename state
+  const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
+  const [renameText, setRenameText] = useState("");
+
+  const startRename = (file: ModalFile) => {
+    setRenamingFileId(file.id);
+    setRenameText(file.name);
+  };
+
+  const commitRename = () => {
+    if (renamingFileId && renameText.trim() && onFileRename) {
+      onFileRename(renamingFileId, renameText.trim());
+    }
+    setRenamingFileId(null);
+    setRenameText("");
+  };
+
+  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      commitRename();
+    } else if (e.key === "Escape") {
+      setRenamingFileId(null);
+      setRenameText("");
+    }
+  };
 
   // --- isDirty ref so Esc handler never sees stale closure (Task 1.3) ---
   const isDirtyRef = useRef(isDirty);
@@ -255,19 +285,31 @@ export default function GlobalActionModal({
 
                     {/* File name + dropdown to jump to any file */}
                     <div className="relative flex-1 min-w-0 ml-1">
-                      <button
-                        type="button"
-                        onClick={() => setFileDropdownOpen(prev => !prev)}
-                        onBlur={() => setTimeout(() => setFileDropdownOpen(false), 150)}
-                        className="flex items-center gap-0.5 w-full min-w-0 text-left"
-                      >
-                        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 truncate">
-                          {selectedFile.name}
-                        </span>
-                        <svg className={`h-3 w-3 shrink-0 text-zinc-400 transition-transform ${fileDropdownOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-                        </svg>
-                      </button>
+                      {renamingFileId === selectedFile.id ? (
+                        <input
+                          type="text"
+                          value={renameText}
+                          onChange={(e) => setRenameText(e.target.value)}
+                          onBlur={commitRename}
+                          onKeyDown={handleRenameKeyDown}
+                          className="w-full rounded border border-emerald-400 px-1 py-0.5 text-xs font-medium text-zinc-900 outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100 dark:border-emerald-600"
+                          autoFocus
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setFileDropdownOpen(prev => !prev)}
+                          onBlur={() => setTimeout(() => setFileDropdownOpen(false), 150)}
+                          className="flex items-center gap-0.5 w-full min-w-0 text-left"
+                        >
+                          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 truncate">
+                            {selectedFile.name}
+                          </span>
+                          <svg className={`h-3 w-3 shrink-0 text-zinc-400 transition-transform ${fileDropdownOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      )}
                       {fileDropdownOpen && (
                         <div className="absolute z-20 left-0 top-full mt-1 w-56 rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
                           <div className="max-h-48 overflow-y-auto py-1">
@@ -310,6 +352,11 @@ export default function GlobalActionModal({
                         Unsaved
                       </span>
                     )}
+                    {selectedFile.isMarkedForUnlink && (
+                      <span className="inline-flex items-center shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:bg-amber-800 dark:text-amber-200">
+                        To unlink
+                      </span>
+                    )}
                     {selectedFile.isMarkedForDeletion && (
                       <span className="inline-flex items-center shrink-0 rounded-full bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-800 dark:bg-red-800 dark:text-red-200">
                         To delete
@@ -318,6 +365,16 @@ export default function GlobalActionModal({
 
                     {/* Explicit action buttons (replaces ... menu) */}
                     <div className="flex items-center gap-0.5 ml-1">
+                      {onFileRename && (
+                        <button
+                          type="button"
+                          onClick={() => startRename(selectedFile)}
+                          className="p-1 rounded text-zinc-400 hover:text-emerald-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:text-emerald-400 dark:hover:bg-zinc-800 transition-colors"
+                          title="Rename"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
                       {onFileUnlink && (
                         <button
                           type="button"
@@ -395,26 +452,54 @@ export default function GlobalActionModal({
                         key={f.id}
                         className="flex items-center gap-2 px-3 py-2 border-b border-zinc-100 last:border-b-0 dark:border-zinc-800/50"
                       >
-                        <button
-                          type="button"
-                          onClick={() => onSelectFile?.(f.id)}
-                          className="flex flex-1 items-center gap-2 min-w-0 text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                        >
-                          <DocumentIcon className="h-4 w-4 shrink-0 text-zinc-400" />
-                          <span className="text-sm text-zinc-700 dark:text-zinc-300 truncate">
-                            {f.name}
-                          </span>
-                        </button>
+                        {renamingFileId === f.id ? (
+                          <input
+                            type="text"
+                            value={renameText}
+                            onChange={(e) => setRenameText(e.target.value)}
+                            onBlur={commitRename}
+                            onKeyDown={handleRenameKeyDown}
+                            className="flex-1 min-w-0 rounded border border-emerald-400 px-1.5 py-0.5 text-sm text-zinc-900 outline-none focus:ring-1 focus:ring-emerald-500 dark:bg-zinc-800 dark:text-zinc-100 dark:border-emerald-600"
+                            autoFocus
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onSelectFile?.(f.id)}
+                            className="flex flex-1 items-center gap-2 min-w-0 text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                          >
+                            <DocumentIcon className="h-4 w-4 shrink-0 text-zinc-400" />
+                            <span className="text-sm text-zinc-700 dark:text-zinc-300 truncate">
+                              {f.name}
+                            </span>
+                          </button>
+                        )}
                         {/* Badges */}
                         {f.isNew && (
                           <span className="inline-flex items-center shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:bg-amber-800 dark:text-amber-200">
                             Unsaved
                           </span>
                         )}
+                        {f.isMarkedForUnlink && (
+                          <span className="inline-flex items-center shrink-0 rounded-full bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800 dark:bg-amber-800 dark:text-amber-200">
+                            To unlink
+                          </span>
+                        )}
                         {f.isMarkedForDeletion && (
                           <span className="inline-flex items-center shrink-0 rounded-full bg-red-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-red-800 dark:bg-red-800 dark:text-red-200">
                             To delete
                           </span>
+                        )}
+                        {/* Rename button */}
+                        {onFileRename && renamingFileId !== f.id && (
+                          <button
+                            type="button"
+                            onClick={() => startRename(f)}
+                            className="p-1 rounded text-zinc-400 hover:text-emerald-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:text-emerald-400 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                            title="Rename"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
                         )}
                         {/* X button to delete/remove from queue */}
                         {onFileDelete && (

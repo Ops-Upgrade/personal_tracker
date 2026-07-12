@@ -166,6 +166,22 @@ export default function StoreCertificateModal({
     setSelectedFileId("store-file");
   };
 
+  const handleFileRename = (fileId: string, newName: string) => {
+    // Rename unsaved file (storeFile)
+    if (fileId === "store-file" && storeFile) {
+      const renamedFile = new File([storeFile], newName, {
+        type: storeFile.type,
+        lastModified: storeFile.lastModified,
+      });
+      setStoreFile(renamedFile);
+    }
+    // For existing certificate in edit mode, update label locally
+    // (The save handler uses storeFile?.name || certificate?.label, so
+    //  if we had a local label override it would go here. Since the plan
+    //  focuses on unsaved files, the cert label rename flows through
+    //  the TileView → API path instead.)
+  };
+
   const handleFileDelete = () => {
     // Edit mode: deleting the file means complete delete of the certificate
     if (isEditing && certificate && onDelete) {
@@ -293,6 +309,7 @@ export default function StoreCertificateModal({
         onSelectFile={(id) => setSelectedFileId(id)}
         onFileDelete={files.length > 0 ? handleFileDelete : undefined}
         onFileDownload={files.length > 0 ? handleFileDownload : undefined}
+        onFileRename={files.length > 0 ? handleFileRename : undefined}
         onFileUpload={!isEditing ? handleFileUpload : undefined}
         onLoadPreview={files.length > 0 ? handleLoadPreview : undefined}
         onSave={handleSave}
