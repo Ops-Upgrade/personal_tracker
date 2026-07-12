@@ -55,7 +55,7 @@ src/app/(protected)/<feature>/  # Page route(s)
 
 ### Storage bucket pattern
 
-File uploads (expense invoices, certificates) are client-side encrypted with DEK before upload. Buckets are private with RLS. Files stored as `application/octet-stream` with `.enc` extension. Metadata (filename, MIME, IV) is stored inside the parent record's encrypted `data` blob.
+File uploads (expense invoices, certificates) are client-side encrypted with DEK before upload. Files are stored in Cloudflare R2 (`personal-tracker` bucket) under folder-prefixed paths (`expenses/{userId}/...`, `certificates/{userId}/...`). The client gets presigned URLs from Next.js API routes (`/api/storage/upload`, `/api/storage/download`, `/api/storage/delete`), then uploads/downloads directly to/from R2. Server-side delete uses `DeleteObjectCommand` directly. Files stored as `application/octet-stream` with `.enc` extension. Metadata (filename, MIME, IV) is stored inside the parent record's encrypted `data` blob.
 
 ### UI conventions
 
@@ -94,8 +94,9 @@ Use `getServerDateIST()` from `src/api/serverDate.ts` to get current IST date fr
 
 ### Linking a storage bucket to a feature
 
-1. Create the bucket in Supabase (private, RLS enforced).
-2. Add RLS policies on `storage.objects` for INSERT/SELECT/DELETE/UPDATE.
-3. Create `src/api/<feature>/<feature>Storage.ts` with encrypted upload/download.
-4. Include file metadata (filename, IV, MIME) inside the parent record's encrypted `data` blob.
-5. Update `docs/schema.md` with bucket config and RLS.
+1. Determine the R2 folder prefix for the feature (e.g. `expenses`, `certificates`).
+2. Create `src/api/<feature>/<feature>Storage.ts` using `createEncryptedFileStorage` with the feature's folder.
+3. Include file metadata (filename, IV, MIME) inside the parent record's encrypted `data` blob.
+4. Ensure the folder is in the `allowedFolders` list in `src/app/api/storage/upload/route.ts`.
+5. Update `docs/schema.md` with the folder structure.
+6. No RLS policies needed — access control is enforced by the Next.js API routes via `getAuthenticatedUserId()`.

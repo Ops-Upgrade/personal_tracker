@@ -188,23 +188,25 @@ export default function EducationModal({
       file?: File | null;
       isNew?: boolean;
       isMarkedForDeletion?: boolean;
+      isMarkedForUnlink?: boolean;
       orderGroup: number;   // 0=existing certs, 1=new uploads, 2=staged link
       orderIndex: number;   // position within group for stable numbering
     };
 
     const entries: FileEntry[] = [];
 
-    // Existing linked certs (skip those marked for deletion or unlink)
+    // Existing linked certs (show all; marked ones carry badge flags)
     let idx = 0;
     for (const cert of linkedCerts) {
-      if (markedForDeletion.has(cert.id)) continue;
-      if (markedForUnlink.has(cert.id)) continue;
+      const isDeletion = markedForDeletion.has(cert.id);
+      const isUnlink = markedForUnlink.has(cert.id);
       entries.push({
         id: cert.id,
         rawName: cert.label || "Unnamed Certificate",
         mime: cert.file_mime,
         iv: cert.file_iv,
-        isMarkedForDeletion: false,
+        isMarkedForDeletion: isDeletion || undefined,
+        isMarkedForUnlink: isUnlink || undefined,
         orderGroup: 0,
         orderIndex: idx++,
       });
@@ -253,10 +255,10 @@ export default function EducationModal({
       bucket.sort((a, b) => a.orderGroup - b.orderGroup || a.orderIndex - b.orderIndex);
       if (bucket.length === 1) {
         const e = bucket[0];
-        result.push({ id: e.id, name: e.rawName, mime: e.mime, iv: e.iv, file: e.file, isNew: e.isNew, isMarkedForDeletion: e.isMarkedForDeletion });
+        result.push({ id: e.id, name: e.rawName, mime: e.mime, iv: e.iv, file: e.file, isNew: e.isNew, isMarkedForDeletion: e.isMarkedForDeletion, isMarkedForUnlink: e.isMarkedForUnlink });
       } else {
         bucket.forEach((e, i) => {
-          result.push({ id: e.id, name: `${e.rawName} (${i + 1})`, mime: e.mime, iv: e.iv, file: e.file, isNew: e.isNew, isMarkedForDeletion: e.isMarkedForDeletion });
+          result.push({ id: e.id, name: `${e.rawName} (${i + 1})`, mime: e.mime, iv: e.iv, file: e.file, isNew: e.isNew, isMarkedForDeletion: e.isMarkedForDeletion, isMarkedForUnlink: e.isMarkedForUnlink });
         });
       }
     }
@@ -339,6 +341,32 @@ export default function EducationModal({
 
     try { await onDownloadCertificate(cert); }
     catch (err) { alert(err instanceof Error ? err.message : "Failed to download certificate."); }
+  };
+
+  const handleFileRename = (fileId: string, newName: string) => {
+    // Standalone mode: rename the uploaded file
+    if (isStandaloneMode && fileId === "standalone-file" && standaloneFile) {
+      const renamed = new File([standaloneFile], newName, {
+        type: standaloneFile.type,
+        lastModified: standaloneFile.lastModified,
+      });
+      setStandaloneFile(renamed);
+      return;
+    }
+
+    // Standard mode: rename a new unsaved file
+    const newFile = newFiles.find((nf) => nf.tempId === fileId);
+    if (newFile) {
+      setNewFiles((prev) =>
+        prev.map((nf) =>
+          nf.tempId === fileId ? { ...nf, label: newName } : nf
+        )
+      );
+      return;
+    }
+
+    // For existing linked certs or staged link, rename is deferred to save
+    // (the label flows through the parent's API path via TileView)
   };
 
   const handleFileUpload = (file: File) => {
@@ -626,6 +654,7 @@ export default function EducationModal({
           onSelectFile={(id) => setSelectedCertId(id)}
           onFileDelete={standaloneFile ? handleFileDelete : undefined}
           onFileDownload={standaloneFile ? handleFileDownload : undefined}
+          onFileRename={standaloneFile ? handleFileRename : undefined}
           onFileUpload={handleFileUpload}
           onLoadPreview={standaloneFile ? handleLoadPreview : undefined}
           onSave={handleSaveWithFullProcessing}
@@ -705,6 +734,7 @@ export default function EducationModal({
         onFileDelete={hasFiles ? handleFileDelete : undefined}
         onFileUnlink={hasFiles ? handleFileUnlink : undefined}
         onFileDownload={hasFiles ? handleFileDownload : undefined}
+        onFileRename={hasFiles ? handleFileRename : undefined}
         onFileUpload={handleFileUpload}
         onLoadPreview={handleLoadPreview}
         onSave={handleSaveWithFullProcessing}

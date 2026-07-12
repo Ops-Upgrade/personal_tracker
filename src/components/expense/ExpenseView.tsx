@@ -172,7 +172,7 @@ export default function ExpenseView() {
         // Delete old file from storage
         if (invoice_file) {
           try {
-            await deleteInvoice(invoice_file);
+            await deleteInvoice(userId, invoice_file);
           } catch {
             // Swallow — best-effort cleanup
           }
@@ -184,7 +184,7 @@ export default function ExpenseView() {
         // Delete old file first if exists
         if (invoice_file) {
           try {
-            await deleteInvoice(invoice_file);
+            await deleteInvoice(userId, invoice_file);
           } catch {
             // Swallow
           }
@@ -236,7 +236,7 @@ export default function ExpenseView() {
     // Cleanup storage file if exists
     if (invoiceFile) {
       try {
-        await deleteInvoice(invoiceFile);
+        await deleteInvoice(userId, invoiceFile);
       } catch {
         // Swallow — best-effort cleanup
       }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pencil, Trash2, Link } from "lucide-react";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
 import { getSession } from "@/api/auth";
@@ -26,9 +27,12 @@ import type {
 import type { Priority } from "@/types/taskmanager";
 import TileView, { DocumentTile } from "@/components/common/TileView";
 import BoxContainer from "@/components/common/BoxContainer";
+import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
 import EducationModal from "./EducationModal";
 import StoreCertificateModal from "./StoreCertificateModal";
+import BulkLinkModal from "./BulkLinkModal";
 import type { StoreCertificateSaveParams } from "./StoreCertificateModal";
+import { getUniqueFileName } from "./helpers";
 
 export default function CertificateStoreView() {
   const [userId, setUserId] = useState<string | null>(null);
@@ -56,6 +60,47 @@ export default function CertificateStoreView() {
   const editingCertificate = modals.edit;
   const isAddingCertificate = modals.add;
   const linkedEducation = modals.linkedEducation;
+
+  // --- Bulk selection state ---
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleSelectionChange = useCallback((id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const handleSelectAll = useCallback((checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(certificates.map((c) => c.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  }, [certificates]);
+
+  // Derived bulk action state
+  const bulkSelectedCerts = useMemo(
+    () => certificates.filter((c) => selectedIds.has(c.id)),
+    [certificates, selectedIds]
+  );
+  const allBulkUnlinked = useMemo(
+    () => bulkSelectedCerts.length > 0 && bulkSelectedCerts.every((c) => !c.education_id),
+    [bulkSelectedCerts]
+  );
+  const anyBulkLinked = useMemo(
+    () => bulkSelectedCerts.some((c) => !!c.education_id),
+    [bulkSelectedCerts]
+  );
+
+  // --- Bulk action modal state ---
+  const [showBulkRename, setShowBulkRename] = useState(false);
+  const [bulkRenameBase, setBulkRenameBase] = useState("");
+  const [showBulkDelete, setShowBulkDelete] = useState(false);
+  const [showBulkLink, setShowBulkLink] = useState(false);
+  const [bulkProcessing, setBulkProcessing] = useState(false);
 
   // --- Hash parsing ---
   const resolveHash = useCallback(
@@ -320,7 +365,7 @@ export default function CertificateStoreView() {
       }
       if (certificate.file_name) {
         try {
-          await deleteCertificateFile(certificate.file_name);
+          await deleteCertificateFile(userId, certificate.file_name);
         } catch {
           /* best-effort */
         }
@@ -391,7 +436,7 @@ export default function CertificateStoreView() {
           currentCertIds = currentCertIds.filter((id) => id !== certId);
           if (cert.file_name) {
             try {
-              await deleteCertificateFile(cert.file_name);
+              await deleteCertificateFile(userId, cert.file_name);
             } catch {
               /* best-effort */
             }
@@ -490,7 +535,7 @@ export default function CertificateStoreView() {
       for (const cert of linkedCerts) {
         if (cert.file_name) {
           try {
-            await deleteCertificateFile(cert.file_name);
+            await deleteCertificateFile(userId, cert.file_name);
           } catch {
             /* best-effort */
           }
@@ -586,7 +631,7 @@ export default function CertificateStoreView() {
 
     if (certificate.file_name) {
       try {
-        await deleteCertificateFile(certificate.file_name);
+        await deleteCertificateFile(userId, certificate.file_name);
       } catch {
         /* best-effort */
       }
@@ -719,6 +764,168 @@ export default function CertificateStoreView() {
   };
 
   // ============================================================
+  // Inline rename handler
+  // ============================================================
+
+  const handleRenameConfirmed = async (certId: string, newName: string) => {
+    if (!userId) return;
+    try {
+      const cert = certificates.find((c) => c.id === certId);
+      if (!cert) return;
+      await updateCertificate(userId, certId, {
+        ...cert,
+        label: newName,
+        updated_at: new Date().toISOString(),
+      } as CertificatePlaintext);
+      await loadData();
+    } catch (err) {
+      alert(
+        "Failed to rename certificate: " +
+          (err instanceof Error ? err.message : "Unknown error")
+      );
+    }
+  };
+
+  // ============================================================
+  // Bulk action handlers
+  // ============================================================
+
+  const executeBulkRename = async (baseName: string) => {
+    if (!userId || !baseName.trim()) return;
+    setBulkProcessing(true);
+    try {
+      const takenNames = new Set(certificates.map((c) => c.label || ""));
+      // Remove the selected certs' current names so they can keep their name
+      for (const cert of bulkSelectedCerts) {
+        if (cert.label) takenNames.delete(cert.label);
+      }
+
+      const updates = bulkSelectedCerts.map((cert) => {
+        const newName = getUniqueFileName(baseName.trim(), takenNames);
+        takenNames.add(newName); // Reserve this name for subsequent certs
+        return updateCertificate(userId, cert.id, {
+          ...cert,
+          label: newName,
+          updated_at: new Date().toISOString(),
+        } as CertificatePlaintext);
+      });
+
+      await Promise.all(updates);
+      await loadData();
+      setSelectedIds(new Set());
+    } catch (err) {
+      alert(
+        "Failed to bulk rename: " +
+          (err instanceof Error ? err.message : "Unknown error")
+      );
+    } finally {
+      setBulkProcessing(false);
+      setShowBulkRename(false);
+      setBulkRenameBase("");
+    }
+  };
+
+  const executeBulkDelete = async (cascade: boolean) => {
+    if (!userId) return;
+    setBulkProcessing(true);
+    try {
+      for (const cert of bulkSelectedCerts) {
+        if (cascade && cert.education_id) {
+          // Cascade: delete the associated education record
+          try {
+            await deleteEducation(cert.education_id);
+          } catch {
+            /* best-effort */
+          }
+        } else if (!cascade && cert.education_id) {
+          // Unlink: update the education to remove this cert from certificate_ids
+          const edu = educations.find((e) => e.id === cert.education_id);
+          if (edu) {
+            const newCertIds = edu.certificate_ids.filter(
+              (id) => id !== cert.id
+            );
+            const isStillCompleted =
+              newCertIds.length > 0 ? edu.is_completed : false;
+            await updateEducation(userId, edu.id, {
+              ...edu,
+              certificate_ids: newCertIds,
+              is_completed: isStillCompleted,
+              completed_at: isStillCompleted ? edu.completed_at : null,
+              updated_at: new Date().toISOString(),
+            } as EducationPlaintext);
+          }
+        }
+
+        // Delete the certificate file from R2
+        if (cert.file_name) {
+          try {
+            await deleteCertificateFile(userId, cert.file_name);
+          } catch {
+            /* best-effort */
+          }
+        }
+
+        // Delete the certificate DB row
+        await deleteCertificate(cert.id);
+      }
+
+      await loadData();
+      setSelectedIds(new Set());
+    } catch (err) {
+      alert(
+        "Failed to bulk delete: " +
+          (err instanceof Error ? err.message : "Unknown error")
+      );
+    } finally {
+      setBulkProcessing(false);
+      setShowBulkDelete(false);
+    }
+  };
+
+  const handleBulkLinkSave = async (educationId: string) => {
+    if (!userId || !educationId) return;
+    setBulkProcessing(true);
+    try {
+      const nowIso = new Date().toISOString();
+
+      // Update each certificate with the new education_id
+      const certUpdates = bulkSelectedCerts.map((cert) =>
+        updateCertificate(userId, cert.id, {
+          ...cert,
+          education_id: educationId,
+          updated_at: nowIso,
+        } as CertificatePlaintext)
+      );
+      await Promise.all(certUpdates);
+
+      // Update the target education's certificate_ids
+      const edu = educations.find((e) => e.id === educationId);
+      if (edu) {
+        const newCertIds = [
+          ...edu.certificate_ids,
+          ...bulkSelectedCerts.map((c) => c.id),
+        ];
+        await updateEducation(userId, educationId, {
+          ...edu,
+          certificate_ids: newCertIds,
+          updated_at: nowIso,
+        } as EducationPlaintext);
+      }
+
+      await loadData();
+      setSelectedIds(new Set());
+      setShowBulkLink(false);
+    } catch (err) {
+      alert(
+        "Failed to bulk link: " +
+          (err instanceof Error ? err.message : "Unknown error")
+      );
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
+  // ============================================================
   // Build document tiles
   // ============================================================
 
@@ -791,8 +998,128 @@ export default function CertificateStoreView() {
             setModals((prev) => ({ ...prev, add: true }));
           }}
           title=""
+          onRenameConfirmed={handleRenameConfirmed}
+          selectionEnabled
+          selectedIds={selectedIds}
+          onSelectionChange={handleSelectionChange}
+          onSelectAll={handleSelectAll}
+          bulkActions={
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+                {selectedIds.size} selected
+              </span>
+              <button
+                onClick={() => { setBulkRenameBase(""); setShowBulkRename(true); }}
+                className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
+              >
+                <Pencil className="h-4 w-4" />
+                Rename
+              </button>
+              <button
+                onClick={() => setShowBulkDelete(true)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+              <button
+                onClick={() => setShowBulkLink(true)}
+                disabled={!allBulkUnlinked}
+                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50 transition-colors"
+              >
+                <Link className="h-4 w-4" />
+                Link
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="ml-1 text-sm text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          }
         />
       </BoxContainer>
+
+      {/* Bulk Rename Modal */}
+      {showBulkRename && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+              Bulk Rename
+            </h3>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+              Enter a base name for {selectedIds.size} selected certificate{selectedIds.size !== 1 ? "s" : ""}. Numeric suffixes will be added automatically (e.g., &ldquo;Cert (1)&rdquo;, &ldquo;Cert (2)&rdquo;).
+            </p>
+            <input
+              type="text"
+              value={bulkRenameBase}
+              onChange={(e) => setBulkRenameBase(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && bulkRenameBase.trim()) {
+                  executeBulkRename(bulkRenameBase);
+                }
+              }}
+              placeholder="e.g., AWS Certification"
+              autoFocus
+              disabled={bulkProcessing}
+              className="mt-3 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowBulkRename(false); setBulkRenameBase(""); }}
+                disabled={bulkProcessing}
+                className="inline-flex items-center rounded-md bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => executeBulkRename(bulkRenameBase)}
+                disabled={!bulkRenameBase.trim() || bulkProcessing}
+                className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {bulkProcessing ? "Renaming..." : "Rename All"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation */}
+      {showBulkDelete && (
+        anyBulkLinked ? (
+          <ConfirmDialog
+            title="Bulk Delete"
+            description={`You are about to delete ${selectedIds.size} certificate${selectedIds.size !== 1 ? "s" : ""}. ${anyBulkLinked ? "Some are linked to education records." : ""}`}
+            confirmLabel={bulkProcessing ? "Deleting..." : "Delete"}
+            cancelLabel="Cancel"
+            showDeleteFilesCheckbox
+            deleteFilesLabel="Delete associated education record(s)"
+            onCancel={() => setShowBulkDelete(false)}
+            onConfirm={(deleteRecord) => executeBulkDelete(!!deleteRecord)}
+          />
+        ) : (
+          <ConfirmDialog
+            title="Bulk Delete"
+            description={`You are about to permanently delete ${selectedIds.size} certificate${selectedIds.size !== 1 ? "s" : ""}. This action cannot be undone.`}
+            confirmLabel={bulkProcessing ? "Deleting..." : "Delete"}
+            cancelLabel="Cancel"
+            onCancel={() => setShowBulkDelete(false)}
+            onConfirm={() => executeBulkDelete(false)}
+          />
+        )
+      )}
+
+      {/* Bulk Link Modal */}
+      {showBulkLink && userId && (
+        <BulkLinkModal
+          educations={educations}
+          selectedCount={selectedIds.size}
+          isProcessing={bulkProcessing}
+          onClose={() => setShowBulkLink(false)}
+          onSave={handleBulkLinkSave}
+        />
+      )}
 
       {/* Store Certificate Modal — Add mode */}
       {isAddingCertificate && userId && (

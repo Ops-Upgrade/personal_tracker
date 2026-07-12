@@ -60,7 +60,7 @@ export default function FileUploadZone({
       {showEncryptedNotice && (
         <p className="text-xs text-zinc-400 flex items-center gap-1">
           <ShieldExclamationIcon className="h-3 w-3" />
-          Files are encrypted before upload to Supabase Storage.
+          Files are encrypted before upload to secure cloud storage.
         </p>
       )}
     </div>

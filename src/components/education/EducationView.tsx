@@ -180,7 +180,7 @@ export default function EducationView() {
           currentCertIds = currentCertIds.filter(id => id !== certId);
           // Delete storage file
           if (cert.file_name) {
-            try { await deleteCertificateFile(cert.file_name); } catch { /* best-effort */ }
+            try { await deleteCertificateFile(userId, cert.file_name); } catch { /* best-effort */ }
           }
           // Delete DB row
           await deleteCertificate(certId);
@@ -269,7 +269,7 @@ export default function EducationView() {
       for (const cert of linkedCerts) {
         if (cert.file_name) {
           try {
-            await deleteCertificateFile(cert.file_name);
+            await deleteCertificateFile(userId, cert.file_name);
           } catch {
             // Best-effort storage cleanup — don't block deletion
           }
@@ -413,7 +413,7 @@ export default function EducationView() {
 
     // Delete storage file
     if (certificate.file_name) {
-      try { await deleteCertificateFile(certificate.file_name); } catch {}
+      try { await deleteCertificateFile(userId, certificate.file_name); } catch {}
     }
 
     // Delete DB row

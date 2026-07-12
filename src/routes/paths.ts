@@ -9,7 +9,7 @@ export const ROUTES = {
   TASK_MANAGER: "/taskmanager",
   TASK_MANAGER_COMPLETED: "/taskmanager/completed",
   TASK_MANAGER_NOTES: "/taskmanager/notes",
-  CHANGE_PASSWORD: "/settings/change-password",
+  PROFILE: "/settings/profile",
   EXPENSE: "/expense",
   EXPENSE_ALL: "/expense/all",
   EDUCATION: "/education",

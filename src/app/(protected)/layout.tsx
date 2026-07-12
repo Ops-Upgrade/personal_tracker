@@ -29,9 +29,34 @@ export default async function ProtectedLayout({
     redirect(AUTH_ROUTE);
   }
 
+  // Extract user metadata for Navbar display
+  const meta = user.user_metadata as Record<string, unknown> | undefined;
+  const userName =
+    typeof meta?.full_name === "string" && meta.full_name
+      ? (meta.full_name as string)
+      : null;
+
+  let userAvatarUrl: string | null = null;
+  const avatarTs =
+    typeof meta?.avatar_updated_at === "string"
+      ? (meta.avatar_updated_at as string)
+      : null;
+  if (avatarTs) {
+    const { data } = supabase.storage
+      .from("avatars")
+      .getPublicUrl(`${user.id}/avatar.jpg`);
+    if (data?.publicUrl) {
+      userAvatarUrl = `${data.publicUrl}?t=${encodeURIComponent(avatarTs)}`;
+    }
+  }
+
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
-      <Navbar userEmail={user.email ?? "User"} />
+      <Navbar
+        userEmail={user.email ?? "User"}
+        userName={userName}
+        userAvatarUrl={userAvatarUrl}
+      />
       <main className="px-4 py-8 sm:px-6 lg:px-8">
         <CryptoProvider userId={user.id}>
           {children}

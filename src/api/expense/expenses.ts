@@ -82,7 +82,7 @@ export async function updateExpense(
  * Permanently delete an expense by ID.
  *
  * NOTE: Callers are responsible for cleaning up any associated invoice file
- * in Supabase Storage (see deleteInvoice). This function only removes the
+ * in R2 storage (see deleteInvoice). This function only removes the
  * database row — storage cleanup happens at the UI layer in ExpenseView.
  */
 export async function deleteExpense(expenseId: string): Promise<void> {

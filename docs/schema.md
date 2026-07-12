@@ -317,99 +317,75 @@ All encrypted feature tables follow the same shape: `id`, `user_id`, `iv`, `data
 
 ---
 
-## Storage Buckets
+## Cloudflare R2 Storage
 
-### `expenses` bucket
+All file storage uses a single Cloudflare R2 bucket (`personal-tracker`) with folder prefixes per feature. Files are client-side encrypted with the user's DEK before upload — R2 never sees plaintext.
 
-Private storage bucket for encrypted invoice file attachments. Files are client-side encrypted with the user's DEK before upload — Supabase never sees plaintext.
+Access control is enforced by Next.js API routes (`src/app/api/storage/`) that validate the user's Supabase session before granting presigned URLs or performing server-side deletes. There is no RLS — the API routes are the gatekeepers.
+
+### R2 Bucket: `personal-tracker`
 
 | Setting | Value |
 |---------|-------|
-| **Bucket ID** | `expenses` |
-| **Public** | No (RLS enforced) |
-| **File path convention** | `invoice/<uuid>.enc` |
-| **Content-Type on upload** | `application/octet-stream` |
+| **Bucket name** | `personal-tracker` (configurable via `R2_BUCKET_NAME` env var) |
+| **Region** | `auto` (Cloudflare R2 default) |
+| **Endpoint** | `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` |
+| **Auth** | S3-compatible API via `@aws-sdk/client-s3` with R2 API token |
 | **Max file size** | 45 MB (client-side enforced) |
+| **Content-Type** | `application/octet-stream` |
 
-#### DDL (source of truth — run in Supabase Dashboard SQL Editor)
+### Folder Structure
 
-```sql
--- 1. Create private storage bucket
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('expenses', 'expenses', false);
-
--- 2. RLS: Authenticated users can upload to their own folder
-CREATE POLICY "Users upload their own invoices"
-ON storage.objects
-FOR INSERT
-TO authenticated
-WITH CHECK (
-    bucket_id = 'expenses'
-    AND auth.uid() IS NOT NULL
-);
-
--- 3. RLS: Users can only read/download files they own
-CREATE POLICY "Users read their own invoices"
-ON storage.objects
-FOR SELECT
-TO authenticated
-USING (
-    bucket_id = 'expenses'
-    AND owner_id = auth.uid()::text
-);
-
--- 4. RLS: Users can only delete files they own
-CREATE POLICY "Users delete their own invoices"
-ON storage.objects
-FOR DELETE
-TO authenticated
-USING (
-    bucket_id = 'expenses'
-    AND owner_id = auth.uid()::text
-);
-
--- 5. RLS: Users can update (overwrite) files they own
-CREATE POLICY "Users update their own invoices"
-ON storage.objects
-FOR UPDATE
-TO authenticated
-USING (
-    bucket_id = 'expenses'
-    AND owner_id = auth.uid()::text
-);
+```
+personal-tracker/
+├── expenses/
+│   └── {userId}/
+│       └── {uuid}.enc         # Encrypted invoice files
+└── certificates/
+    └── {userId}/
+        └── {uuid}.enc         # Encrypted certificate files
 ```
 
-> **Note:** Supabase auto-sets `owner_id` to `auth.uid()` on INSERT into `storage.objects`.
+User isolation is guaranteed by path: every object key includes the authenticated `userId` in the second path segment, validated server-side before any operation.
 
----
+### API Routes (Access Control)
 
-### `certificates` bucket
+| Route | Method | Purpose | Auth Check |
+|-------|--------|---------|------------|
+| `/api/storage/upload` | POST | Returns presigned PUT URL (5 min TTL) | Session → `getClaims()` |
+| `/api/storage/download` | POST | Returns presigned GET URL (5 min TTL) | Session + key ownership |
+| `/api/storage/delete` | POST | Server-side `DeleteObjectCommand` | Session + key ownership |
 
-Private storage bucket for encrypted certificate file attachments (education feature). Files are client-side encrypted with the user's DEK before upload.
+All routes validate:
+1. Valid Supabase session (JWT signature verified via `getClaims()`)
+2. Key ownership: the second path segment must match `userId`
+3. Folder whitelist: only `expenses` and `certificates` folders are allowed for upload
+4. Filename format: `UUID.enc` pattern enforced for upload
 
-| Setting | Value |
-|---------|-------|
-| **Bucket ID** | `certificates` |
-| **Public** | No (RLS enforced) |
-| **File path convention** | `<uuid>.enc` |
-| **Content-Type on upload** | `application/octet-stream` |
-| **Max file size** | 45 MB (client-side enforced) |
+### Environment Variables
 
-#### RLS policies
+| Variable | Scope | Purpose |
+|----------|-------|---------|
+| `R2_ACCOUNT_ID` | Server-only | Cloudflare account ID |
+| `R2_ACCESS_KEY_ID` | Server-only | R2 API token access key |
+| `R2_SECRET_ACCESS_KEY` | Server-only | R2 API token secret key |
+| `R2_BUCKET_NAME` | Server-only | Bucket name (defaults to `personal-tracker`) |
 
-Users can insert, select, update, and delete files where `bucket_id = 'certificates'` and they are the owner (Supabase sets `owner_id` automatically on INSERT).
+These are **server-only** (no `NEXT_PUBLIC_` prefix) — the browser never sees R2 credentials. The browser uploads/downloads via presigned URLs, which are temporary and scoped to a single object.
 
----
+### Encrypted Blob Fields (Invoice + Certificate Storage)
 
-### Expense Blob Fields (Invoice Storage)
-
-The `ExpensePlaintext` encrypted blob includes three additional fields for invoice file storage:
+Both `ExpensePlaintext` and `CertificatePlaintext` encrypted blobs include file metadata fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `invoice_file` | `string` | Filename in bucket (e.g. `"<uuid>.enc"`), empty if no file attached |
-| `invoice_iv` | `string` | Base64 IV used to encrypt the file, empty if no file |
-| `invoice_mime` | `string` | Original MIME type (e.g. `"application/pdf"`), empty if no file |
+| `*_file` / `file_name` | `string` | Filename in R2 (e.g. `"<uuid>.enc"`), empty if no file attached |
+| `*_iv` / `file_iv` | `string` | Base64 IV used to encrypt the file, empty if no file |
+| `*_mime` / `file_mime` | `string` | Original MIME type (e.g. `"application/pdf"`), empty if no file |
+
+### CSP Requirement
+
+The `connect-src` CSP directive must allow `https://*.r2.cloudflarestorage.com` so the browser can `fetch()` directly to R2 presigned URLs.
 
 ---
 

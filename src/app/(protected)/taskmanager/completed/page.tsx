@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
-import { fetchTasks, updateTask } from "@/api/taskmanager";
+import { deleteTask, fetchTasks, updateTask } from "@/api/taskmanager";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { ROUTES } from "@/routes/paths";
 import type { Task, TaskView } from "@/types/taskmanager";
@@ -23,6 +22,7 @@ import {
   getPriorityColor,
   trunc,
 } from "@/components/taskmanager/helpers";
+import TaskModal from "@/components/taskmanager/TaskModal";
 import { MONTH_NAMES } from "@/lib/constants";
 
 const VIEW_OPTIONS: readonly ViewToggleOption<TaskView>[] = [
@@ -31,7 +31,6 @@ const VIEW_OPTIONS: readonly ViewToggleOption<TaskView>[] = [
 ];
 
 export default function CompletedTasksPage() {
-  const router = useRouter();
   const [tasks, setTasks] = useState<Task[]>([]);
 
   const loadData = useCallback(async (uid: string) => {
@@ -43,6 +42,7 @@ export default function CompletedTasksPage() {
     useAuthBootstrap({ loadData });
 
   const [view, setView] = useLocalStorage<TaskView>("taskManagerCompletedView", "months");
+  const [taskModalTarget, setTaskModalTarget] = useState<Task | null>(null);
 
   const completedTasks = useMemo(
     () => tasks.filter((t) => t.is_completed),
@@ -52,9 +52,43 @@ export default function CompletedTasksPage() {
   const priorityGroups = byPriority(completedTasks);
   const monthGroups = completedByMonths(completedTasks, nowYear);
 
-  const handleEditTask = (taskId: string) => {
-    router.push(`${ROUTES.TASK_MANAGER}#edit-task-${taskId}`);
+  const handleEditTask = (task: Task) => {
+    setTaskModalTarget(task);
   };
+
+  const closeTaskModal = () => setTaskModalTarget(null);
+
+  async function handleTaskSave(
+    draft: {
+      name: string;
+      priority: Task["priority"];
+      due_date: string | null;
+      mode: Task["mode"];
+      description: string;
+      is_completed: boolean;
+    },
+    existingTask: Task | null
+  ) {
+    if (!userId || !existingTask) return;
+    const nowIso = new Date().toISOString();
+    const completedAt = draft.is_completed
+      ? existingTask.completed_at ?? nowIso
+      : null;
+
+    await updateTask(userId, existingTask.id, {
+      ...draft,
+      completed_at: completedAt,
+      updated_at: nowIso,
+    });
+
+    await refreshData(userId);
+  }
+
+  async function handleTaskDelete(taskId: string) {
+    if (!userId) return;
+    await deleteTask(taskId);
+    await refreshData(userId);
+  }
 
   const handleReopen = async (task: Task) => {
     if (!userId) return;
@@ -116,11 +150,14 @@ export default function CompletedTasksPage() {
                         >
                           <button
                             type="button"
-                            onClick={() => handleEditTask(task.id)}
-                            className="col-span-6 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+                            onClick={() => handleEditTask(task)}
+                            className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
                           >
-                            {trunc(task.name, 52)}
+                            {trunc(task.name, 42)}
                           </button>
+                          <span className="col-span-2 text-xs capitalize text-zinc-500 dark:text-zinc-400">
+                            {task.mode}
+                          </span>
                           <span className="col-span-3 text-zinc-600 dark:text-zinc-300">
                             {formatShortDate(task.completed_at)}
                           </span>
@@ -162,15 +199,18 @@ export default function CompletedTasksPage() {
                           >
                             <button
                               type="button"
-                              onClick={() => handleEditTask(task.id)}
-                              className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+                              onClick={() => handleEditTask(task)}
+                              className="col-span-3 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
                             >
-                              {trunc(task.name, 42)}
+                              {trunc(task.name, 32)}
                             </button>
                             <span className="col-span-2">
                               <PriorityBadge priority={task.priority} />
                             </span>
-                            <span className="col-span-3 text-zinc-600 dark:text-zinc-300">
+                            <span className="col-span-2 text-xs capitalize text-zinc-500 dark:text-zinc-400">
+                              {task.mode}
+                            </span>
+                            <span className="col-span-2 text-zinc-600 dark:text-zinc-300">
                               {formatShortDate(task.completed_at)}
                             </span>
                             <div className="col-span-3 flex justify-end">
@@ -191,6 +231,15 @@ export default function CompletedTasksPage() {
               })}
           </div>
         </BoxContainer>
+      )}
+
+      {taskModalTarget && (
+        <TaskModal
+          task={taskModalTarget}
+          onClose={closeTaskModal}
+          onSave={handleTaskSave}
+          onDelete={handleTaskDelete}
+        />
       )}
     </PageShell>
   );

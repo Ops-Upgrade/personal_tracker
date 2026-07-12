@@ -1,18 +1,17 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
-import { fetchNotes } from "@/api/taskmanager";
+import { deleteNote, fetchNotes, updateNote } from "@/api/taskmanager";
 import { ROUTES } from "@/routes/paths";
 import type { Note } from "@/types/taskmanager";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import { sortedNotes, trunc } from "@/components/taskmanager/helpers";
+import NoteModal from "@/components/taskmanager/NoteModal";
 
 export default function NotesPage() {
-  const router = useRouter();
   const [notes, setNotes] = useState<Note[]>([]);
 
   const loadData = useCallback(async (uid: string) => {
@@ -24,10 +23,29 @@ export default function NotesPage() {
     useAuthBootstrap({ loadData });
 
   const sorted = useMemo(() => sortedNotes(notes), [notes]);
+  const [noteModalTarget, setNoteModalTarget] = useState<Note | null>(null);
 
-  const handleEditNote = (noteId: string) => {
-    router.push(`${ROUTES.TASK_MANAGER}#edit-note-${noteId}`);
+  const handleEditNote = (note: Note) => {
+    setNoteModalTarget(note);
   };
+
+  const closeNoteModal = () => setNoteModalTarget(null);
+
+  async function handleNoteSave(content: string, existingNote: Note | null) {
+    if (!userId || !existingNote) return;
+    const payload = {
+      content,
+      updated_at: new Date().toISOString(),
+    };
+    await updateNote(userId, existingNote.id, payload);
+    await refreshData(userId);
+  }
+
+  async function handleNoteDelete(noteId: string) {
+    if (!userId) return;
+    await deleteNote(noteId);
+    await refreshData(userId);
+  }
 
   return (
     <PageShell
@@ -50,7 +68,7 @@ export default function NotesPage() {
               <button
                 key={note.id}
                 type="button"
-                onClick={() => handleEditNote(note.id)}
+                onClick={() => handleEditNote(note)}
                 className="w-full cursor-pointer rounded-md border border-zinc-200 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
                 {trunc(note.content, 280)}
@@ -58,6 +76,15 @@ export default function NotesPage() {
             ))}
           </div>
         </BoxContainer>
+      )}
+
+      {noteModalTarget && (
+        <NoteModal
+          note={noteModalTarget}
+          onClose={closeNoteModal}
+          onSave={handleNoteSave}
+          onDelete={handleNoteDelete}
+        />
       )}
     </PageShell>
   );

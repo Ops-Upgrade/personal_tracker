@@ -13,13 +13,15 @@ import { Menu, X } from "lucide-react";
 
 interface NavbarProps {
   userEmail: string;
+  userName?: string | null;
+  userAvatarUrl?: string | null;
 }
 
 /**
  * Top navigation bar for protected pages.
- * Displays app name, user email, current IST date, and logout button.
+ * Displays app logo, user avatar + name (or email fallback), current IST date.
  */
-export default function Navbar({ userEmail }: NavbarProps) {
+export default function Navbar({ userEmail, userName, userAvatarUrl }: NavbarProps) {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
   const [dateDisplay, setDateDisplay] = useState<string>("");
@@ -75,15 +77,33 @@ export default function Navbar({ userEmail }: NavbarProps) {
 
         {/* Right: User Info + Actions */}
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2 sm:gap-4">
-          <div className="flex min-w-0 flex-col text-right">
-            <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              {userEmail}
-            </span>
-            {dateDisplay && (
-              <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                {dateDisplay}
-              </span>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Avatar */}
+            {userAvatarUrl ? (
+              <Image
+                src={userAvatarUrl}
+                alt={userName ?? userEmail}
+                width={32}
+                height={32}
+                className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-zinc-200 dark:ring-zinc-700"
+              />
+            ) : (
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-300 text-xs font-semibold text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+                {(userName ?? userEmail).charAt(0).toUpperCase()}
+              </div>
             )}
+
+            {/* Name + Date */}
+            <div className="flex min-w-0 flex-col text-right">
+              <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                {userName ?? userEmail}
+              </span>
+              {dateDisplay && (
+                <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                  {dateDisplay}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Hamburger Toggle (All Screens) */}
@@ -118,7 +138,7 @@ export default function Navbar({ userEmail }: NavbarProps) {
           </div>
           <div className="my-1 h-px bg-zinc-200 dark:bg-zinc-800" />
           <Link
-            href={ROUTES.CHANGE_PASSWORD}
+            href={ROUTES.PROFILE}
             className="w-full rounded-md px-3 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
             onClick={() => setIsMobileMenuOpen(false)}
           >
