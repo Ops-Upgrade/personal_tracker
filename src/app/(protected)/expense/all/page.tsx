@@ -1,11 +1,18 @@
 "use client";
 
 import { Suspense, useCallback, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
-import { fetchExpenses } from "@/api/expense";
+import {
+  createExpense,
+  deleteExpense,
+  fetchExpenses,
+  updateExpense,
+  uploadInvoice,
+  deleteInvoice,
+} from "@/api/expense";
 import { ROUTES } from "@/routes/paths";
-import type { Expense, ExpenseViewMode } from "@/types/expense";
+import type { Expense, ExpensePlaintext, ExpenseViewMode } from "@/types/expense";
 import { MONTHS } from "@/types/expense";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import ViewToggle from "@/components/common/ViewToggle";
@@ -16,6 +23,8 @@ import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContain
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import YearDropdown from "@/components/expense/YearDropdown";
+import ExpenseModal from "@/components/expense/ExpenseModal";
+import ExpenseTable from "@/components/expense/ExpenseTable";
 
 const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
   { value: "single", label: <RectangleVertical className="h-4 w-4" /> },
@@ -23,7 +32,6 @@ const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
 ];
 
 function AllExpensesContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
@@ -44,6 +52,8 @@ function AllExpensesContent() {
 
   const [viewMode, setViewMode] = useLocalStorage<ExpenseViewMode>("expenseViewMode", "single");
   const [selectedYear, setSelectedYear] = useState(yearFilter ?? new Date().getFullYear());
+  const [expenseModalTarget, setExpenseModalTarget] = useState<Expense | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -74,19 +84,100 @@ function AllExpensesContent() {
     }, 0);
   }, [expensesByMonth]);
 
-  const handleEditExpense = (expenseId: string) => {
-    router.push(`${ROUTES.EXPENSE}#edit-expense-${expenseId}`);
+  const handleEditExpense = (expense: Expense) => {
+    setExpenseModalTarget(expense);
   };
 
+  const closeExpenseModal = () => setExpenseModalTarget(null);
+
+  async function handleExpenseSave(
+    draft: {
+      item: string;
+      seller: string;
+      cost: number;
+      date: string;
+      reason: string;
+      invoice: string;
+    },
+    existingExpense: Expense | null,
+    fileAction: { action: "upload" | "remove" | "keep"; file?: File }
+  ) {
+    if (!userId) throw new Error("No active session.");
+    setIsSaving(true);
+
+    try {
+      let invoice_file = existingExpense?.invoice_file ?? "";
+      let invoice_iv = existingExpense?.invoice_iv ?? "";
+      let invoice_mime = existingExpense?.invoice_mime ?? "";
+
+      if (fileAction.action === "remove") {
+        if (invoice_file) {
+          try { await deleteInvoice(userId, invoice_file); } catch { /* best-effort */ }
+        }
+        invoice_file = "";
+        invoice_iv = "";
+        invoice_mime = "";
+      } else if (fileAction.action === "upload" && fileAction.file) {
+        if (invoice_file) {
+          try { await deleteInvoice(userId, invoice_file); } catch { /* best-effort */ }
+        }
+        const result = await uploadInvoice(userId, fileAction.file);
+        invoice_file = result.fileName;
+        invoice_iv = result.iv;
+        invoice_mime = result.mimeType;
+      }
+
+      const nowIso = new Date().toISOString();
+
+      const payload: ExpensePlaintext = {
+        item: draft.item,
+        seller: draft.seller,
+        cost: draft.cost,
+        date: draft.date,
+        reason: draft.reason,
+        invoice: draft.invoice,
+        invoice_file,
+        invoice_iv,
+        invoice_mime,
+        updated_at: nowIso,
+      };
+
+      if (existingExpense) {
+        await updateExpense(userId, existingExpense.id, payload);
+      } else {
+        await createExpense(userId, payload);
+      }
+
+      await refreshData(userId);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleExpenseDelete(expenseId: string) {
+    if (!userId) throw new Error("No active session.");
+    const expense = expenses.find((e) => e.id === expenseId);
+    const invoiceFile = expense?.invoice_file;
+
+    await deleteExpense(expenseId);
+
+    if (invoiceFile) {
+      try { await deleteInvoice(userId, invoiceFile); } catch { /* best-effort */ }
+    }
+
+    await refreshData(userId);
+  }
+
   return (
-    <PageShell
-      backHref={ROUTES.EXPENSE}
-      backLabel="← Back to Expenses"
-      title={isFiltered ? `${MONTHS[monthIndex!]} ${yearFilter}` : "All Expenses"}
-      description={isFiltered ? `Expenses for ${MONTHS[monthIndex!]} ${yearFilter}.` : "Browse all your expenses by year and month."}
-      error={error}
-      onRetry={() => userId && refreshData(userId)}
-    >
+    <>
+      <PageShell
+        backHref={ROUTES.EXPENSE}
+        backLabel="← Back to Expenses"
+        title={isFiltered ? `${MONTHS[monthIndex!]} ${yearFilter}` : "All Expenses"}
+        description={isFiltered ? `Expenses for ${MONTHS[monthIndex!]} ${yearFilter}.` : "Browse all your expenses by year and month."}
+        error={error}
+        onRetry={() => userId && refreshData(userId)}
+      >
       {!isLoading && (
         <p className="-mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
           Total for {selectedYear}:{" "}
@@ -128,37 +219,10 @@ function AllExpensesContent() {
                 accent={monthExpenses.length > 0}
                 className="text-sm"
               >
-                {monthExpenses.length === 0 ? (
-                  <div className="text-sm text-zinc-500 dark:text-zinc-400">No expenses</div>
-                ) : (
-                  <div className="space-y-1">
-                    {monthExpenses.map((expense) => (
-                      <div
-                        key={expense.id}
-                        className="flex items-center justify-between rounded-md border border-zinc-200 px-3 py-1.5 dark:border-zinc-700"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleEditExpense(expense.id)}
-                          className="flex-1 cursor-pointer text-left text-sm"
-                        >
-                          <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                            {expense.item}
-                          </span>
-                          {expense.seller && (
-                            <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
-                              {expense.seller}
-                            </span>
-                          )}
-                        </button>
-                        <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                          ₹ {expense.cost.toLocaleString("en-IN")}
-                        </span>
-                      </div>
-                    ))}
-                    <div className="text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 pr-1">
-                      Total: ₹ {monthExpenses.reduce((s, e) => s + e.cost, 0).toLocaleString("en-IN")}
-                    </div>
+                <ExpenseTable expenses={monthExpenses} onSelectExpense={handleEditExpense} />
+                {monthExpenses.length > 0 && (
+                  <div className="text-right text-xs font-medium text-zinc-500 dark:text-zinc-400 pr-1 mt-1">
+                    Total: ₹ {monthExpenses.reduce((s, e) => s + e.cost, 0).toLocaleString("en-IN")}
                   </div>
                 )}
               </MonthTile>
@@ -167,6 +231,18 @@ function AllExpensesContent() {
         </BoxContainer>
       )}
     </PageShell>
+
+      {expenseModalTarget && (
+        <ExpenseModal
+          expense={expenseModalTarget}
+          userId={userId ?? ""}
+          isSaving={isSaving}
+          onClose={closeExpenseModal}
+          onSave={handleExpenseSave}
+          onDelete={handleExpenseDelete}
+        />
+      )}
+    </>
   );
 }
 
