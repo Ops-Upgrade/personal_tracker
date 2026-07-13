@@ -1,96 +1,84 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { Education } from "@/types/education";
-import { trunc } from "./helpers";
+import type { StoreParentRecord } from "./StoreDocumentModal";
 
 interface BulkLinkModalProps {
-  educations: Education[];
+  parentRecords: StoreParentRecord[];
   selectedCount: number;
   isProcessing?: boolean;
   onClose: () => void;
-  onSave: (educationId: string) => Promise<void>;
+  onSave: (parentId: string) => Promise<void>;
 }
 
 /**
- * Modal for bulk-linking unlinked certificates to a single education record.
- *
- * Reusable for any future flow requiring a user to "Move to" or "Link to"
- * a specific education record en masse.
+ * Domain-agnostic modal for bulk-linking unlinked documents to a single parent record.
  */
 export default function BulkLinkModal({
-  educations,
+  parentRecords,
   selectedCount,
   isProcessing = false,
   onClose,
   onSave,
 }: BulkLinkModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedEduId, setSelectedEduId] = useState("");
+  const [selectedParentId, setSelectedParentId] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const filteredEducations = useMemo(() => {
-    if (!searchQuery.trim()) return educations;
+  const filteredParents = useMemo(() => {
+    if (!searchQuery.trim()) return parentRecords;
     const q = searchQuery.toLowerCase();
-    return educations.filter(
-      (e) =>
-        (e.name || "").toLowerCase().includes(q) ||
-        (e.provider || "").toLowerCase().includes(q)
-    );
-  }, [educations, searchQuery]);
+    return parentRecords.filter((r) => r.name.toLowerCase().includes(q));
+  }, [parentRecords, searchQuery]);
 
-  const selectedEdu = selectedEduId
-    ? educations.find((e) => e.id === selectedEduId)
+  const selectedParent = selectedParentId
+    ? parentRecords.find((r) => r.id === selectedParentId)
     : null;
-  const displayValue = selectedEduId && selectedEdu
-    ? trunc(selectedEdu.name, 55)
-    : searchQuery;
+  const displayValue =
+    selectedParentId && selectedParent
+      ? selectedParent.name.length > 55
+        ? selectedParent.name.slice(0, 55) + "…"
+        : selectedParent.name
+      : searchQuery;
 
   const handleSave = async () => {
-    if (!selectedEduId || isProcessing) return;
-    await onSave(selectedEduId);
+    if (!selectedParentId || isProcessing) return;
+    await onSave(selectedParentId);
   };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/60 p-4 backdrop-blur-sm">
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
-        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-          Bulk Link
-        </h3>
+        <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Bulk Link</h3>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-          Link {selectedCount} unlinked certificate{selectedCount !== 1 ? "s" : ""} to a single education record.
+          Link {selectedCount} unlinked document{selectedCount !== 1 ? "s" : ""} to a single record.
         </p>
 
-        {/* Searchable education dropdown */}
+        {/* Searchable parent record dropdown */}
         <div className="relative mt-3">
           <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-            Target education record
+            Target record
           </span>
           <div className="relative flex items-center">
             <input
               type="text"
               value={displayValue}
               onChange={(e) => {
-                if (selectedEduId) setSelectedEduId("");
+                if (selectedParentId) setSelectedParentId("");
                 setSearchQuery(e.target.value);
                 if (!dropdownOpen) setDropdownOpen(true);
               }}
-              onFocus={() => {
-                if (!dropdownOpen) setDropdownOpen(true);
-              }}
+              onFocus={() => { if (!dropdownOpen) setDropdownOpen(true); }}
               onBlur={() => setTimeout(() => setDropdownOpen(false), 150)}
-              placeholder="Search education..."
+              placeholder="Search records..."
               disabled={isProcessing}
               className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 pr-16 text-xs outline-none focus:border-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
             />
             <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-              {selectedEduId && (
+              {selectedParentId && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedEduId("");
-                    setSearchQuery("");
-                  }}
+                  onClick={() => { setSelectedParentId(""); setSearchQuery(""); }}
                   className="px-1 py-0.5 text-xs font-medium text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded"
                   title="Clear selection"
                 >
@@ -104,11 +92,7 @@ export default function BulkLinkModal({
                 disabled={isProcessing}
                 className="p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
               >
-                <svg
-                  className="h-3.5 w-3.5 shrink-0"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
+                <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
                   <path
                     fillRule="evenodd"
                     d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
@@ -122,30 +106,27 @@ export default function BulkLinkModal({
           {/* Dropdown popup */}
           {dropdownOpen && (
             <div className="absolute z-20 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-              {filteredEducations.length > 0 ? (
+              {filteredParents.length > 0 ? (
                 <div className="max-h-36 overflow-y-auto">
-                  {filteredEducations.map((edu) => (
+                  {filteredParents.map((parent) => (
                     <button
-                      key={edu.id}
+                      key={parent.id}
                       type="button"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
-                        setSelectedEduId(edu.id);
+                        setSelectedParentId(parent.id);
                         setSearchQuery("");
                         setDropdownOpen(false);
                       }}
                       className="w-full px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-zinc-300 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400"
                     >
-                      {trunc(edu.name, 55)}
-                      {edu.is_completed ? " ✓" : ""}
+                      {parent.name.length > 55 ? parent.name.slice(0, 55) + "…" : parent.name}
                     </button>
                   ))}
                 </div>
               ) : (
                 <div className="px-3 py-2 text-xs text-zinc-400">
-                  {searchQuery
-                    ? "No matching educations"
-                    : "No educations available"}
+                  {searchQuery ? "No matching records" : "No records available"}
                 </div>
               )}
             </div>
@@ -162,7 +143,7 @@ export default function BulkLinkModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={!selectedEduId || isProcessing}
+            disabled={!selectedParentId || isProcessing}
             className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isProcessing ? "Linking..." : "Link All"}

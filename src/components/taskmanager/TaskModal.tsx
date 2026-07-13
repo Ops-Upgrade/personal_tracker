@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Priority, Task, TaskMode } from "@/types/taskmanager";
 import ConfirmDialog from "./ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
-import { InputField, SelectField, TextareaField, CheckboxField } from "@/components/common/FormField";
+import { InputField, SelectField, CheckboxField } from "@/components/common/FormField";
+import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 
 interface TaskDraft {
@@ -146,7 +147,16 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
             />
           </div>
 
-          <TextareaField label="Task Description" value={description} onChange={setDescription} rows={4} />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              Task Description
+            </label>
+            <RichTextEditor
+              value={description}
+              onChange={setDescription}
+              minHeight="8rem"
+            />
+          </div>
 
           <CheckboxField label="Mark complete" checked={isCompleted} onChange={setIsCompleted} />
 

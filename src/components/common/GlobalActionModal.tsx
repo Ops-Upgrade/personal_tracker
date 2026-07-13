@@ -14,7 +14,7 @@ import {
   ArrowPathIcon,
   DocumentIcon,
 } from "@/components/common/Icons";
-import { Pencil } from "lucide-react";
+import { Eye, Pencil } from "lucide-react";
 
 // --- Types ---
 
@@ -101,6 +101,7 @@ export default function GlobalActionModal({
 }: GlobalActionModalProps) {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [fileDropdownOpen, setFileDropdownOpen] = useState(false);
+  const [previewTrigger, setPreviewTrigger] = useState(0);
 
   // Inline rename state
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
@@ -256,7 +257,7 @@ export default function GlobalActionModal({
             {/* Right: Files panel                                            */}
             {/* ============================================================ */}
             {showRightPanel && (
-              <div className="shrink-0 border-t border-zinc-200 sm:w-[420px] sm:border-l sm:border-t-0 dark:border-zinc-800 flex flex-col min-h-0">
+              <div className="sm:shrink-0 border-t border-zinc-200 sm:w-[420px] sm:border-l sm:border-t-0 dark:border-zinc-800 flex flex-col min-h-0 flex-1 min-w-0">
                 {/* ---- Nav bar with explicit action buttons (Task 1.6) ---- */}
                 {hasFiles && selectedFile && (
                   <div className="shrink-0 flex items-center gap-1 px-3 py-2 border-b border-zinc-200 dark:border-zinc-800">
@@ -375,6 +376,16 @@ export default function GlobalActionModal({
                           <Pencil className="h-4 w-4" />
                         </button>
                       )}
+                      {onLoadPreview && !selectedFile.file && (
+                        <button
+                          type="button"
+                          onClick={() => setPreviewTrigger((prev) => prev + 1)}
+                          className="p-1 rounded text-zinc-400 hover:text-sky-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:text-sky-400 dark:hover:bg-zinc-800 transition-colors"
+                          title="Preview"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                      )}
                       {onFileUnlink && (
                         <button
                           type="button"
@@ -490,6 +501,20 @@ export default function GlobalActionModal({
                             To delete
                           </span>
                         )}
+                        {/* Preview button — select file and trigger preview load */}
+                        {onLoadPreview && !f.file && f.iv && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectFile?.(f.id);
+                              setPreviewTrigger((prev) => prev + 1);
+                            }}
+                            className="p-1 rounded text-zinc-400 hover:text-sky-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:text-sky-400 dark:hover:bg-zinc-800 transition-colors shrink-0"
+                            title="Preview"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                         {/* Rename button */}
                         {onFileRename && renamingFileId !== f.id && (
                           <button
@@ -532,6 +557,7 @@ export default function GlobalActionModal({
                           ? () => onLoadPreview(selectedFile.id)
                           : undefined
                       }
+                      loadPreviewTrigger={previewTrigger}
                     />
                   </div>
                 )}

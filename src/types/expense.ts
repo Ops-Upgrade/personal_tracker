@@ -26,9 +26,7 @@ export interface ExpensePlaintext {
    date: string; // ISO 8601 date (YYYY-MM-DD) — determines month/year grouping
    reason: string;
    invoice: string; // Legacy: free-text reference (may be empty when file is used)
-   invoice_file: string; // Filename in storage bucket (e.g. "<uuid>.enc"), empty if no file
-   invoice_iv: string; // Base64 IV used to encrypt the file, empty if no file
-   invoice_mime: string; // Original MIME type (e.g. "application/pdf"), empty if no file
+   document_ids: string[]; // linked Document row IDs (global document store)
    updated_at: string;
 }
 

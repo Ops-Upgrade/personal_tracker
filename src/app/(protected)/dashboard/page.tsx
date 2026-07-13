@@ -130,6 +130,40 @@ export default async function DashboardPage() {
             </span>
           </div>
         </Link>
+
+        {/* Medical Records Card */}
+        <Link
+          href={ROUTES.MEDICAL}
+          className="rounded-xl border border-red-200 bg-white p-6 shadow-sm transition hover:border-red-300 hover:shadow-md dark:border-red-900/60 dark:bg-zinc-900 dark:hover:border-red-800"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 dark:bg-red-900/30">
+            <svg
+              className="h-5 w-5 text-red-600 dark:text-red-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"
+              />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Medical Records
+          </h3>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Track medical visits, diagnoses, and reports.
+          </p>
+          <div className="mt-4">
+            <span className="inline-block rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700 dark:bg-red-900/40 dark:text-red-300">
+              Open feature
+            </span>
+          </div>
+        </Link>
+
         {/* Analytics Card */}
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-900/30">

@@ -1,4 +1,5 @@
-import type { Education, Certificate } from "@/types/education";
+import type { Education } from "@/types/education";
+import type { Document } from "@/types/document";
 import type { Priority } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
 
@@ -19,18 +20,24 @@ export function byPriority(educations: Education[]): Record<Priority, Education[
   return sharedByPriority(educations, PRIORITIES) as Record<Priority, Education[]>;
 }
 
-export function certCountForEducation(
+/** Count documents linked to a given education */
+export function docCountForEducation(
   educationId: string,
-  certificates: Certificate[]
+  documents: Document[]
 ): number {
-  return certificates.filter((c) => c.education_id === educationId).length;
+  return documents.filter(
+    (d) => d.domain === "education" && d.linked_id === educationId
+  ).length;
 }
 
-export function certsForEducation(
+/** Get documents linked to a given education */
+export function docsForEducation(
   educationId: string,
-  certificates: Certificate[]
-): Certificate[] {
-  return certificates.filter((c) => c.education_id === educationId);
+  documents: Document[]
+): Document[] {
+  return documents.filter(
+    (d) => d.domain === "education" && d.linked_id === educationId
+  );
 }
 
 export function fileTypeLabel(mime: string): string {
@@ -41,18 +48,4 @@ export function fileTypeLabel(mime: string): string {
   return "File";
 }
 
-/**
- * Returns a unique file name by appending (1), (2), ... if the desired name
- * already exists in the provided set of taken names.
- * The renamed name becomes the canonical name for the file.
- */
-export function getUniqueFileName(desiredName: string, takenNames: Set<string>): string {
-  if (!takenNames.has(desiredName)) return desiredName;
-  let counter = 1;
-  let candidate = `${desiredName} (${counter})`;
-  while (takenNames.has(candidate)) {
-    counter++;
-    candidate = `${desiredName} (${counter})`;
-  }
-  return candidate;
-}
+export { getUniqueFileName } from "@/lib/viewHelpers";

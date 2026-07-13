@@ -7,17 +7,22 @@ import {
   deleteEducation,
   fetchEducations,
   updateEducation,
-  createCertificate,
-  deleteCertificate,
-  fetchCertificates,
-  updateCertificate,
-  uploadCertificateFile,
-  downloadCertificateFile,
-  deleteCertificateFile,
 } from "@/api/education";
+import {
+  fetchDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+} from "@/api/common/documents";
+import {
+  uploadDocumentFile,
+  downloadDocumentFile,
+  deleteDocumentFile,
+} from "@/api/common/documentStorage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { ROUTES } from "@/routes/paths";
-import type { Certificate, CertificatePlaintext, Education, EducationPlaintext, EducationViewMode } from "@/types/education";
+import type { Document, DocumentPlaintext } from "@/types/document";
+import type { Education, EducationPlaintext, EducationViewMode } from "@/types/education";
 import type { Priority } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
@@ -30,7 +35,7 @@ import PriorityBadge from "@/components/taskmanager/PriorityBadge";
 import { getPriorityColor } from "@/lib/priorityColors";
 import {
   byPriority,
-  certCountForEducation,
+  docCountForEducation,
   completedByMonths,
   sortByCompletedDesc,
   formatShortDate,
@@ -46,15 +51,15 @@ const VIEW_OPTIONS: readonly ViewToggleOption<EducationViewMode>[] = [
 
 export default function CompletedEducationsPage() {
   const [educations, setEducations] = useState<Education[]>([]);
-  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
 
   const loadData = useCallback(async (uid: string) => {
-    const [eduRows, certRows] = await Promise.all([
+    const [eduRows, docRows] = await Promise.all([
       fetchEducations(uid),
-      fetchCertificates(uid),
+      fetchDocuments(uid),
     ]);
     setEducations(eduRows);
-    setCertificates(certRows);
+    setDocuments(docRows);
   }, []);
 
   const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
@@ -77,7 +82,7 @@ export default function CompletedEducationsPage() {
 
   const closeEduModal = () => setEduModalTarget(null);
 
-  // ---- Education CRUD handlers (mirrors EducationView) ----
+  // ---- Education CRUD handlers ----
 
   async function handleEducationSave(
     draft: {
@@ -89,47 +94,47 @@ export default function CompletedEducationsPage() {
       is_completed: boolean;
     },
     existingEducation: Education | null,
-    pendingCert?: { file: File; label: string },
-    pendingLinkCertId?: string,
-    pendingUnlinkCertIds?: string[],
-    pendingDeleteCertIds?: string[],
+    pendingDoc?: { file: File; label: string },
+    pendingLinkDocId?: string,
+    pendingUnlinkDocIds?: string[],
+    pendingDeleteDocIds?: string[],
   ) {
     if (!userId) throw new Error("No active session.");
 
     const freshEdus = await fetchEducations(userId);
-    const freshCerts = await fetchCertificates(userId);
+    const freshDocs = await fetchDocuments(userId);
     const freshEdu = existingEducation ? freshEdus.find(e => e.id === existingEducation.id) : null;
 
-    let currentCertIds = [...(freshEdu?.certificate_ids ?? [])];
+    let currentDocIds = [...(freshEdu?.document_ids ?? [])];
 
     const nowIso = new Date().toISOString();
     const completedAt = draft.is_completed
       ? freshEdu?.completed_at ?? nowIso
       : null;
 
-    if (pendingUnlinkCertIds && pendingUnlinkCertIds.length > 0 && existingEducation) {
-      for (const certId of pendingUnlinkCertIds) {
-        const cert = freshCerts.find(c => c.id === certId);
-        if (cert) {
-          await updateCertificate(userId, certId, {
-            ...cert,
-            education_id: "",
+    if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0 && existingEducation) {
+      for (const docId of pendingUnlinkDocIds) {
+        const doc = freshDocs.find(d => d.id === docId);
+        if (doc) {
+          await updateDocument(userId, docId, {
+            ...doc,
+            linked_id: "",
             updated_at: nowIso,
-          } as CertificatePlaintext);
+          } as DocumentPlaintext);
         }
-        currentCertIds = currentCertIds.filter(id => id !== certId);
+        currentDocIds = currentDocIds.filter(id => id !== docId);
       }
     }
 
-    if (pendingDeleteCertIds && pendingDeleteCertIds.length > 0) {
-      for (const certId of pendingDeleteCertIds) {
-        const cert = freshCerts.find(c => c.id === certId);
-        if (cert) {
-          currentCertIds = currentCertIds.filter(id => id !== certId);
-          if (cert.file_name) {
-            try { await deleteCertificateFile(userId, cert.file_name); } catch { /* best-effort */ }
+    if (pendingDeleteDocIds && pendingDeleteDocIds.length > 0) {
+      for (const docId of pendingDeleteDocIds) {
+        const doc = freshDocs.find(d => d.id === docId);
+        if (doc) {
+          currentDocIds = currentDocIds.filter(id => id !== docId);
+          if (doc.file_name) {
+            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
           }
-          await deleteCertificate(certId);
+          await deleteDocument(docId);
         }
       }
     }
@@ -137,7 +142,7 @@ export default function CompletedEducationsPage() {
     const payload = {
       ...draft,
       completed_at: completedAt,
-      certificate_ids: currentCertIds,
+      document_ids: currentDocIds,
       updated_at: nowIso,
     };
 
@@ -149,32 +154,33 @@ export default function CompletedEducationsPage() {
     }
 
     let needsUpdate = false;
-    const newCertIds = [...currentCertIds];
+    const newDocIds = [...currentDocIds];
 
-    if (pendingCert) {
-      const { fileName, iv, mimeType } = await uploadCertificateFile(userId, pendingCert.file);
-      const cert = await createCertificate(userId, {
-        label: pendingCert.label,
+    if (pendingDoc) {
+      const { fileName, iv, mimeType } = await uploadDocumentFile(userId, pendingDoc.file);
+      const doc = await createDocument(userId, {
+        label: pendingDoc.label,
         file_name: fileName,
         file_iv: iv,
         file_mime: mimeType,
-        education_id: savedEdu.id,
+        domain: "education",
+        linked_id: savedEdu.id,
         updated_at: nowIso,
       });
-      newCertIds.push(cert.id);
+      newDocIds.push(doc.id);
       needsUpdate = true;
     }
 
-    if (pendingLinkCertId) {
-      const pcert = freshCerts.find(c => c.id === pendingLinkCertId);
-      if (pcert) {
-        await updateCertificate(userId, pendingLinkCertId, {
-          ...pcert,
-          education_id: savedEdu.id,
+    if (pendingLinkDocId) {
+      const pdoc = freshDocs.find(d => d.id === pendingLinkDocId);
+      if (pdoc) {
+        await updateDocument(userId, pendingLinkDocId, {
+          ...pdoc,
+          linked_id: savedEdu.id,
           updated_at: nowIso,
-        } as CertificatePlaintext);
-        if (!newCertIds.includes(pendingLinkCertId)) {
-          newCertIds.push(pendingLinkCertId);
+        } as DocumentPlaintext);
+        if (!newDocIds.includes(pendingLinkDocId)) {
+          newDocIds.push(pendingLinkDocId);
         }
         needsUpdate = true;
       }
@@ -183,7 +189,7 @@ export default function CompletedEducationsPage() {
     if (needsUpdate) {
       await updateEducation(userId, savedEdu.id, {
         ...payload,
-        certificate_ids: newCertIds,
+        document_ids: newDocIds,
         updated_at: new Date().toISOString(),
       });
     }
@@ -194,23 +200,25 @@ export default function CompletedEducationsPage() {
   async function handleEducationDelete(educationId: string, cascadeMode: 'unlink' | 'cascade') {
     if (!userId) throw new Error("No active session.");
 
+    const eduDocs = documents.filter(
+      (d) => d.domain === "education" && d.linked_id === educationId
+    );
+
     if (cascadeMode === 'unlink') {
-      const linkedCerts = certificates.filter((c) => c.education_id === educationId);
       const nowIso = new Date().toISOString();
-      for (const cert of linkedCerts) {
-        await updateCertificate(userId, cert.id, {
-          ...cert,
-          education_id: "",
+      for (const doc of eduDocs) {
+        await updateDocument(userId, doc.id, {
+          ...doc,
+          linked_id: "",
           updated_at: nowIso,
-        } as CertificatePlaintext);
+        } as DocumentPlaintext);
       }
     } else {
-      const linkedCerts = certificates.filter((c) => c.education_id === educationId);
-      for (const cert of linkedCerts) {
-        if (cert.file_name) {
-          try { await deleteCertificateFile(userId, cert.file_name); } catch { /* best-effort */ }
+      for (const doc of eduDocs) {
+        if (doc.file_name) {
+          try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
         }
-        await deleteCertificate(cert.id);
+        await deleteDocument(doc.id);
       }
     }
 
@@ -218,124 +226,119 @@ export default function CompletedEducationsPage() {
     await refreshData(userId);
   }
 
-  async function handleLinkCertificate(educationId: string, certificateId: string) {
+  async function handleLinkDocument(educationId: string, documentId: string) {
     if (!userId) throw new Error("No active session.");
-    const cert = certificates.find((c) => c.id === certificateId);
-    if (!cert) return;
+    const doc = documents.find((d) => d.id === documentId);
+    if (!doc) return;
     const nowIso = new Date().toISOString();
-    await updateCertificate(userId, certificateId, {
-      ...cert,
-      education_id: educationId,
+    await updateDocument(userId, documentId, {
+      ...doc,
+      linked_id: educationId,
       updated_at: nowIso,
-    } as CertificatePlaintext);
+    } as DocumentPlaintext);
     const edu = educations.find(e => e.id === educationId);
-    if (edu && !edu.certificate_ids.includes(certificateId)) {
+    if (edu && !edu.document_ids.includes(documentId)) {
       await updateEducation(userId, educationId, {
         ...edu,
-        certificate_ids: [...edu.certificate_ids, certificateId],
+        document_ids: [...edu.document_ids, documentId],
         updated_at: nowIso
       } as EducationPlaintext);
     }
     await refreshData(userId);
   }
 
-  async function handleUnlinkCertificate(educationId: string, certificateId: string) {
+  async function handleUnlinkDocument(educationId: string, documentId: string) {
     if (!userId) throw new Error("No active session.");
-    const cert = certificates.find((c) => c.id === certificateId);
-    if (!cert) return;
+    const doc = documents.find((d) => d.id === documentId);
+    if (!doc) return;
     const nowIso = new Date().toISOString();
-    await updateCertificate(userId, certificateId, {
-      ...cert,
-      education_id: "",
+    await updateDocument(userId, documentId, {
+      ...doc,
+      linked_id: "",
       updated_at: nowIso,
-    } as CertificatePlaintext);
+    } as DocumentPlaintext);
     const edu = educations.find(e => e.id === educationId);
     if (edu) {
-      const newCertIds = edu.certificate_ids.filter(id => id !== certificateId);
-      const isStillCompleted = newCertIds.length > 0 ? edu.is_completed : false;
+      const newDocIds = edu.document_ids.filter(id => id !== documentId);
       await updateEducation(userId, educationId, {
         ...edu,
-        certificate_ids: newCertIds,
-        is_completed: isStillCompleted,
-        completed_at: isStillCompleted ? edu.completed_at : null,
+        document_ids: newDocIds,
         updated_at: nowIso
       } as EducationPlaintext);
     }
     await refreshData(userId);
   }
 
-  async function handleUploadCertificateForEducation(
+  async function handleUploadDocumentForEducation(
     educationId: string,
     file: File,
     label: string
   ) {
     if (!userId) throw new Error("No active session.");
     const nowIso = new Date().toISOString();
-    const { fileName, iv, mimeType } = await uploadCertificateFile(userId, file);
-    const cert = await createCertificate(userId, {
+    const { fileName, iv, mimeType } = await uploadDocumentFile(userId, file);
+    const doc = await createDocument(userId, {
       label,
       file_name: fileName,
       file_iv: iv,
       file_mime: mimeType,
-      education_id: educationId,
+      domain: "education",
+      linked_id: educationId,
       updated_at: nowIso,
     });
     const edu = educations.find(e => e.id === educationId);
     if (edu) {
       await updateEducation(userId, edu.id, {
         ...edu,
-        certificate_ids: [...edu.certificate_ids, cert.id],
+        document_ids: [...edu.document_ids, doc.id],
         updated_at: nowIso,
       } as EducationPlaintext);
     }
     await refreshData(userId);
-    return cert;
+    return doc;
   }
 
-  async function handleDownloadCertificate(certificate: Certificate) {
+  async function handleDownloadDocument(doc: Document) {
     if (!userId) throw new Error("No active session.");
-    const blob = await downloadCertificateFile(
+    const blob = await downloadDocumentFile(
       userId,
-      certificate.file_name,
-      certificate.file_iv,
-      certificate.file_mime
+      doc.file_name,
+      doc.file_iv,
+      doc.file_mime
     );
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = certificate.label || "certificate";
+    a.download = doc.label || "document";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
-  async function handleDeleteCertificateFromEducation(certificate: Certificate, cascadeMode: 'unlink' | 'cascade') {
+  async function handleDeleteDocumentFromEducation(doc: Document, cascadeMode: 'unlink' | 'cascade') {
     if (!userId) throw new Error("No active session.");
 
-    if (cascadeMode === 'cascade' && certificate.education_id) {
-       await deleteEducation(certificate.education_id);
-    } else if (cascadeMode === 'unlink' && certificate.education_id) {
-      const edu = educations.find((e) => e.id === certificate.education_id);
+    if (cascadeMode === 'cascade' && doc.linked_id) {
+       await deleteEducation(doc.linked_id);
+    } else if (cascadeMode === 'unlink' && doc.linked_id) {
+      const edu = educations.find((e) => e.id === doc.linked_id);
       if (edu) {
         const nowIso = new Date().toISOString();
-        const newCertIds = edu.certificate_ids.filter((id) => id !== certificate.id);
-        const isStillCompleted = newCertIds.length > 0 ? edu.is_completed : false;
+        const newDocIds = edu.document_ids.filter((id) => id !== doc.id);
         await updateEducation(userId, edu.id, {
           ...edu,
-          certificate_ids: newCertIds,
-          is_completed: isStillCompleted,
-          completed_at: isStillCompleted ? edu.completed_at : null,
+          document_ids: newDocIds,
           updated_at: nowIso,
         } as EducationPlaintext);
       }
     }
 
-    if (certificate.file_name) {
-      try { await deleteCertificateFile(userId, certificate.file_name); } catch {}
+    if (doc.file_name) {
+      try { await deleteDocumentFile(userId, doc.file_name); } catch {}
     }
 
-    await deleteCertificate(certificate.id);
+    await deleteDocument(doc.id);
     await refreshData(userId);
   }
 
@@ -382,7 +385,7 @@ export default function CompletedEducationsPage() {
                     </h3>
                     <div className="space-y-2">
                       {group.map((edu) => {
-                        const certCount = certCountForEducation(edu.id, certificates);
+                        const docCount = docCountForEducation(edu.id, documents);
                         return (
                         <div
                           key={edu.id}
@@ -396,9 +399,9 @@ export default function CompletedEducationsPage() {
                             {trunc(edu.name, 42)}
                           </button>
                           <span className="col-span-2 text-center">
-                            {certCount > 0 ? (
+                            {docCount > 0 ? (
                               <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                                {certCount} cert{certCount !== 1 ? "s" : ""}
+                                {docCount} file{docCount !== 1 ? "s" : ""}
                               </span>
                             ) : (
                               <span className="text-xs text-zinc-400">—</span>
@@ -429,7 +432,7 @@ export default function CompletedEducationsPage() {
                     <div className="space-y-2">
                       {group.items.map((edu) => {
                         const colors = getPriorityColor((edu as Education).priority);
-                        const certCount = certCountForEducation(edu.id, certificates);
+                        const docCount = docCountForEducation(edu.id, documents);
                         return (
                           <div
                             key={edu.id}
@@ -450,9 +453,9 @@ export default function CompletedEducationsPage() {
                               )}
                             </span>
                             <span className="col-span-2 text-center">
-                              {certCount > 0 ? (
+                              {docCount > 0 ? (
                                 <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                                  {certCount} cert{certCount !== 1 ? "s" : ""}
+                                  {docCount} file{docCount !== 1 ? "s" : ""}
                                 </span>
                               ) : (
                                 <span className="text-xs text-zinc-400">—</span>
@@ -476,16 +479,16 @@ export default function CompletedEducationsPage() {
       {eduModalTarget && (
         <EducationModal
           education={eduModalTarget}
-          certificates={certificates}
+          documents={documents}
           userId={userId || ""}
           onClose={closeEduModal}
           onSave={handleEducationSave}
           onDelete={handleEducationDelete}
-          onUploadCertificate={handleUploadCertificateForEducation}
-          onDownloadCertificate={handleDownloadCertificate}
-          onDeleteCertificate={handleDeleteCertificateFromEducation}
-          onLinkCertificate={handleLinkCertificate}
-          onUnlinkCertificate={handleUnlinkCertificate}
+          onUploadDocument={handleUploadDocumentForEducation}
+          onDownloadDocument={handleDownloadDocument}
+          onDeleteDocument={handleDeleteDocumentFromEducation}
+          onLinkDocument={handleLinkDocument}
+          onUnlinkDocument={handleUnlinkDocument}
         />
       )}
     </>

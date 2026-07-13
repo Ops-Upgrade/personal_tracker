@@ -17,10 +17,12 @@ export interface DocPreviewPanelProps {
   existingIv?: string | null;
   /** Called when user clicks "load preview" for remote encrypted files */
   onLoadPreview?: () => Promise<Blob>;
+  /** Increment this to trigger a preview load from the parent (e.g. a preview button) */
+  loadPreviewTrigger?: number;
 }
 
 /**
- * Stripped-down document preview panel.
+ * Document preview panel.
  * No header, no navigation, no download button — those live in the parent (GlobalActionModal).
  * Uses strict height containment: h-full w-full overflow-hidden so a loaded PDF
  * never stretches the modal beyond the form panel's height.
@@ -31,6 +33,7 @@ export default function DocPreviewPanel({
   existingMime,
   existingIv,
   onLoadPreview,
+  loadPreviewTrigger = 0,
 }: DocPreviewPanelProps) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -71,6 +74,14 @@ export default function DocPreviewPanel({
       setIsLoading(false);
     }
   };
+
+  // Auto-trigger preview load when parent signals (e.g. preview button clicked)
+  useEffect(() => {
+    if (loadPreviewTrigger > 0 && onLoadPreview && !file && !blobUrl && !isLoading) {
+      handleLoadPreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadPreviewTrigger]);
 
   const mimeType = file ? file.type : (existingMime || "");
   const isPdf = mimeType === "application/pdf";

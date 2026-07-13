@@ -180,3 +180,18 @@ export function trunc(text: string | null | undefined, max = 70): string {
   if (!text) return "";
   return text.length <= max ? text : `${text.slice(0, max)}...`;
 }
+
+/**
+ * Returns a unique file name by appending (1), (2), ... if the desired name
+ * already exists in the provided set of taken names.
+ */
+export function getUniqueFileName(desiredName: string, takenNames: Set<string>): string {
+  if (!takenNames.has(desiredName)) return desiredName;
+  let counter = 1;
+  let candidate = `${desiredName} (${counter})`;
+  while (takenNames.has(candidate)) {
+    counter++;
+    candidate = `${desiredName} (${counter})`;
+  }
+  return candidate;
+}

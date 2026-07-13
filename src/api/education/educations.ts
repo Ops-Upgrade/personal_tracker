@@ -20,7 +20,7 @@ export async function fetchEducations(userId: string): Promise<Education[]> {
       const plaintext = await decryptField(userId, row.iv, row.data);
       const raw = JSON.parse(plaintext);
       const parsed: EducationPlaintext = {
-        certificate_ids: [],
+        document_ids: [],
         ...raw,
       };
       return { id: row.id, created_at: row.created_at, ...parsed };
@@ -79,8 +79,8 @@ export async function updateEducation(
 /**
  * Permanently delete an education by ID.
  *
- * NOTE: Callers are responsible for cleaning up any associated certificate files
- * in R2 storage (see deleteCertificateFile). This function only removes the
+ * NOTE: Callers are responsible for cleaning up any associated document files
+ * in R2 storage (see deleteDocumentFile). This function only removes the
  * database row — storage cleanup happens at the UI layer in EducationView.
  */
 export async function deleteEducation(educationId: string): Promise<void> {

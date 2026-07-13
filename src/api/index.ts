@@ -9,4 +9,21 @@ export { fetchTasks, createTask, updateTask, deleteTask } from "./taskmanager";
 export { fetchNotes, createNote, updateNote, deleteNote } from "./taskmanager";
 export { fetchExpenses, createExpense, updateExpense, deleteExpense } from "./expense";
 export { fetchEducations, createEducation, updateEducation, deleteEducation } from "./education";
-export { fetchCertificates, createCertificate, updateCertificate, deleteCertificate } from "./education";
+export {
+  fetchDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+  fetchDocumentsByDomain,
+} from "./common/documents";
+export {
+  uploadDocumentFile,
+  downloadDocumentFile,
+  deleteDocumentFile,
+} from "./common/documentStorage";
+export {
+  fetchMedicalRecords,
+  createMedicalRecord,
+  updateMedicalRecord,
+  deleteMedicalRecord,
+} from "./medical";

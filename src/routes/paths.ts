@@ -15,6 +15,8 @@ export const ROUTES = {
   EDUCATION: "/education",
   EDUCATION_COMPLETED: "/education/completed",
   EDUCATION_STORE: "/education/store",
+  MEDICAL: "/medical",
+  MEDICAL_STORE: "/medical/store",
 } as const;
 
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];

@@ -8,11 +8,20 @@ import {
   deleteExpense,
   fetchExpenses,
   updateExpense,
-  uploadInvoice,
-  deleteInvoice,
 } from "@/api/expense";
+import {
+  fetchDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+} from "@/api/common/documents";
+import {
+  uploadDocumentFile,
+  deleteDocumentFile,
+} from "@/api/common/documentStorage";
 import { ROUTES } from "@/routes/paths";
 import type { Expense, ExpensePlaintext, ExpenseViewMode } from "@/types/expense";
+import type { Document, DocumentPlaintext } from "@/types/document";
 import { MONTHS } from "@/types/expense";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import ViewToggle from "@/components/common/ViewToggle";
@@ -34,6 +43,7 @@ const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
 function AllExpensesContent() {
   const searchParams = useSearchParams();
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
 
   // Read optional month/year filters from query params
   const filterMonth = searchParams.get("month");
@@ -43,8 +53,12 @@ function AllExpensesContent() {
   const isFiltered = monthIndex !== null && !isNaN(monthIndex) && yearFilter !== null && !isNaN(yearFilter);
 
   const loadData = useCallback(async (uid: string) => {
-    const rows = await fetchExpenses(uid);
-    setExpenses(rows);
+    const [expRows, docRows] = await Promise.all([
+      fetchExpenses(uid),
+      fetchDocuments(uid),
+    ]);
+    setExpenses(expRows);
+    setDocuments(docRows);
   }, []);
 
   const { userId, isLoading, error, refreshData } =
@@ -53,7 +67,6 @@ function AllExpensesContent() {
   const [viewMode, setViewMode] = useLocalStorage<ExpenseViewMode>("expenseViewMode", "single");
   const [selectedYear, setSelectedYear] = useState(yearFilter ?? new Date().getFullYear());
   const [expenseModalTarget, setExpenseModalTarget] = useState<Expense | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
 
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -100,71 +113,106 @@ function AllExpensesContent() {
       invoice: string;
     },
     existingExpense: Expense | null,
-    fileAction: { action: "upload" | "remove" | "keep"; file?: File }
+    fileAction?: { newFiles: File[]; removeDocIds: string[]; linkDocId?: string },
   ) {
     if (!userId) throw new Error("No active session.");
-    setIsSaving(true);
 
-    try {
-      let invoice_file = existingExpense?.invoice_file ?? "";
-      let invoice_iv = existingExpense?.invoice_iv ?? "";
-      let invoice_mime = existingExpense?.invoice_mime ?? "";
+    const nowIso = new Date().toISOString();
+    let document_ids = [...(existingExpense?.document_ids ?? [])];
 
-      if (fileAction.action === "remove") {
-        if (invoice_file) {
-          try { await deleteInvoice(userId, invoice_file); } catch { /* best-effort */ }
+    if (fileAction?.removeDocIds) {
+      for (const docId of fileAction.removeDocIds) {
+        const doc = documents.find((d) => d.id === docId);
+        if (doc) {
+          if (doc.file_name) {
+            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+          }
+          try { await deleteDocument(docId); } catch { /* best-effort */ }
         }
-        invoice_file = "";
-        invoice_iv = "";
-        invoice_mime = "";
-      } else if (fileAction.action === "upload" && fileAction.file) {
-        if (invoice_file) {
-          try { await deleteInvoice(userId, invoice_file); } catch { /* best-effort */ }
-        }
-        const result = await uploadInvoice(userId, fileAction.file);
-        invoice_file = result.fileName;
-        invoice_iv = result.iv;
-        invoice_mime = result.mimeType;
+        document_ids = document_ids.filter((id) => id !== docId);
       }
-
-      const nowIso = new Date().toISOString();
-
-      const payload: ExpensePlaintext = {
-        item: draft.item,
-        seller: draft.seller,
-        cost: draft.cost,
-        date: draft.date,
-        reason: draft.reason,
-        invoice: draft.invoice,
-        invoice_file,
-        invoice_iv,
-        invoice_mime,
-        updated_at: nowIso,
-      };
-
-      if (existingExpense) {
-        await updateExpense(userId, existingExpense.id, payload);
-      } else {
-        await createExpense(userId, payload);
-      }
-
-      await refreshData(userId);
-    } finally {
-      setIsSaving(false);
     }
+
+    if (fileAction?.newFiles) {
+      for (const file of fileAction.newFiles) {
+        const { fileName, iv, mimeType } = await uploadDocumentFile(userId, file);
+        const doc = await createDocument(userId, {
+          label: file.name,
+          file_name: fileName,
+          file_iv: iv,
+          file_mime: mimeType,
+          domain: "expense",
+          linked_id: existingExpense?.id ?? "",
+          updated_at: nowIso,
+        });
+        document_ids.push(doc.id);
+      }
+    }
+
+    if (fileAction?.linkDocId) {
+      const linkDoc = documents.find((d) => d.id === fileAction.linkDocId);
+      if (linkDoc && !document_ids.includes(fileAction.linkDocId)) {
+        document_ids.push(fileAction.linkDocId);
+        await updateDocument(userId, fileAction.linkDocId, {
+          ...linkDoc,
+          linked_id: existingExpense?.id ?? "",
+          updated_at: nowIso,
+        } as DocumentPlaintext);
+      }
+    }
+
+    const payload: ExpensePlaintext = {
+      item: draft.item, seller: draft.seller, cost: draft.cost,
+      date: draft.date, reason: draft.reason, invoice: draft.invoice,
+      document_ids, updated_at: nowIso,
+    };
+
+    let savedExpense: Expense;
+    if (existingExpense) {
+      savedExpense = await updateExpense(userId, existingExpense.id, payload);
+    } else {
+      savedExpense = await createExpense(userId, payload);
+    }
+
+    if (!existingExpense && fileAction?.newFiles && fileAction.newFiles.length > 0) {
+      const freshDocs = await fetchDocuments(userId);
+      for (const doc of freshDocs) {
+        if (doc.domain === "expense" && doc.linked_id === "" && document_ids.includes(doc.id)) {
+          await updateDocument(userId, doc.id, {
+            ...doc, linked_id: savedExpense.id, updated_at: new Date().toISOString(),
+          } as DocumentPlaintext);
+        }
+      }
+    }
+    if (!existingExpense && fileAction?.linkDocId) {
+      const linkDoc = documents.find((d) => d.id === fileAction.linkDocId);
+      if (linkDoc && linkDoc.linked_id === "") {
+        await updateDocument(userId, fileAction.linkDocId, {
+          ...linkDoc, linked_id: savedExpense.id, updated_at: new Date().toISOString(),
+        } as DocumentPlaintext);
+      }
+    }
+
+    await refreshData(userId);
   }
 
   async function handleExpenseDelete(expenseId: string) {
     if (!userId) throw new Error("No active session.");
+
     const expense = expenses.find((e) => e.id === expenseId);
-    const invoiceFile = expense?.invoice_file;
-
-    await deleteExpense(expenseId);
-
-    if (invoiceFile) {
-      try { await deleteInvoice(userId, invoiceFile); } catch { /* best-effort */ }
+    if (expense?.document_ids) {
+      for (const docId of expense.document_ids) {
+        const doc = documents.find((d) => d.id === docId);
+        if (doc) {
+          if (doc.file_name) {
+            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+          }
+          try { await deleteDocument(docId); } catch { /* best-effort */ }
+        }
+      }
     }
 
+    await deleteExpense(expenseId);
     await refreshData(userId);
   }
 
@@ -235,8 +283,9 @@ function AllExpensesContent() {
       {expenseModalTarget && (
         <ExpenseModal
           expense={expenseModalTarget}
+          attachedDocuments={documents.filter((d) => expenseModalTarget.document_ids?.includes(d.id))}
+          standaloneDocuments={documents.filter((d) => d.domain === "expense" && !d.linked_id)}
           userId={userId ?? ""}
-          isSaving={isSaving}
           onClose={closeExpenseModal}
           onSave={handleExpenseSave}
           onDelete={handleExpenseDelete}

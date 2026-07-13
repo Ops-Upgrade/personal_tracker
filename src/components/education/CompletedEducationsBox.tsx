@@ -1,13 +1,14 @@
 "use client";
 
-import type { Education, Certificate } from "@/types/education";
+import type { Education } from "@/types/education";
+import type { Document } from "@/types/document";
 import GenericCompletedBox from "@/components/common/GenericCompletedBox";
 import { getPriorityColor } from "@/lib/priorityColors";
-import { certCountForEducation, formatShortDate, sortByCompletedDesc, trunc } from "./helpers";
+import { docCountForEducation, formatShortDate, sortByCompletedDesc, trunc } from "./helpers";
 
 interface CompletedEducationsBoxProps {
   educations: Education[];
-  certificates: Certificate[];
+  documents: Document[];
   isLoading: boolean;
   onOpenExpanded: () => void;
   onSelectEducation: (education: Education) => void;
@@ -15,7 +16,7 @@ interface CompletedEducationsBoxProps {
 
 export default function CompletedEducationsBox({
   educations,
-  certificates,
+  documents,
   isLoading,
   onOpenExpanded,
   onSelectEducation,
@@ -28,7 +29,7 @@ export default function CompletedEducationsBox({
       isLoading={isLoading}
       onOpenExpanded={onOpenExpanded}
       renderItem={(edu) => {
-        const certCount = certCountForEducation(edu.id, certificates);
+        const docCount = docCountForEducation(edu.id, documents);
         const colors = edu.priority ? getPriorityColor(edu.priority) : { dot: "bg-zinc-400" };
         return (
           <div
@@ -50,11 +51,11 @@ export default function CompletedEducationsBox({
             <div className="col-span-3 text-zinc-600 dark:text-zinc-300">
               {formatShortDate(edu.completed_at)}
             </div>
-            {/* Certificate count badge */}
+            {/* Document count badge */}
             <div className="col-span-2 text-right">
-              {certCount > 0 && (
+              {docCount > 0 && (
                 <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                  {certCount} cert{certCount !== 1 ? "s" : ""}
+                  {docCount} file{docCount !== 1 ? "s" : ""}
                 </span>
               )}
             </div>

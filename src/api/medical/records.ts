@@ -1,25 +1,25 @@
 import { createClient } from "@/lib/supabase/client";
 import { encryptField, decryptField } from "@/lib/crypto";
-import type { Expense, ExpensePlaintext } from "@/types/expense";
+import type { MedicalRecord, MedicalPlaintext } from "@/types/medical";
 
 /**
- * Fetch all expenses for a user, decrypt each row, and return hydrated Expense[].
+ * Fetch all medical records for a user, decrypt each row, and return hydrated MedicalRecord[].
  */
-export async function fetchExpenses(userId: string): Promise<Expense[]> {
+export async function fetchMedicalRecords(userId: string): Promise<MedicalRecord[]> {
   const supabase = createClient();
   const { data: rows, error } = await supabase
-    .from("expenses")
+    .from("medical_records")
     .select("id, user_id, iv, data, created_at")
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to fetch expenses: ${error.message}`);
+  if (error) throw new Error(`Failed to fetch medical records: ${error.message}`);
   if (!rows || rows.length === 0) return [];
 
   return Promise.all(
     rows.map(async (row) => {
       const plaintext = await decryptField(userId, row.iv, row.data);
       const raw = JSON.parse(plaintext);
-      const parsed: ExpensePlaintext = {
+      const parsed: MedicalPlaintext = {
         document_ids: [],
         ...raw,
       };
@@ -29,17 +29,17 @@ export async function fetchExpenses(userId: string): Promise<Expense[]> {
 }
 
 /**
- * Create a new expense. Encrypts the plaintext blob before inserting.
+ * Create a new medical record. Encrypts the plaintext blob before inserting.
  */
-export async function createExpense(
+export async function createMedicalRecord(
   userId: string,
-  plaintext: ExpensePlaintext
-): Promise<Expense> {
+  plaintext: MedicalPlaintext
+): Promise<MedicalRecord> {
   const supabase = createClient();
   const encrypted = await encryptField(userId, JSON.stringify(plaintext));
 
   const { data, error } = await supabase
-    .from("expenses")
+    .from("medical_records")
     .insert({
       user_id: userId,
       iv: encrypted.iv,
@@ -48,44 +48,40 @@ export async function createExpense(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create expense: ${error.message}`);
+  if (error) throw new Error(`Failed to create medical record: ${error.message}`);
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
 
 /**
- * Update an existing expense. Re-encrypts the full blob with a new IV.
+ * Update an existing medical record. Re-encrypts the full blob with a new IV.
  */
-export async function updateExpense(
+export async function updateMedicalRecord(
   userId: string,
-  expenseId: string,
-  plaintext: ExpensePlaintext
-): Promise<Expense> {
+  recordId: string,
+  plaintext: MedicalPlaintext
+): Promise<MedicalRecord> {
   const supabase = createClient();
   const encrypted = await encryptField(userId, JSON.stringify(plaintext));
 
   const { data, error } = await supabase
-    .from("expenses")
+    .from("medical_records")
     .update({ iv: encrypted.iv, data: encrypted.ciphertext })
-    .eq("id", expenseId)
+    .eq("id", recordId)
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update expense: ${error.message}`);
+  if (error) throw new Error(`Failed to update medical record: ${error.message}`);
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
 
 /**
- * Permanently delete an expense by ID.
- *
- * NOTE: Callers are responsible for cleaning up any associated document files
- * in R2 storage. This function only removes the
- * database row — storage cleanup happens at the UI layer in ExpenseView.
+ * Permanently delete a medical record by ID.
  */
-export async function deleteExpense(expenseId: string): Promise<void> {
+export async function deleteMedicalRecord(recordId: string): Promise<void> {
   const supabase = createClient();
-  const { error } = await supabase.from("expenses").delete().eq("id", expenseId);
+  const { error } = await supabase.from("medical_records").delete().eq("id", recordId);
 
-  if (error) throw new Error(`Failed to delete expense: ${error.message}`);
+  if (error) throw new Error(`Failed to delete medical record: ${error.message}`);
 }

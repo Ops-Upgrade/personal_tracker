@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Education, Certificate, EducationViewMode } from "@/types/education";
+import type { Education, EducationViewMode } from "@/types/education";
 import { PRIORITIES } from "@/types/taskmanager";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import GenericCompletedModal from "@/components/common/GenericCompletedModal";
@@ -14,7 +14,6 @@ import {
 
 interface CompletedEducationsModalProps {
   educations: Education[];
-  certificates: Certificate[];
   onClose: () => void;
   onSelectEducation: (education: Education) => void;
 }

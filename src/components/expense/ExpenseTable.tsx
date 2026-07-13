@@ -204,8 +204,8 @@ export default function ExpenseTable({
                 {trunc(expense.reason, 20)}
               </td>
               <td className="py-2 text-center">
-                {(expense.invoice_file && expense.invoice_file !== "") ? (
-                  <span className="inline-flex items-center text-emerald-500" title="Invoice attached">
+                {(expense.document_ids && expense.document_ids.length > 0) ? (
+                  <span className="inline-flex items-center text-emerald-500" title="Document attached">
                     <PaperClipIcon className="h-4 w-4" />
                   </span>
                 ) : (

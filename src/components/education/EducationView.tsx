@@ -11,16 +11,21 @@ import {
   deleteEducation,
   fetchEducations,
   updateEducation,
-  createCertificate,
-  deleteCertificate,
-  fetchCertificates,
-  updateCertificate,
-  uploadCertificateFile,
-  downloadCertificateFile,
-  deleteCertificateFile,
 } from "@/api/education";
+import {
+  fetchDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+} from "@/api/common/documents";
+import {
+  uploadDocumentFile,
+  downloadDocumentFile,
+  deleteDocumentFile,
+} from "@/api/common/documentStorage";
 import ErrorBanner from "@/components/common/ErrorBanner";
-import type { Certificate, CertificatePlaintext, Education, EducationPlaintext, EducationViewMode } from "@/types/education";
+import type { Document, DocumentPlaintext } from "@/types/document";
+import type { Education, EducationPlaintext, EducationViewMode } from "@/types/education";
 import type { Priority } from "@/types/taskmanager";
 import ActiveEducationsBox from "./ActiveEducationsBox";
 import CompletedEducationsBox from "./CompletedEducationsBox";
@@ -36,32 +41,29 @@ function FolderIcon(props: React.SVGProps<SVGSVGElement>) {
 
 /**
  * Education feature shell.
- * Mirrors TaskManagerView: bootstrap, state, CRUD handlers, 3-box layout.
- * "View All" navigates to dedicated /education/completed route.
+ * Uses the global Document store for file attachments instead of the old certificates table.
  */
 export default function EducationView() {
   const router = useRouter();
   const [educations, setEducations] = useState<Education[]>([]);
-  const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
 
   const loadAllData = useCallback(async (uid: string) => {
-    const [eduRows, certRows] = await Promise.all([
+    const [eduRows, docRows] = await Promise.all([
       fetchEducations(uid),
-      fetchCertificates(uid),
+      fetchDocuments(uid),
     ]);
     setEducations(eduRows);
-    setCertificates(certRows);
+    setDocuments(docRows);
   }, []);
 
   const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
     useAuthBootstrap({ loadData: loadAllData, fetchServerDate: false });
 
-  // Hash-driven: #new-education, #edit-<eduId>
   const [eduModalTarget, setEduModalTarget] = useState<Education | "create" | null>(() => {
     if (typeof window === "undefined") return null;
     const raw = window.location.hash.replace("#", "");
     if (raw === "new-education") return "create";
-    // For edit-education-<id>, we need educations loaded — handled in useEffect below
     return null;
   });
   const [activeView, setActiveView] = useState<EducationViewMode>("months");
@@ -72,7 +74,6 @@ export default function EducationView() {
     }
   }, []);
 
-  // Hash change handler (returns derived state, doesn't call setState)
   const resolveHashState = useCallback((raw: string, currentEdus: Education[]) => {
     if (!raw) return null;
     if (raw === "new-education") return "create" as const;
@@ -84,7 +85,6 @@ export default function EducationView() {
     return null;
   }, []);
 
-  // Sync initial hash when educations load (e.g. navigating from CertificateStoreView)
   useEffect(() => {
     if (educations.length === 0) return;
     const raw = window.location.hash.replace("#", "");
@@ -137,53 +137,49 @@ export default function EducationView() {
       is_completed: boolean;
     },
     existingEducation: Education | null,
-    pendingCert?: { file: File; label: string },
-    pendingLinkCertId?: string,
-    pendingUnlinkCertIds?: string[],
-    pendingDeleteCertIds?: string[],
+    pendingDoc?: { file: File; label: string },
+    pendingLinkDocId?: string,
+    pendingUnlinkDocIds?: string[],
+    pendingDeleteDocIds?: string[],
   ) {
     if (!userId) throw new Error("No active session.");
 
-    // Fetch fresh state so we operate on committed DB data
     const freshEdus = await fetchEducations(userId);
-    const freshCerts = await fetchCertificates(userId);
+    const freshDocs = await fetchDocuments(userId);
     const freshEdu = existingEducation ? freshEdus.find(e => e.id === existingEducation.id) : null;
 
-    let currentCertIds = [...(freshEdu?.certificate_ids ?? [])];
+    let currentDocIds = [...(freshEdu?.document_ids ?? [])];
 
     const nowIso = new Date().toISOString();
     const completedAt = draft.is_completed
       ? freshEdu?.completed_at ?? nowIso
       : null;
 
-    // --- 1. Process unlinks (remove cert association, keep cert in DB) ---
-    if (pendingUnlinkCertIds && pendingUnlinkCertIds.length > 0 && existingEducation) {
-      for (const certId of pendingUnlinkCertIds) {
-        const cert = freshCerts.find(c => c.id === certId);
-        if (cert) {
-          await updateCertificate(userId, certId, {
-            ...cert,
-            education_id: "",
+    // --- 1. Process unlinks ---
+    if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0 && existingEducation) {
+      for (const docId of pendingUnlinkDocIds) {
+        const doc = freshDocs.find(d => d.id === docId);
+        if (doc) {
+          await updateDocument(userId, docId, {
+            ...doc,
+            linked_id: "",
             updated_at: nowIso,
-          } as CertificatePlaintext);
+          } as DocumentPlaintext);
         }
-        currentCertIds = currentCertIds.filter(id => id !== certId);
+        currentDocIds = currentDocIds.filter(id => id !== docId);
       }
     }
 
-    // --- 2. Process deletions (remove cert from education, delete storage + DB row) ---
-    if (pendingDeleteCertIds && pendingDeleteCertIds.length > 0) {
-      for (const certId of pendingDeleteCertIds) {
-        const cert = freshCerts.find(c => c.id === certId);
-        if (cert) {
-          // Unlink from education's cert_ids
-          currentCertIds = currentCertIds.filter(id => id !== certId);
-          // Delete storage file
-          if (cert.file_name) {
-            try { await deleteCertificateFile(userId, cert.file_name); } catch { /* best-effort */ }
+    // --- 2. Process deletions ---
+    if (pendingDeleteDocIds && pendingDeleteDocIds.length > 0) {
+      for (const docId of pendingDeleteDocIds) {
+        const doc = freshDocs.find(d => d.id === docId);
+        if (doc) {
+          currentDocIds = currentDocIds.filter(id => id !== docId);
+          if (doc.file_name) {
+            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
           }
-          // Delete DB row
-          await deleteCertificate(certId);
+          await deleteDocument(docId);
         }
       }
     }
@@ -192,7 +188,7 @@ export default function EducationView() {
     const payload = {
       ...draft,
       completed_at: completedAt,
-      certificate_ids: currentCertIds,
+      document_ids: currentDocIds,
       updated_at: nowIso,
     };
 
@@ -204,77 +200,74 @@ export default function EducationView() {
     }
 
     let needsUpdate = false;
-    const newCertIds = [...currentCertIds];
+    const newDocIds = [...currentDocIds];
 
-    // --- 4. Upload new certificate file ---
-    if (pendingCert) {
-      const { fileName, iv, mimeType } = await uploadCertificateFile(userId, pendingCert.file);
-      const cert = await createCertificate(userId, {
-        label: pendingCert.label,
+    // --- 4. Upload new document file ---
+    if (pendingDoc) {
+      const { fileName, iv, mimeType } = await uploadDocumentFile(userId, pendingDoc.file);
+      const doc = await createDocument(userId, {
+        label: pendingDoc.label,
         file_name: fileName,
         file_iv: iv,
         file_mime: mimeType,
-        education_id: savedEdu.id,
+        domain: "education",
+        linked_id: savedEdu.id,
         updated_at: nowIso,
       });
-      newCertIds.push(cert.id);
+      newDocIds.push(doc.id);
       needsUpdate = true;
     }
 
-    // --- 5. Link an existing unlinked certificate ---
-    if (pendingLinkCertId) {
-      const pcert = freshCerts.find(c => c.id === pendingLinkCertId);
-      if (pcert) {
-        await updateCertificate(userId, pendingLinkCertId, {
-          ...pcert,
-          education_id: savedEdu.id,
+    // --- 5. Link an existing unlinked document ---
+    if (pendingLinkDocId) {
+      const pdoc = freshDocs.find(d => d.id === pendingLinkDocId);
+      if (pdoc) {
+        await updateDocument(userId, pendingLinkDocId, {
+          ...pdoc,
+          linked_id: savedEdu.id,
           updated_at: nowIso,
-        } as CertificatePlaintext);
-        if (!newCertIds.includes(pendingLinkCertId)) {
-          newCertIds.push(pendingLinkCertId);
+        } as DocumentPlaintext);
+        if (!newDocIds.includes(pendingLinkDocId)) {
+          newDocIds.push(pendingLinkDocId);
         }
         needsUpdate = true;
       }
     }
 
-    // --- 6. Update education with final cert IDs if anything changed ---
+    // --- 6. Update education with final doc IDs if anything changed ---
     if (needsUpdate) {
       await updateEducation(userId, savedEdu.id, {
         ...payload,
-        certificate_ids: newCertIds,
+        document_ids: newDocIds,
         updated_at: new Date().toISOString(),
       });
     }
 
-    // Single refreshData call at the end — no mid-save re-renders
     await refreshData(userId);
   }
 
   async function handleEducationDelete(educationId: string, cascadeMode: 'unlink' | 'cascade') {
     if (!userId) throw new Error("No active session.");
 
+    const eduDocs = documents.filter(
+      (d) => d.domain === "education" && d.linked_id === educationId
+    );
+
     if (cascadeMode === 'unlink') {
-      const linkedCerts = certificates.filter((c) => c.education_id === educationId);
       const nowIso = new Date().toISOString();
-      for (const cert of linkedCerts) {
-        await updateCertificate(userId, cert.id, {
-          ...cert,
-          education_id: "",
+      for (const doc of eduDocs) {
+        await updateDocument(userId, doc.id, {
+          ...doc,
+          linked_id: "",
           updated_at: nowIso,
-        } as CertificatePlaintext);
+        } as DocumentPlaintext);
       }
     } else {
-      // Clean up all linked certificates and their storage files
-      const linkedCerts = certificates.filter((c) => c.education_id === educationId);
-      for (const cert of linkedCerts) {
-        if (cert.file_name) {
-          try {
-            await deleteCertificateFile(userId, cert.file_name);
-          } catch {
-            // Best-effort storage cleanup — don't block deletion
-          }
+      for (const doc of eduDocs) {
+        if (doc.file_name) {
+          try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
         }
-        await deleteCertificate(cert.id);
+        await deleteDocument(doc.id);
       }
     }
 
@@ -283,63 +276,59 @@ export default function EducationView() {
   }
 
   function handleQuickComplete(education: Education) {
-    // Open the edit modal with 'is_completed' toggled on
     setEduModalTarget({ ...education, is_completed: true });
   }
 
-  // ---- Certificate handlers (from EducationModal side panel) ----
+  // ---- Document handlers (from EducationModal side panel) ----
 
-  async function handleLinkCertificate(educationId: string, certificateId: string) {
+  async function handleLinkDocument(educationId: string, documentId: string) {
     if (!userId) throw new Error("No active session.");
-    const cert = certificates.find((c) => c.id === certificateId);
-    if (!cert) return;
+    const doc = documents.find((d) => d.id === documentId);
+    if (!doc) return;
     const nowIso = new Date().toISOString();
-    
-    await updateCertificate(userId, certificateId, {
-      ...cert,
-      education_id: educationId,
+
+    await updateDocument(userId, documentId, {
+      ...doc,
+      linked_id: educationId,
       updated_at: nowIso,
-    } as CertificatePlaintext);
-    
+    } as DocumentPlaintext);
+
     const edu = educations.find(e => e.id === educationId);
-    if (edu && !edu.certificate_ids.includes(certificateId)) {
+    if (edu && !edu.document_ids.includes(documentId)) {
       await updateEducation(userId, educationId, {
         ...edu,
-        certificate_ids: [...edu.certificate_ids, certificateId],
+        document_ids: [...edu.document_ids, documentId],
         updated_at: nowIso
       } as EducationPlaintext);
     }
     await refreshData(userId);
   }
 
-  async function handleUnlinkCertificate(educationId: string, certificateId: string) {
+  async function handleUnlinkDocument(educationId: string, documentId: string) {
     if (!userId) throw new Error("No active session.");
-    const cert = certificates.find((c) => c.id === certificateId);
-    if (!cert) return;
+    const doc = documents.find((d) => d.id === documentId);
+    if (!doc) return;
     const nowIso = new Date().toISOString();
-    
-    await updateCertificate(userId, certificateId, {
-      ...cert,
-      education_id: "",
+
+    await updateDocument(userId, documentId, {
+      ...doc,
+      linked_id: "",
       updated_at: nowIso,
-    } as CertificatePlaintext);
-    
+    } as DocumentPlaintext);
+
     const edu = educations.find(e => e.id === educationId);
     if (edu) {
-      const newCertIds = edu.certificate_ids.filter(id => id !== certificateId);
-      const isStillCompleted = newCertIds.length > 0 ? edu.is_completed : false;
+      const newDocIds = edu.document_ids.filter(id => id !== documentId);
       await updateEducation(userId, educationId, {
         ...edu,
-        certificate_ids: newCertIds,
-        is_completed: isStillCompleted,
-        completed_at: isStillCompleted ? edu.completed_at : null,
+        document_ids: newDocIds,
         updated_at: nowIso
       } as EducationPlaintext);
     }
     await refreshData(userId);
   }
 
-  async function handleUploadCertificateForEducation(
+  async function handleUploadDocumentForEducation(
     educationId: string,
     file: File,
     label: string
@@ -347,13 +336,14 @@ export default function EducationView() {
     if (!userId) throw new Error("No active session.");
     const nowIso = new Date().toISOString();
 
-    const { fileName, iv, mimeType } = await uploadCertificateFile(userId, file);
-    const cert = await createCertificate(userId, {
+    const { fileName, iv, mimeType } = await uploadDocumentFile(userId, file);
+    const doc = await createDocument(userId, {
       label,
       file_name: fileName,
       file_iv: iv,
       file_mime: mimeType,
-      education_id: educationId,
+      domain: "education",
+      linked_id: educationId,
       updated_at: nowIso,
     });
 
@@ -361,68 +351,58 @@ export default function EducationView() {
     if (edu) {
       await updateEducation(userId, edu.id, {
         ...edu,
-        certificate_ids: [...edu.certificate_ids, cert.id],
+        document_ids: [...edu.document_ids, doc.id],
         updated_at: nowIso,
       } as EducationPlaintext);
     }
-    
+
     await refreshData(userId);
-    return cert;
+    return doc;
   }
 
-  async function handleDownloadCertificate(certificate: Certificate) {
+  async function handleDownloadDocument(doc: Document) {
     if (!userId) throw new Error("No active session.");
-    const blob = await downloadCertificateFile(
+    const blob = await downloadDocumentFile(
       userId,
-      certificate.file_name,
-      certificate.file_iv,
-      certificate.file_mime
+      doc.file_name,
+      doc.file_iv,
+      doc.file_mime
     );
-    // Trigger browser download
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = certificate.label || "certificate";
+    a.download = doc.label || "document";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
-  async function handleDeleteCertificateFromEducation(certificate: Certificate, cascadeMode: 'unlink' | 'cascade') {
+  async function handleDeleteDocumentFromEducation(doc: Document, cascadeMode: 'unlink' | 'cascade') {
     if (!userId) throw new Error("No active session.");
 
-    if (cascadeMode === 'cascade' && certificate.education_id) {
-       await deleteEducation(certificate.education_id);
-    } else if (cascadeMode === 'unlink' && certificate.education_id) {
-      // Unlink from education before deleting
-      const edu = educations.find((e) => e.id === certificate.education_id);
+    if (cascadeMode === 'cascade' && doc.linked_id) {
+       await deleteEducation(doc.linked_id);
+    } else if (cascadeMode === 'unlink' && doc.linked_id) {
+      const edu = educations.find((e) => e.id === doc.linked_id);
       if (edu) {
         const nowIso = new Date().toISOString();
-        const newCertIds = edu.certificate_ids.filter((id) => id !== certificate.id);
-        const isStillCompleted = newCertIds.length > 0 ? edu.is_completed : false;
+        const newDocIds = edu.document_ids.filter((id) => id !== doc.id);
         await updateEducation(userId, edu.id, {
           ...edu,
-          certificate_ids: newCertIds,
-          is_completed: isStillCompleted,
-          completed_at: isStillCompleted ? edu.completed_at : null,
+          document_ids: newDocIds,
           updated_at: nowIso,
         } as EducationPlaintext);
       }
     }
 
-    // Delete storage file
-    if (certificate.file_name) {
-      try { await deleteCertificateFile(userId, certificate.file_name); } catch {}
+    if (doc.file_name) {
+      try { await deleteDocumentFile(userId, doc.file_name); } catch {}
     }
 
-    // Delete DB row
-    await deleteCertificate(certificate.id);
+    await deleteDocument(doc.id);
     await refreshData(userId);
   }
-
-  // ---- Standalone Certificate CRUD (from CertificateModal) ----
-  // Removed.
 
   return (
     <div className="space-y-4">
@@ -433,7 +413,7 @@ export default function EducationView() {
             Education
           </h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Track courses, certifications, and uploaded certificates.
+            Track courses, certifications, and uploaded documents.
           </p>
         </div>
       </div>
@@ -462,7 +442,7 @@ export default function EducationView() {
 
           <CompletedEducationsBox
             educations={completedEducations}
-            certificates={certificates}
+            documents={documents}
             isLoading={isLoading}
             onOpenExpanded={() => router.push(ROUTES.EDUCATION_COMPLETED)}
             onSelectEducation={(edu) => { window.location.hash = `edit-education-${edu.id}`; }}
@@ -477,20 +457,19 @@ export default function EducationView() {
         />
       )}
 
-      {/* CRUD modal (hash-driven) */}
       {eduModalTarget && (
         <EducationModal
           education={eduModalTarget === "create" ? null : eduModalTarget}
-          certificates={certificates}
+          documents={documents}
           userId={userId || ""}
           onClose={closeEduModal}
           onSave={handleEducationSave}
           onDelete={handleEducationDelete}
-          onUploadCertificate={handleUploadCertificateForEducation}
-          onDownloadCertificate={handleDownloadCertificate}
-          onDeleteCertificate={handleDeleteCertificateFromEducation}
-          onLinkCertificate={handleLinkCertificate}
-          onUnlinkCertificate={handleUnlinkCertificate}
+          onUploadDocument={handleUploadDocumentForEducation}
+          onDownloadDocument={handleDownloadDocument}
+          onDeleteDocument={handleDeleteDocumentFromEducation}
+          onLinkDocument={handleLinkDocument}
+          onUnlinkDocument={handleUnlinkDocument}
         />
       )}
     </div>

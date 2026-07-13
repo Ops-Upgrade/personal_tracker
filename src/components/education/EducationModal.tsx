@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Education, Certificate } from "@/types/education";
-import { downloadCertificateFile } from "@/api/education/certificateStorage";
+import type { Education } from "@/types/education";
+import type { Document } from "@/types/document";
+import { downloadDocumentFile } from "@/api/common/documentStorage";
 import type { Priority } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
 import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import type { ModalFile } from "@/components/common/GlobalActionModal";
-import { InputField, SelectField, TextareaField, CheckboxField } from "@/components/common/FormField";
+import { InputField, SelectField, CheckboxField } from "@/components/common/FormField";
+import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
-import { certsForEducation, getUniqueFileName, trunc } from "./helpers";
+import { docsForEducation, getUniqueFileName, trunc } from "./helpers";
 
 // --- Types ---
 
@@ -25,19 +27,19 @@ interface EducationDraft {
 
 interface EducationModalProps {
   education: Education | null;
-  certificates: Certificate[];
+  documents: Document[];
   /** ALL educations (needed for standalone mode dropdown) */
   allEducations?: Education[];
   userId: string;
   onClose: () => void;
-  onSave: (draft: EducationDraft, existingEducation: Education | null, pendingCert?: { file: File; label: string }, pendingLinkCertId?: string, pendingUnlinkCertIds?: string[], pendingDeleteCertIds?: string[]) => Promise<void>;
+  onSave: (draft: EducationDraft, existingEducation: Education | null, pendingDoc?: { file: File; label: string }, pendingLinkDocId?: string, pendingUnlinkDocIds?: string[], pendingDeleteDocIds?: string[]) => Promise<void>;
   onDelete: (educationId: string, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
-  onUploadCertificate: (educationId: string, file: File, label: string) => Promise<Certificate>;
-  onDownloadCertificate: (certificate: Certificate) => Promise<void>;
-  onDeleteCertificate: (certificate: Certificate, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
-  onLinkCertificate: (educationId: string, certificateId: string) => Promise<void>;
-  onUnlinkCertificate: (educationId: string, certificateId: string) => Promise<void>;
-  // --- Standalone mode (Task 2.2) ---
+  onUploadDocument: (educationId: string, file: File, label: string) => Promise<Document>;
+  onDownloadDocument: (document: Document) => Promise<void>;
+  onDeleteDocument: (document: Document, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
+  onLinkDocument: (educationId: string, documentId: string) => Promise<void>;
+  onUnlinkDocument: (educationId: string, documentId: string) => Promise<void>;
+  // --- Standalone mode ---
   /** When true: form becomes "link existing OR create new" instead of standard education edit */
   isStandaloneMode?: boolean;
   /** Called instead of onSave in standalone mode */
@@ -55,13 +57,13 @@ interface EducationModalProps {
 
 export default function EducationModal({
   education,
-  certificates,
+  documents,
   allEducations,
   userId,
   onClose,
   onSave,
   onDelete,
-  onDownloadCertificate,
+  onDownloadDocument,
   isStandaloneMode = false,
   onSaveStandalone,
 }: EducationModalProps) {
@@ -78,22 +80,21 @@ export default function EducationModal({
   // --- Delete confirmation ---
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // --- Certificate management ---
+  // --- Document management ---
   const [newFiles, setNewFiles] = useState<{ file: File; label: string; tempId: string }[]>([]);
   const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(new Set());
   const [markedForUnlink, setMarkedForUnlink] = useState<Set<string>>(new Set());
-  const [stagedLinkCertId, setStagedLinkCertId] = useState<string | null>(null);
-  const [selectedCertId, setSelectedCertId] = useState<string | null>(() => {
-    // Set before first render — no one-frame queue flash (matching ExpenseModal behavior)
+  const [stagedLinkDocId, setStagedLinkDocId] = useState<string | null>(null);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(() => {
     if (isStandaloneMode || !education) return null;
-    const certs = certsForEducation(education.id, certificates);
-    return certs.length > 0 ? certs[0].id : null;
+    const docs = docsForEducation(education.id, documents);
+    return docs.length > 0 ? docs[0].id : null;
   });
 
   const [linkSearchQuery, setLinkSearchQuery] = useState("");
   const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
 
-  // Standalone mode state (Task 2.2)
+  // Standalone mode state
   const [standaloneFile, setStandaloneFile] = useState<File | null>(null);
   const [standaloneLinkedEduId, setStandaloneLinkedEduId] = useState("");
   const [standaloneNewEduName, setStandaloneNewEduName] = useState("");
@@ -122,19 +123,18 @@ export default function EducationModal({
     setNewFiles([]);
     setMarkedForDeletion(new Set());
     setMarkedForUnlink(new Set());
-    setStagedLinkCertId(null);
-    // Auto-select first existing cert on open (matching ExpenseModal behavior)
-    const existingCerts = education ? certsForEducation(education.id, certificates) : [];
-    setSelectedCertId(existingCerts.length > 0 ? existingCerts[0].id : null);
+    setStagedLinkDocId(null);
+    const existingDocs = education ? docsForEducation(education.id, documents) : [];
+    setSelectedDocId(existingDocs.length > 0 ? existingDocs[0].id : null);
     setLinkSearchQuery("");
     setLinkDropdownOpen(false);
     setStandaloneFile(null);
     setStandaloneLinkedEduId("");
     setStandaloneNewEduName("");
     setStandaloneNewEduProvider("");
-  }, [education, isStandaloneMode, certificates]);
+  }, [education, isStandaloneMode, documents]);
 
-  // ── Baseline form values (single source of truth for both reset AND dirty check) ──
+  // ── Baseline form values ──
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
   const formBaseline = useMemo(() => ({
     name: education?.name ?? "",
@@ -147,13 +147,14 @@ export default function EducationModal({
 
   // --- Dirty check ---
 
-  const linkedCerts = useMemo(
-    () => education ? certsForEducation(education.id, certificates) : [],
-    [education, certificates]
+  const linkedDocs = useMemo(
+    () => education ? docsForEducation(education.id, documents) : [],
+    [education, documents]
   );
-  const standaloneCerts = certificates.filter(c => !c.education_id);
+  const standaloneDocs = documents.filter(
+    (d) => d.domain === "education" && !d.linked_id
+  );
 
-  // Compare current form state against baseline (computed once, never mismatches)
   const hasFormChanges =
     name !== formBaseline.name ||
     provider !== formBaseline.provider ||
@@ -164,7 +165,7 @@ export default function EducationModal({
 
   const isDirty = isStandaloneMode
     ? standaloneFile !== null || standaloneLinkedEduId !== "" || standaloneNewEduName !== "" || standaloneNewEduProvider !== ""
-    : hasFormChanges || newFiles.length > 0 || stagedLinkCertId !== null || markedForDeletion.size > 0 || markedForUnlink.size > 0;
+    : hasFormChanges || newFiles.length > 0 || stagedLinkDocId !== null || markedForDeletion.size > 0 || markedForUnlink.size > 0;
 
   // --- Build files array for GlobalActionModal ---
 
@@ -189,22 +190,22 @@ export default function EducationModal({
       isNew?: boolean;
       isMarkedForDeletion?: boolean;
       isMarkedForUnlink?: boolean;
-      orderGroup: number;   // 0=existing certs, 1=new uploads, 2=staged link
-      orderIndex: number;   // position within group for stable numbering
+      orderGroup: number;
+      orderIndex: number;
     };
 
     const entries: FileEntry[] = [];
 
-    // Existing linked certs (show all; marked ones carry badge flags)
+    // Existing linked docs
     let idx = 0;
-    for (const cert of linkedCerts) {
-      const isDeletion = markedForDeletion.has(cert.id);
-      const isUnlink = markedForUnlink.has(cert.id);
+    for (const doc of linkedDocs) {
+      const isDeletion = markedForDeletion.has(doc.id);
+      const isUnlink = markedForUnlink.has(doc.id);
       entries.push({
-        id: cert.id,
-        rawName: cert.label || "Unnamed Certificate",
-        mime: cert.file_mime,
-        iv: cert.file_iv,
+        id: doc.id,
+        rawName: doc.label || "Unnamed Document",
+        mime: doc.file_mime,
+        iv: doc.file_iv,
         isMarkedForDeletion: isDeletion || undefined,
         isMarkedForUnlink: isUnlink || undefined,
         orderGroup: 0,
@@ -226,15 +227,15 @@ export default function EducationModal({
       });
     }
 
-    // Staged link cert
-    if (stagedLinkCertId) {
-      const sc = certificates.find(c => c.id === stagedLinkCertId);
-      if (sc) {
+    // Staged link doc
+    if (stagedLinkDocId) {
+      const sd = documents.find(d => d.id === stagedLinkDocId);
+      if (sd) {
         entries.push({
-          id: sc.id,
-          rawName: sc.label || "Unnamed Certificate",
-          mime: sc.file_mime,
-          iv: sc.file_iv,
+          id: sd.id,
+          rawName: sd.label || "Unnamed Document",
+          mime: sd.file_mime,
+          iv: sd.file_iv,
           isNew: true,
           orderGroup: 2,
           orderIndex: 0,
@@ -242,7 +243,7 @@ export default function EducationModal({
       }
     }
 
-    // Number duplicates: group by rawName, append (1)/(2)/… when >1
+    // Number duplicates
     const buckets = new Map<string, FileEntry[]>();
     for (const e of entries) {
       if (!buckets.has(e.rawName)) buckets.set(e.rawName, []);
@@ -251,7 +252,6 @@ export default function EducationModal({
 
     const result: ModalFile[] = [];
     for (const [, bucket] of buckets) {
-      // Stable sort: existing certs first, then new uploads, then staged
       bucket.sort((a, b) => a.orderGroup - b.orderGroup || a.orderIndex - b.orderIndex);
       if (bucket.length === 1) {
         const e = bucket[0];
@@ -264,33 +264,30 @@ export default function EducationModal({
     }
 
     return result;
-  }, [isStandaloneMode, standaloneFile, linkedCerts, newFiles, stagedLinkCertId, markedForDeletion, markedForUnlink, certificates]);
+  }, [isStandaloneMode, standaloneFile, linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, documents]);
 
   // --- File action handlers ---
 
   const handleFileDelete = (fileId: string) => {
     if (isStandaloneMode) {
       setStandaloneFile(null);
-      setSelectedCertId(null);
+      setSelectedDocId(null);
       return;
     }
 
-    // If it's a new (unsaved) file, remove it immediately
     const newFile = newFiles.find(nf => nf.tempId === fileId);
     if (newFile) {
       setNewFiles(prev => prev.filter(nf => nf.tempId !== fileId));
-      if (selectedCertId === fileId) setSelectedCertId(null);
+      if (selectedDocId === fileId) setSelectedDocId(null);
       return;
     }
 
-    // If it's the staged link, unstage it
-    if (stagedLinkCertId === fileId) {
-      setStagedLinkCertId(null);
-      if (selectedCertId === fileId) setSelectedCertId(null);
+    if (stagedLinkDocId === fileId) {
+      setStagedLinkDocId(null);
+      if (selectedDocId === fileId) setSelectedDocId(null);
       return;
     }
 
-    // Toggle mark for deletion
     setMarkedForDeletion(prev => {
       const next = new Set(prev);
       if (next.has(fileId)) next.delete(fileId);
@@ -302,7 +299,7 @@ export default function EducationModal({
 
   const handleFileUnlink = (fileId: string) => {
     if (isStandaloneMode) return;
-    if (stagedLinkCertId === fileId) { setStagedLinkCertId(null); return; }
+    if (stagedLinkDocId === fileId) { setStagedLinkDocId(null); return; }
     if (newFiles.find(nf => nf.tempId === fileId)) return;
 
     setMarkedForUnlink(prev => {
@@ -336,15 +333,14 @@ export default function EducationModal({
       return;
     }
 
-    const cert = [...linkedCerts, ...certificates].find(c => c.id === fileId);
-    if (!cert) return;
+    const doc = [...linkedDocs, ...documents].find(d => d.id === fileId);
+    if (!doc) return;
 
-    try { await onDownloadCertificate(cert); }
-    catch (err) { alert(err instanceof Error ? err.message : "Failed to download certificate."); }
+    try { await onDownloadDocument(doc); }
+    catch (err) { alert(err instanceof Error ? err.message : "Failed to download document."); }
   };
 
   const handleFileRename = (fileId: string, newName: string) => {
-    // Standalone mode: rename the uploaded file
     if (isStandaloneMode && fileId === "standalone-file" && standaloneFile) {
       const renamed = new File([standaloneFile], newName, {
         type: standaloneFile.type,
@@ -354,7 +350,6 @@ export default function EducationModal({
       return;
     }
 
-    // Standard mode: rename a new unsaved file
     const newFile = newFiles.find((nf) => nf.tempId === fileId);
     if (newFile) {
       setNewFiles((prev) =>
@@ -364,74 +359,60 @@ export default function EducationModal({
       );
       return;
     }
-
-    // For existing linked certs or staged link, rename is deferred to save
-    // (the label flows through the parent's API path via TileView)
   };
 
   const handleFileUpload = (file: File) => {
     if (isStandaloneMode) {
-      // Standalone mode: dedup against all existing certificate labels
-      const existingNames = new Set(certificates.map(c => c.label || ""));
+      const existingNames = new Set(documents.map(d => d.label || ""));
       const uniqueName = getUniqueFileName(file.name, existingNames);
-      // Rename the file object so the dedup'd name is stored
       const renamedFile = new File([file], uniqueName, { type: file.type, lastModified: file.lastModified });
       setStandaloneFile(renamedFile);
       return;
     }
 
-    // Build the set of all taken names across the ENTIRE certificate store
     const taken = new Set<string>();
-    // All existing certificates (entire store) — skip those marked for deletion/unlink in this session
-    for (const cert of certificates) {
-      if (linkedCerts.some(lc => lc.id === cert.id)) {
-        // For certs linked to this education, respect deletion/unlink marks
-        if (markedForDeletion.has(cert.id)) continue;
-        if (markedForUnlink.has(cert.id)) continue;
+    for (const doc of documents) {
+      if (linkedDocs.some(ld => ld.id === doc.id)) {
+        if (markedForDeletion.has(doc.id)) continue;
+        if (markedForUnlink.has(doc.id)) continue;
       }
-      if (cert.label) taken.add(cert.label);
+      if (doc.label) taken.add(doc.label);
     }
-    // Also consider the staged link cert (already in certificates, but ensure it's included)
-    if (stagedLinkCertId) {
-      const sc = certificates.find(c => c.id === stagedLinkCertId);
-      if (sc && sc.label) taken.add(sc.label);
+    if (stagedLinkDocId) {
+      const sd = documents.find(d => d.id === stagedLinkDocId);
+      if (sd && sd.label) taken.add(sd.label);
     }
 
     setNewFiles(prev => {
-      // Also include already-queued new files in this session
       for (const nf of prev) taken.add(nf.label);
-
       const label = getUniqueFileName(file.name, taken);
-
       const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
       return [...prev, { file, label, tempId }];
     });
 
-    // Return to queue view so the newly added file is visible in the list
-    setSelectedCertId(null);
+    setSelectedDocId(null);
   };
 
-  const handleLinkDropdownSelect = (certId: string) => {
-    if (!certId) return;
-    setStagedLinkCertId(certId);
+  const handleLinkDropdownSelect = (docId: string) => {
+    if (!docId) return;
+    setStagedLinkDocId(docId);
     setLinkSearchQuery("");
     setLinkDropdownOpen(false);
-    // Return to queue view so the newly linked file is visible in the list
-    setSelectedCertId(null);
+    setSelectedDocId(null);
   };
 
-  // Standalone certs available for linking (excludes currently staged, searches label + file_name)
-  const filteredLinkCerts = useMemo(() => {
-    const available = stagedLinkCertId
-      ? standaloneCerts.filter(c => c.id !== stagedLinkCertId)
-      : standaloneCerts;
+  // Standalone docs available for linking (excludes currently staged)
+  const filteredLinkDocs = useMemo(() => {
+    const available = stagedLinkDocId
+      ? standaloneDocs.filter(d => d.id !== stagedLinkDocId)
+      : standaloneDocs;
     if (!linkSearchQuery.trim()) return available;
     const q = linkSearchQuery.toLowerCase();
-    return available.filter(c =>
-      (c.label || "").toLowerCase().includes(q) ||
-      (c.file_name || "").toLowerCase().includes(q)
+    return available.filter(d =>
+      (d.label || "").toLowerCase().includes(q) ||
+      (d.file_name || "").toLowerCase().includes(q)
     );
-  }, [standaloneCerts, linkSearchQuery, stagedLinkCertId]);
+  }, [standaloneDocs, linkSearchQuery, stagedLinkDocId]);
 
   const handleLoadPreview = async (fileId: string): Promise<Blob> => {
     if (isStandaloneMode && standaloneFile) return standaloneFile;
@@ -439,11 +420,11 @@ export default function EducationModal({
     const newFile = newFiles.find(nf => nf.tempId === fileId);
     if (newFile) return newFile.file;
 
-    const cert = [...linkedCerts, ...certificates].find(c => c.id === fileId);
-    if (!cert || !cert.file_name || !cert.file_iv || !cert.file_mime) {
+    const doc = [...linkedDocs, ...documents].find(d => d.id === fileId);
+    if (!doc || !doc.file_name || !doc.file_iv || !doc.file_mime) {
       throw new Error("Cannot load preview for this file.");
     }
-    return downloadCertificateFile(userId, cert.file_name, cert.file_iv, cert.file_mime);
+    return downloadDocumentFile(userId, doc.file_name, doc.file_iv, doc.file_mime);
   };
 
   // --- Delete handler ---
@@ -454,7 +435,6 @@ export default function EducationModal({
 
   // --- Save handler ---
   const handleSaveWithFullProcessing = async () => {
-    // Standalone mode save (Task 2.2)
     if (isStandaloneMode) {
       if (!standaloneFile) {
         setError("Please upload a certificate file.");
@@ -484,7 +464,6 @@ export default function EducationModal({
       return;
     }
 
-    // Standard mode save
     if (!name.trim()) {
       setError("Education name is required.");
       return;
@@ -494,15 +473,11 @@ export default function EducationModal({
     setError(null);
 
     try {
-      // Capture all mutable state BEFORE any async operations.
-      // All cert operations (unlink, delete, link, upload) are passed to onSave
-      // so they execute atomically with a single refreshData at the end,
-      // avoiding mid-save re-renders that reset modal state.
-      const certsToUnlink = [...markedForUnlink];
-      const certsToDelete = [...markedForDeletion];
-      const certToLink = stagedLinkCertId;
+      const docsToUnlink = [...markedForUnlink];
+      const docsToDelete = [...markedForDeletion];
+      const docToLink = stagedLinkDocId;
       const firstNewFile = newFiles[0];
-      const pendingCert = firstNewFile ? { file: firstNewFile.file, label: firstNewFile.label } : undefined;
+      const pendingDoc = firstNewFile ? { file: firstNewFile.file, label: firstNewFile.label } : undefined;
       const finalName = name.trim();
       const finalProvider = provider.trim();
       const finalPriority = priority;
@@ -510,7 +485,6 @@ export default function EducationModal({
       const finalDescription = description.trim();
       const finalIsCompleted = isCompleted;
 
-      // All operations consolidated into onSave to prevent refreshData race conditions
       await onSave(
         {
           name: finalName,
@@ -521,10 +495,10 @@ export default function EducationModal({
           is_completed: finalIsCompleted,
         },
         education,
-        pendingCert,
-        certToLink ?? undefined,
-        certsToUnlink.length > 0 ? certsToUnlink : undefined,
-        certsToDelete.length > 0 ? certsToDelete : undefined,
+        pendingDoc,
+        docToLink ?? undefined,
+        docsToUnlink.length > 0 ? docsToUnlink : undefined,
+        docsToDelete.length > 0 ? docsToDelete : undefined,
       );
 
       onClose();
@@ -535,110 +509,102 @@ export default function EducationModal({
     }
   };
 
-  // --- Build link dropdown (Task 2.1) for rightPanelExtras ---
-  // Searchable combobox: input IS the trigger with chevron beside it
+  // --- Build link dropdown for rightPanelExtras ---
   const linkDropdownExtras = useMemo(() => {
     if (isStandaloneMode) return null;
-    if (standaloneCerts.length === 0 && !stagedLinkCertId) return null;
+    if (standaloneDocs.length === 0 && !stagedLinkDocId) return null;
 
-    // Build display names: show label only; number duplicates (no UUIDs exposed)
-    const labelBuckets = new Map<string, Certificate[]>();
-    for (const cert of standaloneCerts) {
-      const key = cert.label || "Unnamed";
+    const labelBuckets = new Map<string, Document[]>();
+    for (const doc of standaloneDocs) {
+      const key = doc.label || "Unnamed";
       if (!labelBuckets.has(key)) labelBuckets.set(key, []);
-      labelBuckets.get(key)!.push(cert);
+      labelBuckets.get(key)!.push(doc);
     }
     const displayName = new Map<string, string>();
     for (const [, bucket] of labelBuckets) {
       if (bucket.length === 1) {
         displayName.set(bucket[0].id, trunc(bucket[0].label || "Unnamed", 55));
       } else {
-        // Stable sort by created_at so numbering is consistent
         bucket.sort((a, b) => a.created_at.localeCompare(b.created_at));
-        bucket.forEach((cert, i) => {
-          displayName.set(cert.id, `${trunc(cert.label || "Unnamed", 50)} (${i + 1})`);
+        bucket.forEach((doc, i) => {
+          displayName.set(doc.id, `${trunc(doc.label || "Unnamed", 50)} (${i + 1})`);
         });
       }
     }
-    const fmt = (cert: Certificate): string =>
-      displayName.get(cert.id) || trunc(cert.label || "Unnamed", 55);
+    const fmt = (doc: Document): string =>
+      displayName.get(doc.id) || trunc(doc.label || "Unnamed", 55);
 
-    const stagedCert = stagedLinkCertId
-      ? standaloneCerts.find(c => c.id === stagedLinkCertId)
+    const stagedDoc = stagedLinkDocId
+      ? standaloneDocs.find(d => d.id === stagedLinkDocId)
       : null;
-    const stagedLabel = stagedCert ? fmt(stagedCert) : null;
+    const stagedLabel = stagedDoc ? fmt(stagedDoc) : null;
 
-    // If a cert is staged, show its full display name; otherwise show typed query
-    const displayValue = stagedLinkCertId ? (stagedLabel ?? "") : linkSearchQuery;
+    const displayValue = stagedLinkDocId ? (stagedLabel ?? "") : linkSearchQuery;
 
     return (
       <div className="relative w-full">
-          {/* Label */}
-          <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-            Select a file from the store
-          </span>
+        <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+          Select a file from the store
+        </span>
 
-          {/* Combobox: input + chevron — type to filter, chevron toggles dropdown */}
-          <div className="relative flex items-center">
-            <input
-              type="text"
-              value={displayValue}
-              onChange={(e) => {
-                if (stagedLinkCertId) setStagedLinkCertId(null);
-                setLinkSearchQuery(e.target.value);
-                if (!linkDropdownOpen) setLinkDropdownOpen(true);
-              }}
-              onFocus={() => { if (!linkDropdownOpen) setLinkDropdownOpen(true); }}
-              onBlur={() => setTimeout(() => setLinkDropdownOpen(false), 150)}
-              placeholder="Select file..."
-              disabled={isSaving}
-              className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 pr-7 text-xs outline-none focus:border-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-            />
-            <button
-              type="button"
-              tabIndex={-1}
-              onClick={() => { setLinkDropdownOpen(prev => !prev); }}
-              disabled={isSaving}
-              className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
-            >
-              <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Dropdown popup: filtered results */}
-          {linkDropdownOpen && (
-            <div className="absolute z-10 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-              {filteredLinkCerts.length > 0 ? (
-                <div className="max-h-36 overflow-y-auto">
-                  {filteredLinkCerts.map(cert => (
-                    <button
-                      key={cert.id}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => handleLinkDropdownSelect(cert.id)}
-                      className="w-full px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-zinc-300 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400"
-                    >
-                      {fmt(cert)}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="px-3 py-2 text-xs text-zinc-400">
-                  {linkSearchQuery ? "No certificates found" : "No certificates available"}
-                </div>
-              )}
-            </div>
-          )}
+        <div className="relative flex items-center">
+          <input
+            type="text"
+            value={displayValue}
+            onChange={(e) => {
+              if (stagedLinkDocId) setStagedLinkDocId(null);
+              setLinkSearchQuery(e.target.value);
+              if (!linkDropdownOpen) setLinkDropdownOpen(true);
+            }}
+            onFocus={() => { if (!linkDropdownOpen) setLinkDropdownOpen(true); }}
+            onBlur={() => setTimeout(() => setLinkDropdownOpen(false), 150)}
+            placeholder="Select file..."
+            disabled={isSaving}
+            className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 pr-7 text-xs outline-none focus:border-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+          />
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => { setLinkDropdownOpen(prev => !prev); }}
+            disabled={isSaving}
+            className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50"
+          >
+            <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+            </svg>
+          </button>
         </div>
-    );
 
-  }, [isStandaloneMode, linkSearchQuery, linkDropdownOpen, filteredLinkCerts, stagedLinkCertId, standaloneCerts, isSaving]);
+        {linkDropdownOpen && (
+          <div className="absolute z-10 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+            {filteredLinkDocs.length > 0 ? (
+              <div className="max-h-36 overflow-y-auto">
+                {filteredLinkDocs.map(doc => (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handleLinkDropdownSelect(doc.id)}
+                    className="w-full px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-zinc-300 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400"
+                  >
+                    {fmt(doc)}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="px-3 py-2 text-xs text-zinc-400">
+                {linkSearchQuery ? "No documents found" : "No documents available"}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }, [isStandaloneMode, linkSearchQuery, linkDropdownOpen, filteredLinkDocs, stagedLinkDocId, standaloneDocs, isSaving]);
 
   // --- Render ---
 
-  // Standalone mode: use simpler modal (no delete for new cert)
+  // Standalone mode
   if (isStandaloneMode) {
     const eduOptions = allEducations || [];
     const standaloneFormDisabled = standaloneLinkedEduId !== "";
@@ -650,8 +616,8 @@ export default function EducationModal({
           onClose={onClose}
           isDirty={isDirty}
           files={files}
-          selectedFileId={selectedCertId}
-          onSelectFile={(id) => setSelectedCertId(id)}
+          selectedFileId={selectedDocId}
+          onSelectFile={(id) => setSelectedDocId(id)}
           onFileDelete={standaloneFile ? handleFileDelete : undefined}
           onFileDownload={standaloneFile ? handleFileDownload : undefined}
           onFileRename={standaloneFile ? handleFileRename : undefined}
@@ -661,7 +627,6 @@ export default function EducationModal({
           isSaving={isSaving}
         >
           <div className="flex flex-col h-full space-y-3">
-            {/* Link to existing record dropdown (Task 2.2 item 3) */}
             <div>
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
@@ -699,14 +664,12 @@ export default function EducationModal({
               </label>
             </div>
 
-            {/* --- or --- divider (Task 2.2 item 4) */}
             <div className="flex items-center gap-2">
               <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />
               <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500 uppercase">— or —</span>
               <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />
             </div>
 
-            {/* New Education form (Task 2.2 item 5) — disabled if dropdown selected */}
             <fieldset disabled={standaloneFormDisabled} className="space-y-3">
               <InputField label="Education Name" value={standaloneNewEduName} onChange={setStandaloneNewEduName} disabled={isSaving || standaloneFormDisabled} placeholder="e.g. AWS Solutions Architect" />
               <InputField label="Provider" value={standaloneNewEduProvider} onChange={setStandaloneNewEduProvider} disabled={isSaving || standaloneFormDisabled} placeholder="e.g. Amazon Web Services" />
@@ -729,8 +692,8 @@ export default function EducationModal({
         onClose={onClose}
         isDirty={isDirty}
         files={files}
-        selectedFileId={selectedCertId}
-        onSelectFile={(id) => setSelectedCertId(id)}
+        selectedFileId={selectedDocId}
+        onSelectFile={(id) => setSelectedDocId(id)}
         onFileDelete={hasFiles ? handleFileDelete : undefined}
         onFileUnlink={hasFiles ? handleFileUnlink : undefined}
         onFileDownload={hasFiles ? handleFileDownload : undefined}
@@ -758,13 +721,23 @@ export default function EducationModal({
             <InputField label="Due Date" type="date" value={dueDate} onChange={setDueDate} disabled={isSaving} />
           </div>
 
-          <TextareaField label="Description" value={description} onChange={setDescription} disabled={isSaving} rows={2} />
+          <div>
+            <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              Description
+            </label>
+            <RichTextEditor
+              value={description}
+              onChange={setDescription}
+              disabled={isSaving}
+              minHeight="8rem"
+            />
+          </div>
 
           <CheckboxField label="Mark as complete (acquired)" checked={isCompleted} onChange={setIsCompleted} disabled={isSaving} id="is_completed" />
 
           {isCompleted && (
             <div className="text-xs text-zinc-500 dark:text-zinc-400">
-              {files.length} certificate{files.length !== 1 ? "s" : ""} attached
+              {files.length} file{files.length !== 1 ? "s" : ""} attached
               {markedForDeletion.size > 0 && (
                 <span className="ml-2 text-red-500">({markedForDeletion.size} marked for deletion)</span>
               )}
@@ -783,13 +756,13 @@ export default function EducationModal({
         <ConfirmDialog
           title="Delete education?"
           description={
-            linkedCerts.length > 0
-              ? `This education has ${linkedCerts.length} linked certificate(s).`
+            linkedDocs.length > 0
+              ? `This education has ${linkedDocs.length} linked file(s).`
               : "Are you sure you want to delete this education? This cannot be undone."
           }
           confirmLabel="Delete"
           cancelLabel="Cancel"
-          showDeleteFilesCheckbox={linkedCerts.length > 0}
+          showDeleteFilesCheckbox={linkedDocs.length > 0}
           deleteFilesLabel="Delete associated files"
           onCancel={() => setShowDeleteConfirm(false)}
           onConfirm={async (deleteFiles) => {
