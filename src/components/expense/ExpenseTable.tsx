@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { useLocalStorage } from "@/lib/useLocalStorage";
+import { trunc, stripHtml } from "@/lib/viewHelpers";
 import type { Expense } from "@/types/expense";
 
 // --- Inline SVG Icon Component ---
@@ -116,8 +117,8 @@ export default function ExpenseTable({
           bVal = new Date(b.date + "T00:00:00").getTime();
           break;
         case "reason":
-          aVal = a.reason.toLowerCase();
-          bVal = b.reason.toLowerCase();
+          aVal = stripHtml(a.reason).toLowerCase();
+          bVal = stripHtml(b.reason).toLowerCase();
           break;
         default:
           return 0;
@@ -218,10 +219,6 @@ export default function ExpenseTable({
       </table>
     </div>
   );
-}
-
-function trunc(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max)}…`;
 }
 
 function formatDate(dateStr: string): string {

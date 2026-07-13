@@ -176,9 +176,26 @@ export function completedByMonths<T extends HasCompletedAt>(
 
 // ---- Text helpers ----
 
+/** Strip HTML tags from a string, returning clean plain text. */
+export function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<\/p>/gi, " ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function trunc(text: string | null | undefined, max = 70): string {
   if (!text) return "";
-  return text.length <= max ? text : `${text.slice(0, max)}...`;
+  const clean = stripHtml(text);
+  return clean.length <= max ? clean : `${clean.slice(0, max)}...`;
 }
 
 /**
