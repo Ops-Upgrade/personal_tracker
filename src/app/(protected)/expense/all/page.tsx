@@ -220,7 +220,6 @@ function AllExpensesContent() {
     <>
       <PageShell
         backHref={ROUTES.EXPENSE}
-        backLabel="← Back to Expenses"
         title={isFiltered ? `${MONTHS[monthIndex!]} ${yearFilter}` : "All Expenses"}
         description={isFiltered ? `Expenses for ${MONTHS[monthIndex!]} ${yearFilter}.` : "Browse all your expenses by year and month."}
         error={error}

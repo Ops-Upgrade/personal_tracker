@@ -105,7 +105,6 @@ export default function CompletedTasksPage() {
   return (
     <PageShell
       backHref={ROUTES.TASK_MANAGER}
-      backLabel="← Back to Task Manager"
       title="Completed Tasks"
       description="All your completed tasks."
       error={error}

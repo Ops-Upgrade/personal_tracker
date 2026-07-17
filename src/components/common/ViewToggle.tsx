@@ -27,7 +27,7 @@ export default function ViewToggle<T extends string>({
 }: ViewToggleProps<T>) {
   return (
     <div
-      className="inline-flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700"
+      className="hidden md:inline-flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700"
       role="tablist"
       aria-label={ariaLabel}
     >

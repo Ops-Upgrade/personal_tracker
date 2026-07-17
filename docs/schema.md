@@ -17,6 +17,8 @@ Update this file whenever you add or change tables, columns, indexes, or policie
 | `public` | `expenses`     | Encrypted expense blobs (expense tracker feature). |
 | `public` | `educations`   | Encrypted education/course blobs (education feature). |
 | `public` | `certificates` | Encrypted certificate metadata blobs (education feature). |
+| `public` | `media`        | Encrypted media/movie/TV tracking blobs (media tracker feature). |
+| `public` | `media_collections` | Encrypted collection grouping blobs (media tracker feature). |
 
 ---
 
@@ -309,6 +311,98 @@ CREATE POLICY "Users can manage their own certificates"
 
 ---
 
+## `public.media`
+
+Encrypted media tracking data. Each row stores one movie or TV show as an opaque AES-GCM ciphertext blob. Fields (tmdb_id, type, title, status, rating, review_notes, collection_id, episodes) live inside the encrypted `data` JSON.
+
+| Column       | Type          | Nullable | Default              | Notes |
+|--------------|---------------|----------|----------------------|-------|
+| `id`         | `UUID`        | NO       | `gen_random_uuid()`  | PK |
+| `user_id`    | `UUID`        | NO       | —                    | FK → `auth.users(id) ON DELETE CASCADE` |
+| `iv`         | `TEXT`        | NO       | —                    | Per-record AES-GCM IV (Base64) |
+| `data`       | `TEXT`        | NO       | —                    | Base64 ciphertext (encrypted JSON blob) |
+| `created_at` | `TIMESTAMPTZ` | YES      | `now()`              | Row creation timestamp |
+
+### DDL (source of truth)
+
+```sql
+CREATE TABLE public.media (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    iv text NOT NULL,
+    data text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+```
+
+### Row Level Security
+
+- **RLS:** `ENABLE ROW LEVEL SECURITY` on `public.media`.
+
+| Policy name | Command | `USING` | `WITH CHECK` |
+|-------------|---------|---------|----------------|
+| `Users can manage their own media` | `ALL` | `auth.uid() = user_id` | — |
+
+```sql
+ALTER TABLE public.media ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own media"
+    ON public.media
+    FOR ALL USING (auth.uid() = user_id);
+```
+
+### Indexes
+
+- Primary key on `id` (implicit unique index).
+
+---
+
+## `public.media_collections`
+
+Encrypted collection grouping data. Each row stores one collection (name, description, color) used to group media items.
+
+| Column       | Type          | Nullable | Default              | Notes |
+|--------------|---------------|----------|----------------------|-------|
+| `id`         | `UUID`        | NO       | `gen_random_uuid()`  | PK |
+| `user_id`    | `UUID`        | NO       | —                    | FK → `auth.users(id) ON DELETE CASCADE` |
+| `iv`         | `TEXT`        | NO       | —                    | Per-record AES-GCM IV (Base64) |
+| `data`       | `TEXT`        | NO       | —                    | Base64 ciphertext (encrypted JSON blob) |
+| `created_at` | `TIMESTAMPTZ` | YES      | `now()`              | Row creation timestamp |
+
+### DDL (source of truth)
+
+```sql
+CREATE TABLE public.media_collections (
+    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    iv text NOT NULL,
+    data text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+```
+
+### Row Level Security
+
+- **RLS:** `ENABLE ROW LEVEL SECURITY` on `public.media_collections`.
+
+| Policy name | Command | `USING` | `WITH CHECK` |
+|-------------|---------|---------|----------------|
+| `Users can manage their own media_collections` | `ALL` | `auth.uid() = user_id` | — |
+
+```sql
+ALTER TABLE public.media_collections ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own media_collections"
+    ON public.media_collections
+    FOR ALL USING (auth.uid() = user_id);
+```
+
+### Indexes
+
+- Primary key on `id` (implicit unique index).
+
+---
+
 ## Encrypted blob convention
 
 All encrypted feature tables follow the same shape: `id`, `user_id`, `iv`, `data`, `created_at`. The `iv` + `data` columns hold the per-record AES-GCM payload. No plaintext columns. See [`PLAN-crypto.md`](./plans/PLAN-crypto.md) Phase 7 for the encrypt/decrypt patterns.
@@ -400,3 +494,4 @@ The `connect-src` CSP directive must allow `https://*.r2.cloudflarestorage.com` 
 | 2026-06-23 | Added `public.expenses` table + RLS + `expenses` storage bucket (Expense Tracker feature). |
 | 2026-07-07 | Added `public.educations` + `public.certificates` tables + RLS + `certificates` storage bucket (Education feature). |
 | 2026-07-08 | Schema doc brought up to date: documented all 3 previously undocumented tables and the certificates bucket. |
+| 2026-07-15 | Added `public.media` + `public.media_collections` tables + RLS (Media Tracker feature). |

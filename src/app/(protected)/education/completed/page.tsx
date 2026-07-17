@@ -346,7 +346,6 @@ export default function CompletedEducationsPage() {
     <>
       <PageShell
         backHref={ROUTES.EDUCATION}
-        backLabel="← Back to Education"
         title="Completed Educations"
         description="All your completed courses and certifications."
         error={error}

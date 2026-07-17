@@ -1,0 +1,452 @@
+"use client";
+
+import { useState, useEffect, useRef, useCallback } from "react";
+import Image from "next/image";
+import {
+  Search,
+  X,
+  Film,
+  Tv,
+  Library,
+  ArrowLeft,
+  Star,
+  MessageSquare,
+  Loader2,
+} from "lucide-react";
+import { searchMedia } from "@/api/media";
+import type { Media, TmdbSearchResult } from "@/types/media";
+
+const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w342";
+const DEBOUNCE_MS = 400;
+
+const statusColors: Record<Media["status"], string> = {
+  unwatched: "bg-red-500/90 text-white",
+  watching: "bg-yellow-500/90 text-white",
+  watched: "bg-green-600/90 text-white",
+};
+
+const statusLabels: Record<Media["status"], string> = {
+  unwatched: "Not Watched",
+  watching: "Watching",
+  watched: "Watched",
+};
+
+type Mode = "select_source" | "tracked" | "discover";
+
+interface AddMediaModalProps {
+  open: boolean;
+  onClose: () => void;
+  onAdd: (item: TmdbSearchResult) => void;
+  allMedia: Media[];
+}
+
+export default function AddMediaModal({
+  open,
+  onClose,
+  onAdd,
+  allMedia,
+}: AddMediaModalProps) {
+  const [mode, setMode] = useState<Mode>("select_source");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [discoverResults, setDiscoverResults] = useState<TmdbSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Reset state when modal opens
+  useEffect(() => {
+    if (open) {
+      setMode("select_source");
+      setSearchQuery("");
+      setDiscoverResults([]);
+      setSearching(false);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [open]);
+
+  // Esc key to close
+  useEffect(() => {
+    if (!open) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        if (mode !== "select_source") {
+          setMode("select_source");
+          setSearchQuery("");
+          setDiscoverResults([]);
+        } else {
+          onClose();
+        }
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, mode, onClose]);
+
+  // Focus input when switching to tracked/discover
+  useEffect(() => {
+    if (mode === "tracked" || mode === "discover") {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [mode]);
+
+  // ── Discover search with debounce ──
+
+  const doDiscoverSearch = useCallback(async (query: string) => {
+    if (query.trim().length < 2) {
+      setDiscoverResults([]);
+      return;
+    }
+    // Cancel previous request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setSearching(true);
+    try {
+      const results = await searchMedia(query.trim(), "multi", 1, controller.signal);
+      if (!controller.signal.aborted) {
+        setDiscoverResults(results);
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setDiscoverResults([]);
+    } finally {
+      if (!controller.signal.aborted) {
+        setSearching(false);
+      }
+    }
+  }, []);
+
+  function handleSearchChange(value: string) {
+    setSearchQuery(value);
+    if (mode === "tracked") return; // local filter, no debounce needed
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => doDiscoverSearch(value), DEBOUNCE_MS);
+  }
+
+  function handleClearSearch() {
+    setSearchQuery("");
+    setDiscoverResults([]);
+    inputRef.current?.focus();
+  }
+
+  // ── Filter trackable media ──
+
+  const filteredTracked = searchQuery.trim()
+    ? allMedia.filter((m) =>
+        m.title.toLowerCase().includes(searchQuery.trim().toLowerCase()),
+      )
+    : allMedia;
+
+  // ── Add handlers ──
+
+  function handleSelectTracked(media: Media) {
+    onAdd({
+      tmdb_id: media.tmdb_id ?? 0,
+      type: media.type,
+      title: media.title,
+      poster_path: media.poster_path,
+      release_date: media.release_date,
+    });
+    onClose();
+  }
+
+  function handleSelectDiscovered(item: TmdbSearchResult) {
+    onAdd(item);
+    onClose();
+  }
+
+  function handleBackdropClick(e: React.MouseEvent) {
+    if (e.target === e.currentTarget) {
+      if (mode !== "select_source") {
+        setMode("select_source");
+        setSearchQuery("");
+        setDiscoverResults([]);
+      } else {
+        onClose();
+      }
+    }
+  }
+
+  // ── Render ──
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/60 p-4"
+      onClick={handleBackdropClick}
+    >
+      <div className="w-full max-w-5xl rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="shrink-0 flex items-center gap-3 px-6 py-4 border-b border-zinc-200 dark:border-zinc-800">
+          {mode !== "select_source" && (
+            <button
+              type="button"
+              onClick={() => {
+                setMode("select_source");
+                setSearchQuery("");
+                setDiscoverResults([]);
+              }}
+              className="p-1 rounded-md text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+              aria-label="Back to source selection"
+            >
+              <ArrowLeft size={18} />
+            </button>
+          )}
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            {mode === "select_source" && "Add Media"}
+            {mode === "tracked" && "Add from Tracked Media"}
+            {mode === "discover" && "Discover New Media"}
+          </h2>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* ── Select Source ── */}
+          {mode === "select_source" && (
+            <div className="flex flex-col items-center justify-center gap-4 py-12">
+              <button
+                type="button"
+                onClick={() => setMode("tracked")}
+                className="w-full max-w-sm flex items-center gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-5 text-left transition hover:border-violet-400 hover:bg-violet-50 dark:border-zinc-700 dark:bg-zinc-800/50 dark:hover:border-violet-500 dark:hover:bg-violet-950/30"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
+                  <Library size={24} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    Add from tracked media
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Browse your existing library to add to this collection
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMode("discover")}
+                className="w-full max-w-sm flex items-center gap-4 rounded-xl border border-zinc-200 bg-zinc-50 p-5 text-left transition hover:border-violet-400 hover:bg-violet-50 dark:border-zinc-700 dark:bg-zinc-800/50 dark:hover:border-violet-500 dark:hover:bg-violet-950/30"
+              >
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400">
+                  <Search size={24} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    Discover new media
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Search TMDB for movies & TV shows to add
+                  </p>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* ── Tracked & Discover modes ── */}
+          {(mode === "tracked" || mode === "discover") && (
+            <>
+              {/* Search input */}
+              <div className="mb-5">
+                <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
+                  <Search size={16} className="text-zinc-400 shrink-0" />
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    placeholder={
+                      mode === "tracked"
+                        ? "Filter tracked media…"
+                        : "Search movies & TV shows…"
+                    }
+                    className="flex-1 bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder:text-zinc-500"
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Tracked media grid ── */}
+              {mode === "tracked" && (
+                <>
+                  {filteredTracked.length === 0 ? (
+                    <p className="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                      {allMedia.length === 0
+                        ? "No tracked media in your library yet."
+                        : "No tracked media matches your search."}
+                    </p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {filteredTracked.map((media) => (
+                        <button
+                          key={media.id}
+                          type="button"
+                          onClick={() => handleSelectTracked(media)}
+                          className="group rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden cursor-pointer text-left"
+                        >
+                          {/* Poster */}
+                          <div className="relative aspect-[2/3] bg-zinc-100 dark:bg-zinc-800">
+                            {media.poster_path ? (
+                              <Image
+                                src={`${TMDB_POSTER_BASE}${media.poster_path}`}
+                                alt={media.title}
+                                fill
+                                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                                className="object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-full items-center justify-center text-zinc-400 dark:text-zinc-600">
+                                {media.type === "movie" ? (
+                                  <Film size={40} />
+                                ) : (
+                                  <Tv size={40} />
+                                )}
+                              </div>
+                            )}
+                            {/* Type badge */}
+                            <span className="absolute top-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white uppercase">
+                              {media.type === "movie" ? "Movie" : "TV"}
+                            </span>
+                            {/* Status badge */}
+                            <span
+                              className={`absolute top-2 left-2 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shadow-sm ${statusColors[media.status]}`}
+                            >
+                              {statusLabels[media.status]}
+                            </span>
+                          </div>
+                          {/* Info */}
+                          <div className="p-3">
+                            <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                              {media.title}
+                            </h4>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                {media.release_date
+                                  ? new Date(media.release_date).getFullYear()
+                                  : "—"}
+                              </p>
+                            </div>
+                            {(media.rating || media.review_notes) && (
+                              <div className="flex items-center gap-2 mt-2">
+                                {media.rating && (
+                                  <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-500 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                    <Star size={10} className="fill-current" />{" "}
+                                    {media.rating}
+                                  </span>
+                                )}
+                                {media.review_notes && (
+                                  <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                    <MessageSquare size={10} />
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── Discover results grid ── */}
+              {mode === "discover" && (
+                <>
+                  {searching && (
+                    <div className="flex items-center justify-center gap-2 py-12 text-sm text-zinc-500 dark:text-zinc-400">
+                      <Loader2 size={16} className="animate-spin" />
+                      Searching…
+                    </div>
+                  )}
+
+                  {!searching && searchQuery.trim().length < 2 && (
+                    <p className="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                      Search for movies & TV shows to add.
+                    </p>
+                  )}
+
+                  {!searching &&
+                    searchQuery.trim().length >= 2 &&
+                    discoverResults.length === 0 && (
+                      <p className="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                        No results found.
+                      </p>
+                    )}
+
+                  {!searching && discoverResults.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {discoverResults.map((item) => {
+                        const posterUrl = item.poster_path
+                          ? `${TMDB_POSTER_BASE}${item.poster_path}`
+                          : null;
+                        const year = item.release_date
+                          ? new Date(item.release_date).getFullYear()
+                          : undefined;
+
+                        return (
+                          <button
+                            key={`${item.type}-${item.tmdb_id}`}
+                            type="button"
+                            onClick={() => handleSelectDiscovered(item)}
+                            className="group rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden cursor-pointer text-left"
+                          >
+                            {/* Poster */}
+                            <div className="relative aspect-[2/3] bg-zinc-100 dark:bg-zinc-800">
+                              {posterUrl ? (
+                                <Image
+                                  src={posterUrl}
+                                  alt={item.title}
+                                  fill
+                                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-full items-center justify-center text-zinc-400 dark:text-zinc-600">
+                                  {item.type === "movie" ? (
+                                    <Film size={40} />
+                                  ) : (
+                                    <Tv size={40} />
+                                  )}
+                                </div>
+                              )}
+                              {/* Type badge */}
+                              <span className="absolute top-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white uppercase">
+                                {item.type === "movie" ? "Movie" : "TV"}
+                              </span>
+                            </div>
+                            {/* Info */}
+                            <div className="p-3">
+                              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                                {item.title}
+                              </h4>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                  {year ?? "—"}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -407,7 +407,7 @@ export default function EducationView() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col items-start gap-4">
-        <BackButton href={ROUTES.DASHBOARD}>← Back</BackButton>
+        <BackButton href={ROUTES.DASHBOARD} />
         <div>
           <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
             Education

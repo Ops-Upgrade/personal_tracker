@@ -71,6 +71,11 @@ src/
 │   │   ├── certificates.ts     # encrypted CRUD for certificates table
 │   │   ├── certificateStorage.ts # encrypted file upload/download for certificates bucket
 │   │   └── index.ts            # education sub-barrel
+│   ├── media/
+│   │   ├── media.ts            # encrypted CRUD for media table
+│   │   ├── collections.ts      # encrypted CRUD for media_collections table
+│   │   ├── tmdb.ts             # client wrappers for TMDB proxy routes
+│   │   └── index.ts            # media sub-barrel
 │   ├── serverDate.ts           # getServerDateIST() — IST date from Supabase RPC
 │   └── index.ts                # Barrel export
 ├── components/                 # Reusable UI
@@ -86,15 +91,32 @@ src/
 │   │   └── ViewToggle.tsx      # Toggle between list/tile views
 │   ├── taskmanager/            # Task manager feature components + helpers
 │   ├── expense/                # Expense tracker feature components
-│   └── education/              # Education manager feature components
-│       ├── EducationView.tsx   # Main controller for education page
-│       ├── ActiveEducationsBox.tsx
-│       ├── CompletedEducationsBox.tsx
-│       ├── CompletedEducationsModal.tsx
-│       ├── EducationModal.tsx  # Create/edit education + certificate attachment
-│       ├── CertificateModal.tsx
-│       ├── CertificateStoreView.tsx # Certificate Store sub-page controller
-│       └── helpers.ts
+│   ├── education/              # Education manager feature components
+│   │   ├── EducationView.tsx   # Main controller for education page
+│   │   ├── ActiveEducationsBox.tsx
+│   │   ├── CompletedEducationsBox.tsx
+│   │   ├── CompletedEducationsModal.tsx
+│   │   ├── EducationModal.tsx  # Create/edit education + certificate attachment
+│   │   ├── CertificateModal.tsx
+│   │   ├── CertificateStoreView.tsx # Certificate Store sub-page controller
+│   │   └── helpers.ts
+│   └── media/                  # Media Tracker feature components
+│       ├── MediaView.tsx       # Main orchestrator (tabs, data, CRUD)
+│       ├── CollectionFilterBar.tsx # Filter bar for DefaultView
+│       ├── CollectionModal.tsx # Create/rename/delete collection + color picker
+│       ├── MediaStatusSection.tsx # One BoxContainer per status group
+│       ├── MediaGrid.tsx       # CSS grid for media posters
+│       ├── MediaCard.tsx       # Poster, title, quick status/rating controls
+│       ├── TmdbAttribution.tsx # TMDB ToS attribution footer
+│       ├── views/
+│       │   ├── DefaultView.tsx # Tracked library (Watching/Not Watched/Watched)
+│       │   ├── CollectionView.tsx # Grid of color-coded collections
+│       │   └── DiscoverView.tsx # Untracked TMDB search/trending browser
+│       └── pages/
+│           ├── MoviePage.tsx   # Movie details, form, collections, remove
+│           ├── TvSeriesPage.tsx # TV details, season selector, episode matrix
+│           ├── EpisodePage.tsx  # Single episode details, form, comments
+│           └── CollectionDetailPage.tsx # Views all media for a collection
 ├── lib/                        # Core utilities
 │   ├── crypto/                 # Client-side encryption (see below)
 │   │   ├── primitives.ts       # Web Crypto + Argon2id wrappers
@@ -207,6 +229,7 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-07-07 | Education feature plan drafted (`plans/PLAN-education.md`). `educations` + `certificates` tables + RLS + `certificates` storage bucket created in Supabase. |
 | 2026-07-08 | Education Manager feature completed: `/education` route (3-box layout: Active, Completed, Certificate Store), `/education/store` sub-page (tile view), encrypted CRUD for educations + certificates, multi-file certificate upload/download with `DocPreviewPanel` and `TileView`, full modal flows for Education + Certificate + Certificate Store. Dashboard tile integration. |
 | 2026-07-12 | Migrated file storage from Supabase Storage to Cloudflare R2. Added `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`, R2 client singleton (`src/lib/r2/`), presigned-URL API routes (`src/app/api/storage/`), rewrote `encryptedFileStorage.ts` to use R2 via API routes. Removed all `supabase.storage` SDK calls. Updated CSP, docs, and UI text. |
+| 2026-07-15 | Media Tracker feature completed: `/media` route, `media` + `media_collections` tables (HLD documented in schema.md), 4 TMDB proxy routes (`/api/tmdb/*`), encrypted CRUD API layer (`src/api/media/`), 12 UI components (MediaView orchestrator, DefaultView with Watching/Unwatched/Watched lanes, CollectionView, DiscoverView with TMDB search, MoviePage, TvSeriesPage with episode matrix, EpisodePage, CollectionDetailPage, MediaCard with inline status/rating, CollectionModal with color picker, CollectionFilterBar, TmdbAttribution), dashboard tile integration (violet), `next.config.ts` TMDB image domain + CSP update, StarRating common component. |
 
 ---
 

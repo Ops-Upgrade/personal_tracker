@@ -28,7 +28,7 @@ import { MONTHS } from "@/types/expense";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
-import { RectangleVertical, Columns2 } from "lucide-react";
+import { List, LayoutGrid } from "lucide-react";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
@@ -38,8 +38,8 @@ import YearDropdown from "./YearDropdown";
 
 /** SVG icon symbols for the expense view toggle */
 const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
-  { value: "single", label: <RectangleVertical className="h-4 w-4" /> },
-  { value: "multi", label: <Columns2 className="h-4 w-4" /> },
+  { value: "single", label: <List className="h-4 w-4" /> },
+  { value: "multi", label: <LayoutGrid className="h-4 w-4" /> },
 ];
 
 
@@ -297,7 +297,7 @@ export default function ExpenseView() {
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="flex flex-col items-start gap-4">
-          <BackButton href={ROUTES.DASHBOARD}>← Back</BackButton>
+          <BackButton href={ROUTES.DASHBOARD} />
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
               Expenses
