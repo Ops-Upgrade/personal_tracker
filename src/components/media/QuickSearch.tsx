@@ -2,10 +2,11 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
-import { Search, X, Film, Tv } from "lucide-react";
+import { Search, Film, Tv } from "lucide-react";
 import { searchMedia } from "@/api/media";
 import type { TmdbSearchResult } from "@/types/media";
 import { tmdbPosterUrl } from "@/components/media/constants";
+import SearchBar from "@/components/common/SearchBar";
 
 interface QuickSearchProps {
   onSelect: (item: TmdbSearchResult) => void;
@@ -84,25 +85,22 @@ export default function QuickSearch({
       {open && (
         <div className="absolute top-full right-0 mt-1 w-80 rounded-xl border border-zinc-200 bg-white shadow-xl z-50 py-2 dark:border-zinc-700 dark:bg-zinc-900">
           {/* Search input */}
-          <div className="px-3 pb-2">
-            <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-2.5 py-1.5 dark:border-zinc-700 dark:bg-zinc-800">
-              <Search size={14} className="text-zinc-400 shrink-0" />
-              <input
-                ref={inputRef}
-                type="text"
-                value={query}
-                onChange={(e) => handleInputChange(e.target.value)}
-                placeholder={placeholder}
-                className="flex-1 bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100"
-              />
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-              >
-                <X size={14} />
-              </button>
-            </div>
+          <div className="px-3 pb-2 flex items-center gap-1.5">
+            <SearchBar
+              value={query}
+              onChange={handleInputChange}
+              placeholder={placeholder}
+              className="flex-1"
+              inputClassName="rounded-lg bg-zinc-50 py-1.5 pl-8 pr-7 text-sm dark:bg-zinc-800"
+            />
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="shrink-0 p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              aria-label="Close search"
+            >
+              ×
+            </button>
           </div>
 
           {/* Results */}

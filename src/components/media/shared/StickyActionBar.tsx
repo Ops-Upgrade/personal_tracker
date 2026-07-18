@@ -8,8 +8,10 @@ interface StickyActionBarProps {
   onCancel: () => void;
   saving: boolean;
   isDirty: boolean;
-  /** Slot for extra actions rendered on the left (e.g. a Delete button). */
+  /** Slot for extra actions rendered on the left. */
   leftContent?: ReactNode;
+  /** Slot for actions rendered on the right, immediately left of Cancel. */
+  rightContent?: ReactNode;
   /** Optional override for the outer container className. */
   className?: string;
 }
@@ -29,14 +31,16 @@ export default function StickyActionBar({
   saving,
   isDirty,
   leftContent,
+  rightContent,
   className = "",
 }: StickyActionBarProps) {
   return (
     <div
-      className={`sticky bottom-0 -mx-4 px-4 py-3 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-sm border-t border-zinc-200 dark:border-zinc-800 flex justify-between gap-2 ${className}`}
+      className={`sticky bottom-0 z-50 -mx-4 px-4 py-3 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-sm border-t border-zinc-200 dark:border-zinc-800 flex justify-between gap-2 ${className}`}
     >
       <div>{leftContent}</div>
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
+        {rightContent}
         <Button
           variant="secondary"
           size="md"

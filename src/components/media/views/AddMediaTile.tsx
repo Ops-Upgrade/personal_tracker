@@ -31,13 +31,30 @@ export default function AddMediaTile({ viewMode, onClick }: AddMediaTileProps) {
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-violet-400 dark:hover:border-violet-500 transition-colors"
+      className="h-full w-full rounded-xl border-2 border-dashed border-zinc-300 dark:border-zinc-700 cursor-pointer hover:border-violet-400 dark:hover:border-violet-500 transition-colors relative flex flex-col overflow-hidden"
       aria-label="Add media"
     >
-      <Plus size={32} className="text-zinc-400 dark:text-zinc-500" />
-      <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 text-center px-2">
-        Add Media
-      </span>
+      {/* Absolute centered content */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+        <Plus size={32} className="text-zinc-400 dark:text-zinc-500" />
+        <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400 text-center px-2">
+          Add Media
+        </span>
+      </div>
+
+      {/* Invisible structure to maintain exact minimum height of a media tile */}
+      <div className="invisible pointer-events-none w-full flex flex-col">
+        {/* Matches poster aspect ratio */}
+        <div className="w-full aspect-[2/3]"></div>
+        {/* Matches text area padding and line heights */}
+        <div className="p-3 w-full text-left">
+          <h4 className="text-sm font-semibold truncate">&nbsp;</h4>
+          <div className="mt-0.5">
+            <p className="text-xs m-0">&nbsp;</p>
+          </div>
+        </div>
+      </div>
     </button>
   );
 }
+

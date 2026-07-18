@@ -229,10 +229,7 @@ export default function MoviePage({
         rating: result.rating ?? 0,
         watched_on: result.watched_on ?? "",
         review_notes: result.review_notes ?? "",
-        collection_ids:
-          (result.collection_ids ?? result.collection_id
-            ? [result.collection_id!]
-            : []) as string[],
+        collection_ids: result.collection_ids ?? (result.collection_id ? [result.collection_id] : []),
       } as MediaPlaintext);
     }
   }
@@ -312,7 +309,7 @@ export default function MoviePage({
                 selectedIds={collectionIds}
                 onToggle={handleToggleCollection}
                 onRemoveClick={handleRemoveCollectionClick}
-                newCollectionHref={`/media/collection/new?add_tmdb_id=${tmdbId}&add_type=movie`}
+                newCollectionHref={`/media/collection/new_collection?add_tmdb_id=${tmdbId}&add_type=movie`}
               />
             </div>
           </div>

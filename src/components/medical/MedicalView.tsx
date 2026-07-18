@@ -97,7 +97,7 @@ export default function MedicalView() {
       diagnosis_timeline: string;
     },
     existingRecord: MedicalRecord | null,
-    fileAction?: { newFiles: File[]; removeDocIds: string[]; linkDocId?: string },
+    fileAction?: { newFiles: File[]; removeDocIds: string[]; unlinkDocIds?: string[]; linkDocId?: string },
   ) {
     if (!userId) throw new Error("No active session.");
 
@@ -112,6 +112,21 @@ export default function MedicalView() {
             try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
           }
           try { await deleteDocument(docId); } catch { /* best-effort */ }
+        }
+        document_ids = document_ids.filter((id) => id !== docId);
+      }
+    }
+
+    // --- Process unlinks: clear linked_id, remove from parent, keep file ---
+    if (fileAction?.unlinkDocIds) {
+      for (const docId of fileAction.unlinkDocIds) {
+        const doc = documents.find((d) => d.id === docId);
+        if (doc) {
+          await updateDocument(userId, docId, {
+            ...doc,
+            linked_id: "",
+            updated_at: nowIso,
+          } as DocumentPlaintext);
         }
         document_ids = document_ids.filter((id) => id !== docId);
       }
@@ -185,18 +200,32 @@ export default function MedicalView() {
     await refreshData(userId);
   }
 
-  async function handleDelete(recordId: string) {
+  async function handleDelete(recordId: string, cascadeMode: 'unlink' | 'cascade' = 'cascade') {
     if (!userId) throw new Error("No active session.");
 
     const record = records.find((r) => r.id === recordId);
     if (record?.document_ids) {
-      for (const docId of record.document_ids) {
-        const doc = documents.find((d) => d.id === docId);
-        if (doc) {
-          if (doc.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+      if (cascadeMode === 'unlink') {
+        const nowIso = new Date().toISOString();
+        for (const docId of record.document_ids) {
+          const doc = documents.find((d) => d.id === docId);
+          if (doc) {
+            await updateDocument(userId, docId, {
+              ...doc,
+              linked_id: "",
+              updated_at: nowIso,
+            } as DocumentPlaintext);
           }
-          try { await deleteDocument(docId); } catch { /* best-effort */ }
+        }
+      } else {
+        for (const docId of record.document_ids) {
+          const doc = documents.find((d) => d.id === docId);
+          if (doc) {
+            if (doc.file_name) {
+              try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+            }
+            try { await deleteDocument(docId); } catch { /* best-effort */ }
+          }
         }
       }
     }

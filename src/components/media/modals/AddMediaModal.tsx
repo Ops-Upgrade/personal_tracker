@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   Search,
-  X,
   Library,
   ArrowLeft,
   Loader2,
@@ -11,6 +10,7 @@ import {
 import { searchMedia } from "@/api/media";
 import type { Media, TmdbSearchResult } from "@/types/media";
 import MediaCard from "@/components/media/MediaCard";
+import SearchBar from "@/components/common/SearchBar";
 const DEBOUNCE_MS = 400;
 
 type Mode = "select_source" | "tracked" | "discover";
@@ -233,30 +233,19 @@ export default function AddMediaModal({
             <>
               {/* Search input */}
               <div className="mb-5">
-                <div className="flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
-                  <Search size={16} className="text-zinc-400 shrink-0" />
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    placeholder={
-                      mode === "tracked"
-                        ? "Filter tracked media…"
-                        : "Search movies & TV shows…"
-                    }
-                    className="flex-1 bg-transparent text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder:text-zinc-500"
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      onClick={handleClearSearch}
-                      className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                    >
-                      <X size={16} />
-                    </button>
-                  )}
-                </div>
+                <SearchBar
+                  value={searchQuery}
+                  onChange={(val) => {
+                    handleSearchChange(val);
+                    if (!val.trim()) setDiscoverResults([]);
+                  }}
+                  placeholder={
+                    mode === "tracked"
+                      ? "Filter tracked media…"
+                      : "Search movies & TV shows…"
+                  }
+                  inputClassName="rounded-lg bg-zinc-50 dark:bg-zinc-800"
+                />
               </div>
 
               {/* ── Tracked media grid ── */}

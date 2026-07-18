@@ -25,6 +25,11 @@ export interface SortableMediaItemProps {
   isUnsaved?: boolean;
   /** When provided, shows a remove button. */
   onRemove?: (id: string) => void;
+  /**
+   * When provided, called instead of router.push on tile click.
+   * Allows parent pages to intercept navigation (e.g. for unsaved-changes guards).
+   */
+  onNavigate?: (url: string) => void;
 }
 
 // ── Detail (list) item ──
@@ -33,6 +38,7 @@ export function SortableDetailItem({
   media,
   onRemove,
   isUnsaved,
+  onNavigate,
 }: SortableMediaItemProps) {
   const router = useRouter();
   const {
@@ -62,7 +68,11 @@ export function SortableDetailItem({
 
   function handleClick(e: React.MouseEvent) {
     if ((e.target as HTMLElement).closest("[data-no-nav]")) return;
-    router.push(mediaUrl);
+    if (onNavigate) {
+      onNavigate(mediaUrl);
+    } else {
+      router.push(mediaUrl);
+    }
   }
 
   return (
@@ -162,6 +172,7 @@ export function SortableTileItem({
   media,
   onRemove,
   isUnsaved,
+  onNavigate,
 }: SortableMediaItemProps) {
   const router = useRouter();
   const {
@@ -192,7 +203,11 @@ export function SortableTileItem({
 
   function handleClick(e: React.MouseEvent) {
     if ((e.target as HTMLElement).closest("[data-no-nav]")) return;
-    router.push(mediaUrl);
+    if (onNavigate) {
+      onNavigate(mediaUrl);
+    } else {
+      router.push(mediaUrl);
+    }
   }
 
   return (
@@ -202,6 +217,7 @@ export function SortableTileItem({
       onClick={handleClick}
       className="group rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden cursor-pointer"
     >
+      {/* ── Poster ── */}
       <div className="relative aspect-[2/3] bg-zinc-100 dark:bg-zinc-800">
         {posterUrl ? (
           <Image
@@ -213,10 +229,18 @@ export function SortableTileItem({
           />
         ) : (
           <div className="flex h-full items-center justify-center text-zinc-400 dark:text-zinc-600">
-            {media.type === "movie" ? <Film size={36} /> : <Tv size={36} />}
+            {media.type === "movie" ? <Film size={40} /> : <Tv size={40} />}
           </div>
         )}
 
+        {/* Type badge (top-right) — matches MediaCard */}
+        {!onRemove && (
+          <span className="absolute top-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white uppercase">
+            {media.type === "movie" ? "Movie" : "TV"}
+          </span>
+        )}
+
+        {/* Grip handle */}
         <button
           type="button"
           {...attributes}
@@ -228,6 +252,7 @@ export function SortableTileItem({
           <GripVertical size={12} />
         </button>
 
+        {/* Status badge (top-left) — matches MediaCard */}
         {isUnsaved ? (
           <span className="absolute top-2 left-2 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shadow-sm bg-violet-500/90 text-white">
             Unsaved
@@ -236,6 +261,7 @@ export function SortableTileItem({
           <StatusBadge status={media.status} className="absolute top-2 left-2" />
         )}
 
+        {/* Remove button */}
         {onRemove && (
           <button
             type="button"
@@ -249,27 +275,30 @@ export function SortableTileItem({
         )}
       </div>
 
-      <div className="p-2.5">
-        <h4 className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+      {/* ── Info — matches MediaCard ── */}
+      <div className="p-3">
+        <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
           {media.title}
         </h4>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          {year && (
-            <span className="text-[10px] text-zinc-500 dark:text-zinc-400">{year}</span>
-          )}
+        <div className="flex items-center gap-2 mt-0.5">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 m-0">
+            {[year].filter(Boolean).join(" • ") || "—"}
+          </p>
         </div>
-        <div className="flex items-center gap-2 mt-2 min-h-[22px]">
-          {media.rating && (
-            <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-500 text-[10px] font-bold px-1.5 py-0.5 rounded">
-              <Star size={10} className="fill-current" /> {media.rating}
-            </span>
-          )}
-          {media.review_notes && (
-            <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
-              <MessageSquare size={10} />
-            </span>
-          )}
-        </div>
+        {(media.rating || media.review_notes) && (
+          <div className="flex items-center gap-2 mt-2">
+            {media.rating && (
+              <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-500 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                <Star size={10} className="fill-current" /> {media.rating}
+              </span>
+            )}
+            {media.review_notes && (
+              <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                <MessageSquare size={10} />
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

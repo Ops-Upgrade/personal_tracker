@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { getThemeStyles } from "@/lib/collectionThemes";
 import type { MediaCollection } from "@/types/media";
+import SearchBar from "@/components/common/SearchBar";
 
 interface CollectionPickerProps {
   /** All collections available to the user */
@@ -94,25 +95,13 @@ export default function CollectionPicker({
         <div className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-zinc-200 bg-white shadow-lg z-10 dark:border-zinc-700 dark:bg-zinc-800 overflow-hidden">
           {/* Fixed top section */}
           <div className="sticky top-0 bg-white dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700 p-2 space-y-2">
-            <div className="relative">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={searchPlaceholder}
-                className="w-full rounded-lg border border-zinc-300 bg-zinc-50 py-1.5 pl-2.5 pr-7 text-xs dark:border-zinc-600 dark:bg-zinc-700 dark:text-zinc-100"
-                autoFocus
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch("")}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                >
-                  ×
-                </button>
-              )}
-            </div>
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder={searchPlaceholder}
+              autoFocus
+              inputClassName="rounded-lg bg-zinc-50 py-1.5 pl-8 pr-7 text-xs dark:bg-zinc-700"
+            />
             <button
               type="button"
               onClick={() => {

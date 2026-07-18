@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
 import type {
   Media,
   MediaCollection,
@@ -13,6 +12,7 @@ import { DISCOVER_GENRE_IDS, DISCOVER_ERA_DATES } from "@/types/media";
 import MediaGrid from "@/components/media/MediaGrid";
 import MediaCard from "@/components/media/MediaCard";
 import { Chip } from "@/components/common/Chip";
+import SearchBar from "@/components/common/SearchBar";
 import { FilterLabel } from "@/components/media/shared/FilterLabel";
 import { MobileFilterBar } from "@/components/media/shared/MobileFilterBar";
 import { FilterSidebar } from "@/components/media/shared/FilterSidebar";
@@ -174,7 +174,6 @@ export default function DefaultView({
 }: DefaultViewProps) {
   const [filters, setFilters] = useState<LocalFilters>(() => defaultViewCache.filters);
   const [searchQuery, setSearchQuery] = useState(() => defaultViewCache.searchQuery);
-  const [searchFocused, setSearchFocused] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => defaultViewCache.statusFilter);
   const [mobileDropdown, setMobileDropdown] = useState<MobileDropdown>(null);
 
@@ -508,24 +507,12 @@ export default function DefaultView({
             ))}
           </div>
 
-          {/* Search input — full width on mobile, expands on focus, fixed to right on desktop */}
-          <div
-            className={`relative shrink-0 transition-all duration-300 w-full md:w-72 md:ml-auto ${
-              searchFocused ? "md:flex-1 md:min-w-0" : "md:w-96"
-            }`}
-          >
-            <Search
-              size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
-            />
-            <input
-              type="text"
+          {/* Search input — full width on mobile, fixed to right on desktop */}
+          <div className="relative shrink-0 w-full md:w-72 md:ml-auto">
+            <SearchBar
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
+              onChange={setSearchQuery}
               placeholder="Search your library..."
-              className="w-full rounded-xl border border-zinc-300 bg-white py-2.5 pl-10 pr-4 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
           </div>
         </div>

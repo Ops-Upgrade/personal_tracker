@@ -1,15 +1,13 @@
 "use client";
 
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
-import ErrorBanner from "@/components/common/ErrorBanner";
-import Button from "@/components/common/Button";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { useLocalStorage } from "@/lib/useLocalStorage";
-import { createCollection, createMedia, findDuplicate, listMedia, getMediaDetails } from "@/api/media";
+import { createCollection, createMedia, findDuplicate, listMedia, getMediaDetails, updateMedia, updateCollection } from "@/api/media";
 import type { Media, TmdbSearchResult } from "@/types/media";
 import ThemePicker from "@/components/media/modals/ThemePicker";
 import AddMediaModal from "@/components/media/modals/AddMediaModal";
@@ -18,7 +16,11 @@ import { getThemeStyles } from "@/lib/collectionThemes";
 import { computeProgress } from "@/components/media/utils";
 import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import SortableMediaGrid from "@/components/media/shared/SortableMediaGrid";
+import StickyActionBar from "@/components/media/shared/StickyActionBar";
 import ViewToggle from "@/components/common/ViewToggle";
+import Toast from "@/components/media/shared/Toast";
+import type { ToastType } from "@/components/media/shared/Toast";
+import TmdbAttribution from "@/components/media/TmdbAttribution";
 
 const DEFAULT_COLOR = "#8B5CF6";
 
@@ -34,8 +36,33 @@ export default function NewCollectionPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState(DEFAULT_COLOR);
+  const themeStyles = getThemeStyles(color);
+
+  const PANEL_THEMES = new Set([
+    "theme:galaxy",
+    "theme:magma",
+    "theme:abyss",
+    "theme:cyberpunk",
+    "theme:matrix",
+  ]);
+  const usePanelStyling = PANEL_THEMES.has(color);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // ── Toast / popup state ──
+  const [toastConfig, setToastConfig] = useState<{
+    isVisible: boolean;
+    message: string;
+    type: ToastType;
+  }>({ isVisible: false, message: "", type: "success" });
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerToast = useCallback((message: string, type: ToastType = "error") => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastConfig({ isVisible: true, message, type });
+    toastTimerRef.current = setTimeout(() => {
+      setToastConfig((prev) => ({ ...prev, isVisible: false }));
+    }, 2000);
+  }, []);
   const [viewMode, setViewMode] = useLocalStorage<"detail" | "tile">("mediaCollectionDetailLayout", "detail");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [trackedMedia, setTrackedMedia] = useState<Media[]>([]);
@@ -93,7 +120,7 @@ export default function NewCollectionPage() {
         setDisplayOrder((prev) => [...prev, newMedia.id]);
 
         // Clean URL so refresh doesn't re-add
-        router.replace("/media/collection/new");
+        router.replace("/media/collection/new_collection");
       } catch {
         // Silently ignore — media will just not be pre-added
       }
@@ -122,6 +149,7 @@ export default function NewCollectionPage() {
     handleBackClick,
     handleDiscardAndNavigate,
     closeUnsavedDialog,
+    navigateTo,
   } = useNavigationGuard({
     isDirty,
     fallbackRoute: `${ROUTES.MEDIA}?tab=manager&subtab=collections`,
@@ -159,30 +187,40 @@ export default function NewCollectionPage() {
   async function handleSave() {
     if (!userId) return;
     if (!name.trim()) {
-      setError("Collection name is required.");
+      triggerToast("Collection name is required.", "error");
       return;
     }
     setSaving(true);
-    setError(null);
     try {
-      // 1. Create the collection
+      // 1. Create the collection (without ordered_media_ids — we resolve real IDs next)
       const created = await createCollection(userId, {
         name: name.trim(),
         description: description.trim() || undefined,
         color,
-        ordered_media_ids: displayOrder,
+        ordered_media_ids: [],
       });
 
-      // 2. Create media records for each local item (or link existing tracked ones)
+      // 2. Resolve each local item to a real media UUID
+      const tempToReal = new Map<string, string>();
       for (const item of localItems) {
-        if (item.tmdb_id) {
-          // Check if already tracked — if so, just update its collection_ids
-          const existing = findDuplicate(item.tmdb_id, item.type, []);
-          if (existing) {
-            // This won't work since we don't have the full media list here.
-            // For now, create new media records; dedup happens in listMedia.
+        if (!item.tmdb_id) continue;
+
+        const existing = findDuplicate(item.tmdb_id, item.type, trackedMedia);
+
+        if (existing) {
+          // Link existing tracked media to this new collection
+          const existingIds = existing.collection_id
+            ? [...(existing.collection_ids ?? []), existing.collection_id]
+            : (existing.collection_ids ?? []);
+          if (!existingIds.includes(created.id)) {
+            await updateMedia(userId, existing.id, {
+              collection_ids: [...existingIds, created.id],
+            });
           }
-          await createMedia(userId, {
+          tempToReal.set(item.id, existing.id);
+        } else {
+          // Create a brand-new media record and capture its UUID
+          const newMedia = await createMedia(userId, {
             tmdb_id: item.tmdb_id,
             type: item.type,
             title: item.title,
@@ -192,31 +230,45 @@ export default function NewCollectionPage() {
             collection_ids: [created.id],
             runtime: item.runtime,
           });
+          tempToReal.set(item.id, newMedia.id);
         }
       }
 
-      router.push(`/media/collection/${created.id}`);
+      // 3. Replace temp IDs with real UUIDs in ordered_media_ids
+      const resolvedIds = displayOrder.map((id) => tempToReal.get(id) ?? id);
+
+      // 4. Patch the collection with the resolved real IDs
+      await updateCollection(userId, created.id, {
+        ordered_media_ids: resolvedIds,
+      });
+
+      router.replace(`/media/collection/${created.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create collection.");
+      triggerToast(err instanceof Error ? err.message : "Failed to create collection.", "error");
       setSaving(false);
     }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col items-start gap-4">
-        <BackButton onClick={handleBackClick} />
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-            New Collection
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Create a new collection to organize your media.
-          </p>
-        </div>
-      </div>
+    <>
+      {/* ── Textured Page Background Layer ── */}
+      <div
+        className={`fixed inset-0 pointer-events-none -z-10 transition-all duration-700 ${themeStyles.pageClass || ""}`}
+        style={themeStyles.pageStyle}
+      />
 
-      {error && <ErrorBanner message={error} />}
+      <div className="space-y-4">
+        <div className="flex flex-col items-start gap-4">
+          <BackButton onClick={handleBackClick} />
+          <div>
+            <h1 className={`text-2xl font-semibold ${themeStyles.titleClass}`} style={themeStyles.titleStyle}>
+              New Collection
+            </h1>
+            <p className={`mt-1 text-sm ${themeStyles.subtitleClass}`} style={themeStyles.subtitleStyle}>
+              Create a new collection to organize your media.
+            </p>
+          </div>
+        </div>
 
       {/* ── 2-column Metadata Matrix ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12">
@@ -230,7 +282,8 @@ export default function NewCollectionPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Collection Name"
-            className="text-3xl font-bold bg-transparent border-b border-zinc-200 dark:border-zinc-800 focus:outline-none focus:border-violet-500 pb-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+            className="text-3xl font-bold bg-transparent border-b focus:outline-none focus:border-violet-500 pb-2 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+            style={{ borderColor: (themeStyles.cardStyle.borderColor as string) || `${themeStyles.solidColor}60` }}
             autoFocus
           />
           <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
@@ -240,14 +293,19 @@ export default function NewCollectionPage() {
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Description..."
-            className="text-sm bg-transparent border border-zinc-200 dark:border-zinc-800 rounded-xl p-3 focus:outline-none focus:border-violet-500 resize-none h-24 text-zinc-700 dark:text-zinc-300 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+            className="text-sm bg-transparent border rounded-xl p-3 focus:outline-none focus:border-violet-500 resize-none h-24 placeholder:text-zinc-400 dark:placeholder:text-zinc-600"
+            style={{
+              borderColor: ((themeStyles.cardStyle.borderColor as string) || `${themeStyles.solidColor}40`),
+              backgroundColor: (themeStyles.cardStyle.backgroundColor as string) || undefined,
+              color: (themeStyles.titleStyle?.color as string) || undefined,
+            }}
           />
         </div>
 
         {/* Column 2: Color + Progress */}
         <div className="flex flex-col gap-6 justify-center">
           <div className="flex items-center gap-4">
-            <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            <label className={`text-sm ${themeStyles.subtitleClass}`} style={themeStyles.subtitleStyle}>
               Theme Color:
             </label>
             <ThemePicker value={color} onChange={setColor} />
@@ -257,16 +315,16 @@ export default function NewCollectionPage() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <div className="flex justify-between text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+            <div className={`flex justify-between text-sm ${themeStyles.subtitleClass}`} style={themeStyles.subtitleStyle}>
               <span>Collection Progress</span>
               <span>{progress.percent}%</span>
             </div>
-            <div className="h-3 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+            <div className={`h-3 w-full rounded-full overflow-hidden ${themeStyles.progressTrackClass}`} style={themeStyles.progressTrackStyle}>
               <div
-                className="h-full transition-all duration-500"
+                className={`h-full transition-all duration-500 ${themeStyles.progressFillClass}`}
                 style={{
                   width: `${progress.percent}%`,
-                  backgroundColor: getThemeStyles(color).solidColor,
+                  ...themeStyles.progressFillStyle,
                 }}
               />
             </div>
@@ -283,10 +341,20 @@ export default function NewCollectionPage() {
       </div>
 
       {/* ── Titles Matrix ── */}
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 md:p-6 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex items-center justify-between mb-6 border-b border-zinc-200 dark:border-zinc-800 pb-4">
+      <div
+        className={`rounded-xl p-4 md:p-6 ${
+          usePanelStyling
+            ? themeStyles.panelClass || "border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+            : themeStyles.cardClass || "border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
+        }`}
+        style={usePanelStyling ? themeStyles.panelStyle : themeStyles.cardStyle}
+      >
+        <div
+          className="flex items-center justify-between mb-6 border-b pb-4"
+          style={{ borderBottomColor: `${themeStyles.solidColor}40` }}
+        >
           <div className="flex items-center gap-4">
-            <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+            <h2 className={`text-lg ${themeStyles.titleClass}`} style={themeStyles.titleStyle}>
               Titles in Collection
             </h2>
           </div>
@@ -305,25 +373,19 @@ export default function NewCollectionPage() {
             isUnsaved={() => true}
             onReorder={(newOrder) => setDisplayOrder(newOrder.map((m) => m.id))}
             onRemove={handleRemoveItem}
+            onNavigateItem={navigateTo}
             appendElement={<AddMediaTile viewMode={viewMode} onClick={() => setIsAddModalOpen(true)} />}
           />
         )}
       </div>
 
-      {/* ── Unified Bottom Action Bar (matches GlobalActionModal footer) ── */}
-      <div className="shrink-0 flex justify-end gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={handleCancel}
-          disabled={saving}
-        >
-          Cancel
-        </Button>
-        <Button variant="primary" size="md" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
-      </div>
+      {/* ── Bottom Action Bar ── */}
+      <StickyActionBar
+        onSave={handleSave}
+        onCancel={handleCancel}
+        saving={saving}
+        isDirty={isDirty}
+      />
 
       <AddMediaModal
         open={isAddModalOpen}
@@ -343,6 +405,15 @@ export default function NewCollectionPage() {
           onCancel={closeUnsavedDialog}
         />
       )}
-    </div>
+
+      <TmdbAttribution />
+      </div>
+
+      <Toast
+        isVisible={toastConfig.isVisible}
+        message={toastConfig.message}
+        type={toastConfig.type}
+      />
+    </>
   );
 }

@@ -46,8 +46,8 @@ interface GlobalStoreViewProps {
   onUnlinkFromParent?: (documentId: string, parentId: string) => Promise<void>;
   /** Called when documents are bulk-linked to a parent */
   onBulkLinkToParent?: (documentIds: string[], parentId: string) => Promise<void>;
-  /** Override for clicking a document tile. If provided, called instead of opening StoreDocumentModal. */
-  onActionClick?: (documentId: string) => void;
+  /** Override for clicking a document tile. Return `false` to fall back to opening StoreDocumentModal. */
+  onActionClick?: (documentId: string) => boolean | void;
   /** Optional: render a "create new record" form in StoreDocumentModal (for standalone uploads). */
   renderNewRecordForm?: (opts: { disabled: boolean; isSaving: boolean }) => React.ReactNode;
   /** Optional: extract form data for onSave when creating a new parent record inline. */
@@ -205,8 +205,9 @@ export default function GlobalStoreView({
   // --- Action click (TileView) ---
   const handleActionClick = (docId: string) => {
     if (onActionClickOverride) {
-      onActionClickOverride(docId);
-      return;
+      const handled = onActionClickOverride(docId);
+      // If the override explicitly returns false, fall through to default behavior
+      if (handled !== false) return;
     }
     const d = documents.find((x) => x.id === docId);
     if (!d) return;
@@ -603,6 +604,8 @@ export default function GlobalStoreView({
           onClose={closeStoreEditModal}
           onSave={handleStoreSave}
           onDelete={handleStoreDelete}
+          renderNewRecordForm={renderNewRecordForm}
+          extractNewRecordData={extractNewRecordData}
         />
       )}
     </div>

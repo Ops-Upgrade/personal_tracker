@@ -13,7 +13,7 @@ import { useLocalStorage } from "@/lib/useLocalStorage";
 import {
   getSeasonDetails,
   formatEpisodeKey,
-  computeShowStatus,
+  getEffectiveEpisodeStatus,
 } from "@/api/media";
 import type {
   TmdbSeasonDetails,
@@ -117,6 +117,14 @@ export default function TvSeriesPage({
   const [episodeState, setEpisodeState] = useState<
     Record<string, EpisodeTracking>
   >({});
+
+  // Conflict dialog — shown when manually overriding parent status would
+  // wipe individually-tracked episode records
+  const [overrideConfig, setOverrideConfig] = useState<{
+    show: boolean;
+    targetStatus: string | null;
+    conflictCount: number;
+  }>({ show: false, targetStatus: null, conflictCount: 0 });
 
   const seasonCount = tmdbData?.number_of_seasons ?? 10;
   const isTracked = localMedia !== null;
@@ -228,6 +236,7 @@ export default function TvSeriesPage({
     handleBackClick,
     handleDiscardAndNavigate,
     closeUnsavedDialog,
+    navigateTo,
   } = useNavigationGuard({
     isDirty,
     doCancel,
@@ -237,12 +246,54 @@ export default function TvSeriesPage({
   // ── Parent-level handlers ──
 
   function handleParentStatusClick(newStatus: MediaPlaintext["status"]) {
-    setParentStatus(newStatus);
-    if (Object.keys(episodeState).length > 0) {
-      const totalEpisodes = tmdbData?.number_of_episodes ?? 0;
-      const computed = computeShowStatus(episodeState, totalEpisodes);
-      if (computed) setParentStatus(computed);
+    if (!newStatus) return;
+
+    // If the user is forcing the parent to "Watched", find any explicitly tracked
+    // episodes that contradict it.
+    let conflictCount = 0;
+    if (newStatus === "watched") {
+      conflictCount = Object.values(episodeState).filter(ep => ep.status && ep.status !== "watched").length;
+    } else if (newStatus === "unwatched") {
+      conflictCount = Object.values(episodeState).filter(ep => ep.status && ep.status !== "unwatched").length;
     }
+    // Note: Transitioning the parent to "watching" inherently allows mixed episode
+    // states, so no conflict check is necessary.
+
+    if (conflictCount > 0) {
+      // Show confirmation dialog — user must explicitly approve clearing episode records
+      setOverrideConfig({
+        show: true,
+        targetStatus: newStatus,
+        conflictCount,
+      });
+      return;
+    }
+
+    // No conflicts — apply parent status atomically (same synchronous block
+    // so that a single handleSave call patches both changes in one DB write)
+    setParentStatus(newStatus);
+  }
+
+  function handleConfirmOverride() {
+    const targetStatus = overrideConfig.targetStatus;
+    if (!targetStatus) return;
+
+    // Atomically: set parent status AND clear conflicting episode records
+    setParentStatus(targetStatus as MediaPlaintext["status"]);
+    setEpisodeState((prev) => {
+      const next = { ...prev };
+      for (const key of Object.keys(next)) {
+        if (next[key].status && next[key].status !== targetStatus) {
+          delete next[key];
+        }
+      }
+      return next;
+    });
+    setOverrideConfig({ show: false, targetStatus: null, conflictCount: 0 });
+  }
+
+  function handleCancelOverride() {
+    setOverrideConfig({ show: false, targetStatus: null, conflictCount: 0 });
   }
 
   function handleToggleCollection(colId: string) {
@@ -272,11 +323,8 @@ export default function TvSeriesPage({
   // ── Save ──
 
   async function handleSave() {
-    const totalEpisodes = tmdbData?.number_of_episodes ?? 0;
-    const computed = computeShowStatus(episodeState, totalEpisodes);
-
     const patch: Partial<MediaPlaintext> = {
-      status: computed ?? parentStatus,
+      status: parentStatus,
       rating: rating || undefined,
       review_notes: reviewNotes || undefined,
       collection_ids: collectionIds.length > 0 ? collectionIds : undefined,
@@ -293,7 +341,7 @@ export default function TvSeriesPage({
       poster_path: tmdbData?.poster_path,
       release_date: tmdbData?.release_date,
       genre_ids: genreIds,
-      status: computed ?? parentStatus,
+      status: parentStatus,
       episodes: patch.episodes ?? {},
       runtime: totalRuntime,
     };
@@ -306,10 +354,7 @@ export default function TvSeriesPage({
         status: result.status ?? "unwatched",
         rating: result.rating ?? 0,
         review_notes: result.review_notes ?? "",
-        collection_ids:
-          (result.collection_ids ?? result.collection_id
-            ? [result.collection_id!]
-            : []) as string[],
+        collection_ids: result.collection_ids ?? (result.collection_id ? [result.collection_id] : []),
         episodes: result.episodes ?? {},
       } as MediaPlaintext);
     }
@@ -415,7 +460,7 @@ export default function TvSeriesPage({
                     selectedIds={collectionIds}
                     onToggle={handleToggleCollection}
                     onRemoveClick={handleRemoveCollectionClick}
-                    newCollectionHref={`/media/collection/new?add_tmdb_id=${tmdbId}&add_type=tv`}
+                    newCollectionHref={`/media/collection/new_collection?add_tmdb_id=${tmdbId}&add_type=tv`}
                   />
                 </div>
               </div>
@@ -478,11 +523,10 @@ export default function TvSeriesPage({
                 {seasonData?.episodes?.map((ep) => {
                   const key = formatEpisodeKey(selectedSeason, ep.episode_number);
                   const rawLocal = episodeState[key];
+                  const { status, isVirtual } = getEffectiveEpisodeStatus(parentStatus, rawLocal?.status);
                   const local = {
                     ...rawLocal,
-                    status:
-                      rawLocal?.status ??
-                      (parentStatus === "watched" && isTracked ? "watched" : undefined),
+                    status,
                   };
                   const stillUrl = ep.still_path
                     ? tmdbStillUrl(ep.still_path, "w300")
@@ -492,7 +536,7 @@ export default function TvSeriesPage({
                     <div
                       key={key}
                       onClick={() =>
-                        router.push(
+                        navigateTo(
                           `/media/tv/${tmdbId}/episode/${selectedSeason}/${ep.episode_number}`,
                         )
                       }
@@ -523,15 +567,11 @@ export default function TvSeriesPage({
                             <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                               {ep.episode_number}. {ep.name}
                             </h4>
-                            {ep.air_date && (
+                            {(ep.air_date || ep.runtime) && (
                               <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                Aired:{" "}
-                                {ep.air_date
-                                  ? ((d) =>
-                                      `${d[2]}-${d[1]}-${d[0]}`)(
-                                      ep.air_date.split("-"),
-                                    )
-                                  : ""}
+                                {ep.air_date ? `Aired: ${((d) => `${d[2]}-${d[1]}-${d[0]}`)(ep.air_date.split("-"))}` : ""}
+                                {ep.air_date && ep.runtime ? " • " : ""}
+                                {ep.runtime ? (ep.runtime >= 60 ? `${Math.floor(ep.runtime / 60)}h ${ep.runtime % 60}m` : `${ep.runtime}m`) : ""}
                               </p>
                             )}
                             {ep.overview && (
@@ -540,7 +580,7 @@ export default function TvSeriesPage({
                               </p>
                             )}
                             <div className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
-                              {local.status && <StatusBadge status={local.status} />}
+                              {local.status && <StatusBadge status={local.status} isVirtual={isVirtual} />}
                               {local?.rating ? (
                                 <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-500 text-[10px] font-bold px-1.5 py-0.5 rounded">
                                   <Star size={10} className="fill-current" />{" "}
@@ -563,15 +603,11 @@ export default function TvSeriesPage({
                               <h4 className="text-sm font-semibold truncate">
                                 {ep.episode_number}. {ep.name}
                               </h4>
-                              {ep.air_date && (
+                              {(ep.air_date || ep.runtime) && (
                                 <p className="text-xs mt-0.5">
-                                  Aired:{" "}
-                                  {ep.air_date
-                                    ? ((d) =>
-                                        `${d[2]}-${d[1]}-${d[0]}`)(
-                                        ep.air_date.split("-"),
-                                      )
-                                    : ""}
+                                  {ep.air_date ? `Aired: ${((d) => `${d[2]}-${d[1]}-${d[0]}`)(ep.air_date.split("-"))}` : ""}
+                                  {ep.air_date && ep.runtime ? " • " : ""}
+                                  {ep.runtime ? (ep.runtime >= 60 ? `${Math.floor(ep.runtime / 60)}h ${ep.runtime % 60}m` : `${ep.runtime}m`) : ""}
                                 </p>
                               )}
                               <div className="flex items-center gap-2 mt-2 min-h-[22px]">
@@ -604,22 +640,18 @@ export default function TvSeriesPage({
                                 </div>
                               )}
                               {local.status && (
-                                <StatusBadge status={local.status} className="absolute top-2 right-2" />
+                                <StatusBadge status={local.status} isVirtual={isVirtual} className="absolute top-2 right-2" />
                               )}
                             </div>
                             <div className="p-3 pb-2">
                               <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                                 {ep.episode_number}. {ep.name}
                               </h4>
-                              {ep.air_date && (
+                              {(ep.air_date || ep.runtime) && (
                                 <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                                  Aired:{" "}
-                                  {ep.air_date
-                                    ? ((d) =>
-                                        `${d[2]}-${d[1]}-${d[0]}`)(
-                                        ep.air_date.split("-"),
-                                      )
-                                    : ""}
+                                  {ep.air_date ? `Aired: ${((d) => `${d[2]}-${d[1]}-${d[0]}`)(ep.air_date.split("-"))}` : ""}
+                                  {ep.air_date && ep.runtime ? " • " : ""}
+                                  {ep.runtime ? (ep.runtime >= 60 ? `${Math.floor(ep.runtime / 60)}h ${ep.runtime % 60}m` : `${ep.runtime}m`) : ""}
                                 </p>
                               )}
                               <div className="flex items-center gap-2 mt-2 min-h-[22px]">
@@ -639,7 +671,7 @@ export default function TvSeriesPage({
                             {ep.overview && (
                               <div className="grid transition-all duration-300 grid-rows-[0fr] group-hover:grid-rows-[1fr]">
                                 <div className="overflow-hidden">
-                                  <p className="px-3 pb-3 text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed line-clamp-4">
+                                  <p className="px-3 pb-3 text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed max-h-[120px] overflow-y-auto overscroll-contain">
                                     {ep.overview}
                                   </p>
                                 </div>
@@ -694,6 +726,18 @@ export default function TvSeriesPage({
           cancelLabel="Cancel"
           onConfirm={handleConfirmRemoveCollection}
           onCancel={() => setCollectionToRemove(null)}
+        />
+      )}
+
+      {/* Parent status override conflict dialog */}
+      {overrideConfig.show && (
+        <ConfirmDialog
+          title="Override Episode Progress?"
+          description={`This will clear tracked progress on ${overrideConfig.conflictCount} episode${overrideConfig.conflictCount !== 1 ? "s" : ""} you've tracked individually. Continue?`}
+          confirmLabel="Override"
+          cancelLabel="Cancel"
+          onConfirm={handleConfirmOverride}
+          onCancel={handleCancelOverride}
         />
       )}
     </div>

@@ -22,6 +22,8 @@ interface MedicalDraft {
 export interface MedicalFileAction {
   newFiles: File[];
   removeDocIds: string[];
+  /** IDs of existing documents to unlink (clear linked_id but keep file) */
+  unlinkDocIds?: string[];
   /** ID of an existing standalone document to link to this record */
   linkDocId?: string;
 }
@@ -40,7 +42,7 @@ interface MedicalModalProps {
     existingRecord: MedicalRecord | null,
     fileAction?: MedicalFileAction,
   ) => Promise<void>;
-  onDelete: (recordId: string) => Promise<void>;
+  onDelete: (recordId: string, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
 }
 
 export default function MedicalModal({
@@ -63,6 +65,7 @@ export default function MedicalModal({
 
   // --- File state (from shared hook) ---
   const [markedForRemoval, setMarkedForRemoval] = useState<Set<string>>(new Set());
+  const [markedForUnlink, setMarkedForUnlink] = useState<Set<string>>(new Set());
 
   const {
     newFiles,
@@ -112,6 +115,7 @@ export default function MedicalModal({
     setError(null);
     setShowDeleteConfirm(false);
     setMarkedForRemoval(new Set());
+    setMarkedForUnlink(new Set());
     resetFileState();
   }, [baseline, resetFileState]);
 
@@ -123,6 +127,7 @@ export default function MedicalModal({
     diagnosisTimeline !== baseline.diagnosisTimeline ||
     newFiles.length > 0 ||
     markedForRemoval.size > 0 ||
+    markedForUnlink.size > 0 ||
     stagedLinkDocId !== null;
 
   // --- File handlers (wrap shared hook with modal-specific logic) ---
@@ -154,6 +159,19 @@ export default function MedicalModal({
     });
   }, [newFiles, selectedFileId, stagedLinkDocId, removeNewFile, setStagedLinkDocId, setSelectedFileId]);
 
+  const handleFileUnlinkWrapped = useCallback((fileId: string) => {
+    if (stagedLinkDocId === fileId) { setStagedLinkDocId(null); return; }
+    if (newFiles.find((nf) => nf.tempId === fileId)) return;
+
+    setMarkedForUnlink((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+    setMarkedForRemoval((prev) => { const next = new Set(prev); next.delete(fileId); return next; });
+  }, [newFiles, stagedLinkDocId, setStagedLinkDocId]);
+
   const hasFiles = files.length > 0;
 
   // --- Save handler ---
@@ -173,10 +191,11 @@ export default function MedicalModal({
 
     try {
       const fileAction: MedicalFileAction | undefined =
-        newFiles.length > 0 || markedForRemoval.size > 0 || stagedLinkDocId
+        newFiles.length > 0 || markedForRemoval.size > 0 || markedForUnlink.size > 0 || stagedLinkDocId
           ? {
               newFiles: newFiles.map((nf) => nf.file),
               removeDocIds: [...markedForRemoval],
+              unlinkDocIds: markedForUnlink.size > 0 ? [...markedForUnlink] : undefined,
               linkDocId: stagedLinkDocId ?? undefined,
             }
           : undefined;
@@ -201,33 +220,48 @@ export default function MedicalModal({
 
   // --- Delete handler ---
 
+  const linkedDocCount = attachedDocuments.length;
+
   async function handleDelete() {
     if (!record) return;
     setShowDeleteConfirm(true);
   }
 
-  async function confirmDelete() {
-    if (!record) return;
-    try {
-      await onDelete(record.id);
-      setShowDeleteConfirm(false);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete medical record.");
-    }
-  }
-
   // --- Link dropdown for rightPanelExtras ---
-  const stagedLinkDoc = stagedLinkDocId
-    ? standaloneDocuments.find((d) => d.id === stagedLinkDocId)
-    : null;
-  const stagedLinkLabel = stagedLinkDoc
-    ? (stagedLinkDoc.label || stagedLinkDoc.file_name || "Unnamed")
-    : null;
-  const linkDisplayValue = stagedLinkDocId ? (stagedLinkLabel ?? "") : linkSearchQuery;
-
   const linkDropdownExtras = useMemo(() => {
     if (availableStandalone.length === 0 && !stagedLinkDocId) return null;
+
+    // Deduplicate names: same-name docs get chronological numbering (mirrors EducationModal)
+    const labelBuckets = new Map<string, Document[]>();
+    for (const doc of availableStandalone) {
+      const key = doc.label || doc.file_name || "Unnamed";
+      if (!labelBuckets.has(key)) labelBuckets.set(key, []);
+      labelBuckets.get(key)!.push(doc);
+    }
+    const displayName = new Map<string, string>();
+    for (const [, bucket] of labelBuckets) {
+      if (bucket.length === 1) {
+        const label = bucket[0].label || bucket[0].file_name || "Unnamed";
+        displayName.set(bucket[0].id, label.length > 55 ? label.slice(0, 55) + "…" : label);
+      } else {
+        bucket.sort((a, b) => a.created_at.localeCompare(b.created_at));
+        bucket.forEach((doc, i) => {
+          const label = doc.label || doc.file_name || "Unnamed";
+          displayName.set(doc.id, `${label.length > 50 ? label.slice(0, 50) + "…" : label} (${i + 1})`);
+        });
+      }
+    }
+    const fmt = (doc: Document): string =>
+      displayName.get(doc.id) || (() => {
+        const label = doc.label || doc.file_name || "Unnamed";
+        return label.length > 55 ? label.slice(0, 55) + "…" : label;
+      })();
+
+    const stagedDoc = stagedLinkDocId
+      ? availableStandalone.find(d => d.id === stagedLinkDocId)
+      : null;
+    const stagedLabel = stagedDoc ? fmt(stagedDoc) : null;
+    const displayValue = stagedLinkDocId ? (stagedLabel ?? "") : linkSearchQuery;
 
     return (
       <div className="relative w-full">
@@ -237,7 +271,7 @@ export default function MedicalModal({
         <div className="relative flex items-center">
           <input
             type="text"
-            value={linkDisplayValue.length > 55 ? linkDisplayValue.slice(0, 55) + "…" : linkDisplayValue}
+            value={displayValue}
             onChange={(e) => {
               if (stagedLinkDocId) setStagedLinkDocId(null);
               setLinkSearchQuery(e.target.value);
@@ -279,9 +313,7 @@ export default function MedicalModal({
                     }}
                     className="w-full px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-zinc-300 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400"
                   >
-                    {(doc.label || doc.file_name || "Unnamed").length > 55
-                      ? (doc.label || doc.file_name || "Unnamed").slice(0, 55) + "…"
-                      : (doc.label || doc.file_name || "Unnamed")}
+                    {fmt(doc)}
                   </button>
                 ))}
               </div>
@@ -294,7 +326,7 @@ export default function MedicalModal({
         )}
       </div>
     );
-  }, [availableStandalone.length, stagedLinkDocId, linkDisplayValue, linkDropdownOpen, filteredLinkDocs, linkSearchQuery, isSaving, setLinkDropdownOpen, setLinkSearchQuery, setSelectedFileId, setStagedLinkDocId]);
+  }, [availableStandalone, stagedLinkDocId, linkSearchQuery, linkDropdownOpen, filteredLinkDocs, isSaving, setLinkDropdownOpen, setLinkSearchQuery, setSelectedFileId, setStagedLinkDocId]);
 
   // --- Render ---
 
@@ -309,9 +341,10 @@ export default function MedicalModal({
         onSelectFile={(id) => setSelectedFileId(id)}
         onFileUpload={handleFileUploadWrapped}
         onFileDelete={hasFiles ? handleFileDeleteWrapped : undefined}
+        onFileUnlink={hasFiles ? handleFileUnlinkWrapped : undefined}
         onFileDownload={hasFiles ? handleFileDownload : undefined}
         onFileRename={hasFiles ? handleFileRename : undefined}
-        onLoadPreview={hasFiles ? handleLoadPreview : undefined}
+        onLoadPreview={handleLoadPreview}
         onSave={handleSave}
         isSaving={isSaving}
         onDelete={isEditing ? handleDelete : undefined}
@@ -361,9 +394,28 @@ export default function MedicalModal({
       {showDeleteConfirm && record && (
         <ConfirmDialog
           title="Delete medical record?"
-          description="This action cannot be undone. The medical record will be permanently removed."
+          description={
+            linkedDocCount > 0
+              ? `This record has ${linkedDocCount} linked file(s).`
+              : "This action cannot be undone. The medical record will be permanently removed."
+          }
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          showDeleteFilesCheckbox={linkedDocCount > 0}
+          deleteFilesLabel="Delete associated files"
           onCancel={() => setShowDeleteConfirm(false)}
-          onConfirm={confirmDelete}
+          onConfirm={async (deleteFiles) => {
+            setShowDeleteConfirm(false);
+            setIsSaving(true);
+            try {
+              await onDelete(record.id, deleteFiles ? 'cascade' : 'unlink');
+              onClose();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Failed to delete medical record.");
+            } finally {
+              setIsSaving(false);
+            }
+          }}
         />
       )}
     </>

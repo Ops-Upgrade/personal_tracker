@@ -166,9 +166,9 @@ export async function createMedia(
 
   const created: Media = { id: data.id, created_at: data.created_at, ...input };
 
-  // Maintain cache
+  // Maintain cache — create a new array reference so React detects the change
   if (cachedMedia !== null && cacheUserId === userId) {
-    cachedMedia.push(created);
+    cachedMedia = [...cachedMedia, created];
   }
 
   return created;
@@ -211,10 +211,9 @@ export async function updateMedia(
 
   const updated: Media = { id: data.id, created_at: data.created_at, ...merged };
 
-  // Maintain cache — replace stale entry
+  // Maintain cache — replace stale entry with a new array reference
   if (cachedMedia !== null && cacheUserId === userId) {
-    const idx = cachedMedia.findIndex((m) => m.id === id);
-    if (idx !== -1) cachedMedia[idx] = updated;
+    cachedMedia = cachedMedia.map((m) => (m.id === id ? updated : m));
   }
 
   return updated;
@@ -300,6 +299,10 @@ export function formatEpisodeKey(season: number, episode: number): string {
 /**
  * Compute the parent show status from its episode map.
  * Returns null if no episodes are tracked (signals auto-untrack).
+ *
+ * PRODUCT DECISION: Auto-upgrading to "watched" strictly requires every episode
+ * to be explicitly tracked in the DB. Sparse/lazy watchers (e.g. 1000 episode shows)
+ * are expected to manually force the parent to "watched". Do not "fix" this.
  */
 export function computeShowStatus(
   episodes: Record<string, EpisodeTracking>,
@@ -321,4 +324,22 @@ export function computeShowStatus(
   }
   // Any mix
   return "watching";
+}
+
+/**
+ * Calculate the effective display status for an episode, distinguishing
+ * explicit DB records from virtual projections inherited from the parent show.
+ *
+ * - If the episode has its own tracked status → real (isVirtual: false)
+ * - If parent is "watched" and no episode record → virtual "watched"
+ * - Otherwise → virtual "unwatched" (covers "unwatched", "watching", and
+ *   undefined parent states where no episode record exists)
+ */
+export function getEffectiveEpisodeStatus(
+  parentStatus?: string,
+  epStatus?: string
+): { status: string; isVirtual: boolean } {
+  if (epStatus) return { status: epStatus, isVirtual: false };
+  if (parentStatus === "watched") return { status: "watched", isVirtual: true };
+  return { status: "unwatched", isVirtual: true };
 }

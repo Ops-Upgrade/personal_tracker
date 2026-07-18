@@ -35,6 +35,12 @@ export interface SortableMediaGridProps {
   onRemove?: (id: string) => void;
   /** Rendered after the last item (e.g. `<AddMediaTile>`). */
   appendElement?: ReactNode;
+  /**
+   * When provided, forwarded to each item and called on tile click
+   * instead of the default router.push. Allows parent pages to
+   * intercept navigation (e.g. unsaved-changes guard).
+   */
+  onNavigateItem?: (url: string) => void;
 }
 
 // ── Component ──
@@ -57,6 +63,7 @@ export default function SortableMediaGrid({
   onReorder,
   onRemove,
   appendElement,
+  onNavigateItem,
 }: SortableMediaGridProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -102,6 +109,7 @@ export default function SortableMediaGrid({
                 media={m}
                 onRemove={onRemove}
                 isUnsaved={isUnsaved(m)}
+                onNavigate={onNavigateItem}
               />
             ))}
             {appendElement}
@@ -114,6 +122,7 @@ export default function SortableMediaGrid({
                 media={m}
                 onRemove={onRemove}
                 isUnsaved={isUnsaved(m)}
+                onNavigate={onNavigateItem}
               />
             ))}
             {appendElement}

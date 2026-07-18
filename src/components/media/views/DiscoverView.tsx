@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
 import { searchMedia, getDiscoverMedia } from "@/api/media";
 import type {
   TmdbSearchResult,
@@ -16,6 +15,7 @@ import type {
 } from "@/types/media";
 import { DEFAULT_DISCOVER_FILTERS } from "@/types/media";
 import { Chip } from "@/components/common/Chip";
+import SearchBar from "@/components/common/SearchBar";
 import { FilterLabel } from "@/components/media/shared/FilterLabel";
 import { MobileFilterBar } from "@/components/media/shared/MobileFilterBar";
 import { FilterSidebar } from "@/components/media/shared/FilterSidebar";
@@ -635,30 +635,11 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
 
       {/* Main content */}
       <div className="flex-1 min-w-0 space-y-4">
-        {/* Search input */}
-        <div className="relative">
-          <Search
-            size={18}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400"
-          />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="Search TMDB for Movies, TV, or People..."
-            className="w-full rounded-xl border border-zinc-300 bg-white py-2.5 pl-10 pr-10 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-          />
-          {query && (
-            <button
-              type="button"
-              onClick={() => handleQueryChange("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-              aria-label="Clear search"
-            >
-              ×
-            </button>
-          )}
-        </div>
+        <SearchBar
+          value={query}
+          onChange={handleQueryChange}
+          placeholder="Search TMDB for Movies, TV, or People..."
+        />
 
         {/* Mobile filter bar */}
         {!isSearching && (

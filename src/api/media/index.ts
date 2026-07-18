@@ -7,6 +7,7 @@ export {
   unlinkFromCollection,
   formatEpisodeKey,
   computeShowStatus,
+  getEffectiveEpisodeStatus,
   getMediaByTmdbId,
   clearMediaCache,
   cleanupDuplicateMedia,

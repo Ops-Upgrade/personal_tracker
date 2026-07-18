@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { List, LayoutGrid, ArrowUp, ArrowDown } from "lucide-react";
 import Button from "@/components/common/Button";
+import SearchBar from "@/components/common/SearchBar";
 import { Chip } from "@/components/common/Chip";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import type { Media, MediaCollection } from "@/types/media";
@@ -252,24 +253,13 @@ export default function CollectionView({
 
         <div className="flex items-center gap-2 w-full md:w-auto">
           {/* Collection search */}
-          <div className="relative flex-1 md:flex-none">
-            <input
-              type="text"
-              value={collectionSearch}
-              onChange={(e) => setCollectionSearch(e.target.value)}
-              placeholder="Search collections…"
-              className="w-full md:w-48 rounded-xl border border-zinc-300 bg-white py-2 pl-3 pr-8 text-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-            />
-            {collectionSearch && (
-              <button
-                type="button"
-                onClick={() => setCollectionSearch("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-              >
-                ×
-              </button>
-            )}
-          </div>
+          <SearchBar
+            value={collectionSearch}
+            onChange={setCollectionSearch}
+            placeholder="Search collections…"
+            className="flex-1 md:flex-none md:w-48"
+            inputClassName="text-xs py-2 pl-8 pr-8"
+          />
 
           {/* New Collection button */}
           <Button variant="primary" size="md" onClick={onCreateCollection}>
@@ -308,7 +298,7 @@ export default function CollectionView({
           return (
             <div
               key={c.id}
-              className={`flex flex-col overflow-hidden relative transition-transform hover:scale-[1.02] cursor-pointer p-5 ${theme.cardClass}`}
+              className={`flex flex-col overflow-hidden relative transition-transform hover:scale-[1.02] cursor-pointer p-5 rounded-xl ${theme.cardClass}`}
               style={theme.cardStyle}
               onClick={() => router.push(`/media/collection/${c.id}`)}
             >

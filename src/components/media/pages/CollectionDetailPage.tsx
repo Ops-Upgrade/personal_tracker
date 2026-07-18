@@ -265,6 +265,7 @@ export default function CollectionDetailPage({
   async function handleSaveAll() {
     if (!userId || !collection) return;
     if (!name.trim()) {
+      triggerToast("Collection name is required.", "error");
       setName(collection.name ?? "Untitled");
       return;
     }
@@ -335,7 +336,7 @@ export default function CollectionDetailPage({
       setDisplayOrder(resolvedIds);
 
       const media = await listMedia(userId);
-      setAllMedia(media);
+      setAllMedia([...media]);
     } catch {
       triggerToast("Failed to save collection. Please try again.", "error");
     } finally {
@@ -361,6 +362,7 @@ export default function CollectionDetailPage({
     handleBackClick,
     handleDiscardAndNavigate,
     closeUnsavedDialog,
+    navigateTo,
   } = useNavigationGuard({
     isDirty,
     doCancel,
@@ -420,8 +422,31 @@ export default function CollectionDetailPage({
           </div>
         </div>
 
-        {/* ── 2-column Metadata Matrix ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12">
+        {/* ── Collection not found guard ── */}
+        {!isLoading && !error && !collection && (
+          <div className="flex flex-col items-center justify-center py-16 gap-4">
+            <div className="text-6xl">📭</div>
+            <h2 className="text-xl font-semibold text-zinc-700 dark:text-zinc-300">
+              Collection not found
+            </h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              This collection may have been deleted or you may not have access to it.
+            </p>
+            <Button
+              variant="primary"
+              size="md"
+              onClick={() => router.push(`${ROUTES.MEDIA}?tab=manager&subtab=collections`)}
+            >
+              Back to Collections
+            </Button>
+          </div>
+        )}
+
+        {/* Only render editable content when collection exists */}
+        {collection && (
+          <>
+            {/* ── 2-column Metadata Matrix ── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12">
           <div className="flex flex-col gap-4">
             <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
               Collection Name
@@ -521,6 +546,7 @@ export default function CollectionDetailPage({
                 isUnsaved={(m) => pendingAdds.some((p) => p.id === m.id)}
                 onReorder={(newOrder) => setDisplayOrder(newOrder.map((m) => m.id))}
                 onRemove={handleRemoveItem}
+                onNavigateItem={navigateTo}
                 appendElement={<AddMediaTile viewMode={viewMode} onClick={() => setIsAddModalOpen(true)} />}
               />
             )}
@@ -565,7 +591,7 @@ export default function CollectionDetailPage({
               onCancel={handleCancel}
               saving={saving}
               isDirty={isDirty}
-              leftContent={
+              rightContent={
                 <Button
                   variant="danger"
                   size="md"
@@ -580,6 +606,7 @@ export default function CollectionDetailPage({
         )}
 
         <TmdbAttribution />
+        </>)}
       </div>
 
       <AddMediaModal

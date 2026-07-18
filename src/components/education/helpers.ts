@@ -20,16 +20,6 @@ export function byPriority(educations: Education[]): Record<Priority, Education[
   return sharedByPriority(educations, PRIORITIES) as Record<Priority, Education[]>;
 }
 
-/** Count documents linked to a given education */
-export function docCountForEducation(
-  educationId: string,
-  documents: Document[]
-): number {
-  return documents.filter(
-    (d) => d.domain === "education" && d.linked_id === educationId
-  ).length;
-}
-
 /** Get documents linked to a given education */
 export function docsForEducation(
   educationId: string,

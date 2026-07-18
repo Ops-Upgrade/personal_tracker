@@ -2,7 +2,7 @@ const DB_NAME = "personal-tracker-keys";
 const DB_VERSION = 1;
 const STORE_NAME = "dek-store";
 
-function openDB(): Promise<IDBDatabase> {
+let cachedDEK: { userId: string; key: CryptoKey } | null = null;function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -27,6 +27,7 @@ export async function saveDEK(
   userId: string,
   dek: CryptoKey
 ): Promise<void> {
+  cachedDEK = { userId, key: dek };
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -48,13 +49,21 @@ export async function saveDEK(
 export async function loadDEK(
   userId: string
 ): Promise<CryptoKey | null> {
+  if (cachedDEK && cachedDEK.userId === userId) {
+    return cachedDEK.key;
+  }
+
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
     const req = tx.objectStore(STORE_NAME).get(userId);
     req.onsuccess = () => {
       db.close();
-      resolve((req.result as CryptoKey) ?? null);
+      const key = (req.result as CryptoKey) ?? null;
+      if (key) {
+        cachedDEK = { userId, key };
+      }
+      resolve(key);
     };
     req.onerror = () => {
       db.close();
@@ -67,6 +76,9 @@ export async function loadDEK(
  * Remove the DEK for this user (called on logout).
  */
 export async function clearDEK(userId: string): Promise<void> {
+  if (cachedDEK && cachedDEK.userId === userId) {
+    cachedDEK = null;
+  }
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -86,6 +98,7 @@ export async function clearDEK(userId: string): Promise<void> {
  * Check whether a DEK is stored for this user.
  */
 export async function hasDEK(userId: string): Promise<boolean> {
+  if (cachedDEK && cachedDEK.userId === userId) return true;
   const key = await loadDEK(userId);
   return key !== null;
 }

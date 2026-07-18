@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
 import { Trash2 } from "lucide-react";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import ReviewSection from "@/components/media/shared/ReviewSection";
 import Toast from "@/components/media/shared/Toast";
 import type { ToastType } from "@/components/media/shared/Toast";
 import { tmdbStillUrl } from "@/components/media/constants";
 import StatusChipGroup from "@/components/media/shared/StatusChipGroup";
+import StickyActionBar from "@/components/media/shared/StickyActionBar";
 import UntrackConfirmation from "@/components/media/shared/UntrackConfirmation";
+import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import {
   getMediaDetails,
   getSeasonDetails,
@@ -22,6 +24,7 @@ import {
   findDuplicate,
   formatEpisodeKey,
   computeShowStatus,
+  getEffectiveEpisodeStatus,
 } from "@/api/media";
 import type {
   TmdbDetails,
@@ -50,13 +53,11 @@ export default function EpisodePage({
   userAvatarUrl,
   onRefresh,
 }: EpisodePageProps) {
-  const router = useRouter();
   const [seasonData, setSeasonData] = useState<TmdbSeasonDetails | null>(null);
   const [showData, setShowData] = useState<TmdbDetails | null>(null);
   const [localMedia, setLocalMedia] = useState<Media | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [saving, setSaving] = useState(false);
   const [showRemove, setShowRemove] = useState(false);
 
@@ -65,27 +66,42 @@ export default function EpisodePage({
     (e) => e.episode_number === episodeNumber
   );
 
-  // Local form state
+  // ── Local form state ──
   const [status, setStatus] = useState<EpisodeTracking["status"] | undefined>(undefined);
   const [rating, setRating] = useState(0);
   const [watchedOn, setWatchedOn] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
 
-  // Refs for auto-save engine — stay in sync so async calls never read stale values
-  const localMediaRef = useRef(localMedia);
-  useEffect(() => { localMediaRef.current = localMedia; }, [localMedia]);
-  const formStateRef = useRef({ status, rating, reviewNotes, watchedOn });
-  useEffect(() => {
-    formStateRef.current = { status, rating, reviewNotes, watchedOn };
-  }, [status, rating, reviewNotes, watchedOn]);
+  // Snapshot of original values for isDirty comparison
+  const [originalEpisode, setOriginalEpisode] = useState<{
+    status: string;
+    rating: number;
+    watched_on: string;
+    review_notes: string;
+  } | null>(null);
+
+  // ── Toast ──
+  const [toastConfig, setToastConfig] = useState<{
+    isVisible: boolean;
+    message: string;
+    type: ToastType;
+  }>({ isVisible: false, message: "", type: "success" });
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastConfig({ isVisible: true, message, type });
+    toastTimerRef.current = setTimeout(() => {
+      setToastConfig((prev) => ({ ...prev, isVisible: false }));
+    }, 2000);
+  }, []);
+
+  // ── Load ──
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch show details + season data + targeted media lookup in parallel.
-      // getMediaByTmdbId warms the in-memory cache on first call;
-      // subsequent navigations between detail pages return instantly.
       const [show, season, existing] = await Promise.all([
         getMediaDetails(tmdbId, "tv"),
         getSeasonDetails(tmdbId, seasonNumber),
@@ -97,12 +113,22 @@ export default function EpisodePage({
       if (existing) {
         setLocalMedia(existing);
         const epData = existing.episodes?.[episodeKey];
-        if (epData) {
-          setStatus(epData.status);
-          setRating(epData.rating ?? 0);
-          setWatchedOn(epData.watched_on ?? "");
-          setReviewNotes(epData.review_notes ?? "");
-        }
+        const { status: effectiveStatus } = getEffectiveEpisodeStatus(
+          existing.status,
+          epData?.status,
+        );
+        setStatus(effectiveStatus as EpisodeTracking["status"]);
+        setRating(epData?.rating ?? 0);
+        setWatchedOn(epData?.watched_on ?? "");
+        setReviewNotes(epData?.review_notes ?? "");
+        setOriginalEpisode({
+          status: effectiveStatus,
+          rating: epData?.rating ?? 0,
+          watched_on: epData?.watched_on ?? "",
+          review_notes: epData?.review_notes ?? "",
+        });
+      } else {
+        setOriginalEpisode(null);
       }
     } catch (err) {
       setError(
@@ -115,154 +141,225 @@ export default function EpisodePage({
 
   useEffect(() => {
     load();
-    // Force refresh when returning to this tab
-    const handleFocus = () => load();
-    window.addEventListener("focus", handleFocus);
-    return () => window.removeEventListener("focus", handleFocus);
   }, [load]);
 
-  // ── Auto-save engine (queued — prevents duplicate creates on rapid clicks) ──
+  // ── isDirty ──
+  const hasEpisodeRecord = localMedia?.episodes?.[episodeKey] !== undefined;
 
-  const [toastConfig, setToastConfig] = useState<{
-    isVisible: boolean;
-    message: string;
-    type: ToastType;
-  }>({ isVisible: false, message: "", type: "success" });
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const isDirty = useMemo(() => {
+    if (!originalEpisode) {
+      // No media tracked at all — dirty if anything was entered
+      return (
+        status !== undefined ||
+        rating !== 0 ||
+        watchedOn !== "" ||
+        reviewNotes !== ""
+      );
+    }
+    // Compare against the loaded snapshot (works for both virtual and explicit episodes)
+    return (
+      status !== originalEpisode.status ||
+      rating !== originalEpisode.rating ||
+      watchedOn !== originalEpisode.watched_on ||
+      reviewNotes !== originalEpisode.review_notes
+    );
+  }, [originalEpisode, status, rating, watchedOn, reviewNotes]);
 
-  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToastConfig({ isVisible: true, message, type });
-    toastTimerRef.current = setTimeout(() => {
-      setToastConfig((prev) => ({ ...prev, isVisible: false }));
-    }, 2000);
-  }, []);
+  // ── Navigation guard ──
+  function doCancel() {
+    if (originalEpisode) {
+      setStatus(originalEpisode.status as EpisodeTracking["status"]);
+      setRating(originalEpisode.rating);
+      setWatchedOn(originalEpisode.watched_on);
+      setReviewNotes(originalEpisode.review_notes);
+    } else {
+      setStatus(undefined);
+      setRating(0);
+      setWatchedOn("");
+      setReviewNotes("");
+    }
+  }
 
-  const saveEpisodeInteraction = useCallback(
-    (patch: Partial<EpisodeTracking>) => {
-      if (!userId) return;
-      setSaving(true);
+  const {
+    showUnsavedDialog,
+    handleCancel,
+    handleBackClick,
+    handleDiscardAndNavigate,
+    closeUnsavedDialog,
+  } = useNavigationGuard({
+    isDirty,
+    doCancel,
+    fallbackRoute: `${ROUTES.MEDIA}?tab=manager`,
+  });
 
-      saveQueue.current = saveQueue.current.then(async () => {
-        try {
-          const episodeEntry: EpisodeTracking = {
-            status: patch.status ?? formStateRef.current.status ?? "unwatched",
-            rating: (patch.rating !== undefined ? patch.rating : formStateRef.current.rating) || undefined,
-            watched_on: (patch.watched_on !== undefined ? patch.watched_on : formStateRef.current.watchedOn) || undefined,
-            review_notes: (patch.review_notes !== undefined ? patch.review_notes : formStateRef.current.reviewNotes) || undefined,
-          };
-          const currentMedia = localMediaRef.current;
-
-          if (currentMedia) {
-            const updatedEpisodes = {
-              ...(currentMedia.episodes ?? {}),
-              [episodeKey]: episodeEntry,
-            };
-            const parentPatch: Partial<MediaPlaintext> = { episodes: updatedEpisodes };
-            // Bubble up to "watching" if parent is unwatched
-            if (currentMedia.status === "unwatched" && (episodeEntry.status !== "unwatched" || episodeEntry.rating || episodeEntry.review_notes)) {
-              parentPatch.status = "watching";
-            }
-            // Check if this interaction completes the show
-            const totalEpisodes = showData?.number_of_episodes ?? 0;
-            const computedParentStatus = computeShowStatus(updatedEpisodes, totalEpisodes);
-            if (computedParentStatus) {
-              parentPatch.status = computedParentStatus;
-            }
-            const updated = await updateMedia(userId, currentMedia.id, parentPatch);
-            localMediaRef.current = updated;
-            setLocalMedia(updated);
-          } else {
-            // Auto-create parent — read from cache (instant, no network)
-            const mediaList = await listMedia(userId);
-            const dup = findDuplicate(tmdbId, "tv", mediaList);
-            if (dup) {
-              const updatedEpisodes = { ...(dup.episodes ?? {}), [episodeKey]: episodeEntry };
-              const parentPatch: Partial<MediaPlaintext> = { episodes: updatedEpisodes };
-              if (dup.status === "unwatched" && (episodeEntry.status !== "unwatched" || episodeEntry.rating || episodeEntry.review_notes)) {
-                parentPatch.status = "watching";
-              }
-              const totalEpisodes = showData?.number_of_episodes ?? 0;
-              const computedParentStatus = computeShowStatus(updatedEpisodes, totalEpisodes);
-              if (computedParentStatus) parentPatch.status = computedParentStatus;
-              const updated = await updateMedia(userId, dup.id, parentPatch);
-              localMediaRef.current = updated;
-              setLocalMedia(updated);
-            } else {
-              const newMedia = await createMedia(userId, {
-                tmdb_id: tmdbId,
-                type: "tv",
-                title: showData?.name ?? "TV Series",
-                status: "watching",
-                episodes: { [episodeKey]: episodeEntry },
-              });
-              localMediaRef.current = newMedia;
-              setLocalMedia(newMedia);
-            }
-          }
-
-          triggerToast("✓ Progress saved", "success");
-          onRefresh?.();
-        } catch {
-          triggerToast("Auto-save failed. Please try again.", "error");
-        }
-      }).finally(() => {
-        setSaving(false);
-      });
-    },
-    [userId, tmdbId, episodeKey, showData, onRefresh, triggerToast],
-  );
-
-  // ── Interaction handlers ──
+  // ── Handlers (local state only — save is manual) ──
 
   function handleStatusClick(newStatus: EpisodeTracking["status"]) {
     setStatus(newStatus);
-    const patch: Partial<EpisodeTracking> = { status: newStatus };
-    if (newStatus === "watched" && !formStateRef.current.watchedOn) {
+    if (newStatus === "watched" && !watchedOn) {
       const today = new Date().toISOString().split("T")[0];
       setWatchedOn(today);
-      patch.watched_on = today;
     }
-    saveEpisodeInteraction(patch);
   }
 
   function handleRatingChange(newRating: number) {
     setRating(newRating);
-    const patch: Partial<EpisodeTracking> = { rating: newRating || undefined };
-    if ((formStateRef.current.status ?? "unwatched") === "unwatched" && newRating > 0) {
+    const currentStatus = status ?? "unwatched";
+    if (currentStatus === "unwatched" && newRating > 0) {
       setStatus("watched");
-      patch.status = "watched";
-      if (!formStateRef.current.watchedOn) {
+      if (!watchedOn) {
         const today = new Date().toISOString().split("T")[0];
         setWatchedOn(today);
-        patch.watched_on = today;
       }
     }
-    saveEpisodeInteraction(patch);
   }
 
   function handleNotesBlur() {
-    const patch: Partial<EpisodeTracking> = { review_notes: formStateRef.current.reviewNotes || undefined };
-    if ((formStateRef.current.status ?? "unwatched") === "unwatched" && formStateRef.current.reviewNotes) {
+    const currentStatus = status ?? "unwatched";
+    if (currentStatus === "unwatched" && reviewNotes) {
       setStatus("watched");
-      patch.status = "watched";
-      if (!formStateRef.current.watchedOn) {
+      if (!watchedOn) {
         const today = new Date().toISOString().split("T")[0];
         setWatchedOn(today);
-        patch.watched_on = today;
       }
     }
-    saveEpisodeInteraction(patch);
+  }
+
+  // ── Save ──
+
+  async function handleSave() {
+    if (!userId) return;
+    setSaving(true);
+    try {
+      const episodeEntry: EpisodeTracking = {
+        status: status ?? "unwatched",
+        rating: rating || undefined,
+        watched_on: watchedOn || undefined,
+        review_notes: reviewNotes || undefined,
+      };
+
+      if (localMedia) {
+        // Update existing parent show
+        const updatedEpisodes = {
+          ...(localMedia.episodes ?? {}),
+          [episodeKey]: episodeEntry,
+        };
+        const parentPatch: Partial<MediaPlaintext> = { episodes: updatedEpisodes };
+
+        // Bubble up to "watching" if parent is unwatched
+        if (
+          localMedia.status === "unwatched" &&
+          (episodeEntry.status !== "unwatched" || episodeEntry.rating || episodeEntry.review_notes)
+        ) {
+          parentPatch.status = "watching";
+        }
+
+        // Check if this interaction completes the show
+        const totalEpisodes = showData?.number_of_episodes ?? 0;
+        const computedParentStatus = computeShowStatus(updatedEpisodes, totalEpisodes);
+        if (computedParentStatus) {
+          const isDowngradeFromWatched =
+            localMedia.status === "watched" && computedParentStatus !== "watched";
+          if (isDowngradeFromWatched) {
+            // INVARIANT: Any explicit non-watched status breaks the umbrella.
+            if (episodeEntry.status && episodeEntry.status !== "watched") {
+              parentPatch.status = "watching";
+            }
+          } else {
+            parentPatch.status = computedParentStatus;
+          }
+        }
+
+        const updated = await updateMedia(userId, localMedia.id, parentPatch);
+        setLocalMedia(updated);
+
+        // Update original snapshot so isDirty becomes false
+        const epData = updated.episodes?.[episodeKey];
+        setOriginalEpisode({
+          status: epData?.status ?? "unwatched",
+          rating: epData?.rating ?? 0,
+          watched_on: epData?.watched_on ?? "",
+          review_notes: epData?.review_notes ?? "",
+        });
+      } else {
+        // Auto-create parent — read from cache (instant, no network)
+        const mediaList = await listMedia(userId);
+        const dup = findDuplicate(tmdbId, "tv", mediaList);
+
+        if (dup) {
+          // Parent exists but wasn't in localMedia (race or stale cache)
+          const updatedEpisodes = { ...(dup.episodes ?? {}), [episodeKey]: episodeEntry };
+          const parentPatch: Partial<MediaPlaintext> = { episodes: updatedEpisodes };
+
+          if (
+            dup.status === "unwatched" &&
+            (episodeEntry.status !== "unwatched" || episodeEntry.rating || episodeEntry.review_notes)
+          ) {
+            parentPatch.status = "watching";
+          }
+
+          const totalEpisodes = showData?.number_of_episodes ?? 0;
+          const computedParentStatus = computeShowStatus(updatedEpisodes, totalEpisodes);
+          if (computedParentStatus) {
+            const isDowngradeFromWatched =
+              dup.status === "watched" && computedParentStatus !== "watched";
+            if (isDowngradeFromWatched) {
+              // INVARIANT: Any explicit non-watched status breaks the umbrella.
+              if (episodeEntry.status && episodeEntry.status !== "watched") {
+                parentPatch.status = "watching";
+              }
+            } else {
+              parentPatch.status = computedParentStatus;
+            }
+          }
+
+          const updated = await updateMedia(userId, dup.id, parentPatch);
+          setLocalMedia(updated);
+
+          const epData = updated.episodes?.[episodeKey];
+          setOriginalEpisode({
+            status: epData?.status ?? "unwatched",
+            rating: epData?.rating ?? 0,
+            watched_on: epData?.watched_on ?? "",
+            review_notes: epData?.review_notes ?? "",
+          });
+        } else {
+          // Brand-new parent show
+          const newMedia = await createMedia(userId, {
+            tmdb_id: tmdbId,
+            type: "tv",
+            title: showData?.name ?? "TV Series",
+            status: "watching",
+            episodes: { [episodeKey]: episodeEntry },
+          });
+          setLocalMedia(newMedia);
+
+          const epData = newMedia.episodes?.[episodeKey];
+          setOriginalEpisode({
+            status: epData?.status ?? "unwatched",
+            rating: epData?.rating ?? 0,
+            watched_on: epData?.watched_on ?? "",
+            review_notes: epData?.review_notes ?? "",
+          });
+        }
+      }
+
+      triggerToast("✓ Progress saved", "success");
+      onRefresh?.();
+    } catch {
+      triggerToast("Save failed. Please try again.", "error");
+    } finally {
+      setSaving(false);
+    }
   }
 
   // ── Delete episode record ──
 
   async function handleDeleteEpisode() {
-    if (!userId || !localMediaRef.current) return;
+    if (!userId || !localMedia) return;
     setSaving(true);
     try {
-      const currentMedia = localMediaRef.current;
+      const currentMedia = localMedia;
       const updatedEpisodes = { ...(currentMedia.episodes ?? {}) };
 
       // Delete only this specific episode's tracking record
@@ -270,7 +367,11 @@ export default function EpisodePage({
 
       const parentPatch: Partial<MediaPlaintext> = { episodes: updatedEpisodes };
 
-      // Recalculate parent status in case removing this episode changes completion
+      // Recalculate parent status in case removing this episode changes completion.
+      // DESIGN: When computeShowStatus returns null (0 episodes remaining), we
+      // intentionally skip the parent status update — the umbrella status
+      // ("Watching" or "Watched") is preserved while the virtual fallback in
+      // getEffectiveEpisodeStatus correctly presents the inherited state.
       const totalEpisodes = showData?.number_of_episodes ?? 0;
       const computedParentStatus = computeShowStatus(updatedEpisodes, totalEpisodes);
       if (computedParentStatus) {
@@ -278,7 +379,6 @@ export default function EpisodePage({
       }
 
       const updated = await updateMedia(userId, currentMedia.id, parentPatch);
-      localMediaRef.current = updated;
       setLocalMedia(updated);
 
       // Reset the local UI state back to default
@@ -286,6 +386,7 @@ export default function EpisodePage({
       setRating(0);
       setWatchedOn("");
       setReviewNotes("");
+      setOriginalEpisode(null);
 
       triggerToast("Episode record deleted.", "success");
       onRefresh?.();
@@ -311,15 +412,7 @@ export default function EpisodePage({
 
   return (
     <div className="space-y-4">
-      <BackButton
-        onClick={() => {
-          if (window.history.length > 2) {
-            router.back();
-          } else {
-            router.push(`${ROUTES.MEDIA}?tab=manager`);
-          }
-        }}
-      />
+      <BackButton onClick={handleBackClick} />
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400">
@@ -357,11 +450,11 @@ export default function EpisodePage({
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-50">
               {episode?.name ?? `Episode ${episodeNumber}`}
             </h1>
-            {episode?.air_date && (
+            {(episode?.air_date || episode?.runtime) && (
               <p className="mt-3 text-base font-medium text-zinc-500 dark:text-zinc-400">
-                Aired: {episode.air_date
-                    ? (([y, m, d]) => `${d}-${m}-${y}`)(episode.air_date.split("-"))
-                    : ""}
+                {episode?.air_date ? `Aired: ${(([y, m, d]) => `${d}-${m}-${y}`)(episode.air_date.split("-"))}` : ""}
+                {episode?.air_date && episode?.runtime ? " • " : ""}
+                {episode?.runtime ? (episode.runtime >= 60 ? `${Math.floor(episode.runtime / 60)}h ${episode.runtime % 60}m` : `${episode.runtime}m`) : ""}
               </p>
             )}
           </div>
@@ -376,31 +469,32 @@ export default function EpisodePage({
 
       <Toast isVisible={toastConfig.isVisible} message={toastConfig.message} type={toastConfig.type} />
 
-      {/* Tracking Form (Parity Layout) */}
-      <div className="relative w-full rounded-2xl border border-zinc-200 bg-zinc-50 p-6 md:p-8 dark:border-zinc-800 dark:bg-zinc-900/50">
-
-        {/* Only show trash if this episode actually exists in the DB */}
-        {localMedia?.episodes?.[episodeKey] && (
+      {/* ── Delete button ── */}
+      <div className="flex justify-end mb-2">
+        {hasEpisodeRecord && (
           <button
             type="button"
             onClick={() => setShowRemove(true)}
-            className="absolute top-6 right-6 p-2 text-zinc-400 hover:text-red-600 transition-colors"
-            title="Delete Episode Record"
+            className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm border-none transition-colors text-sm"
           >
-            <Trash2 size={18} />
+            <Trash2 size={16} />
+            Delete Episode Record
           </button>
         )}
+      </div>
 
-        <StatusChipGroup
-          status={status}
-          onStatusChange={handleStatusClick}
-          showWatchedOn
-          watchedOn={watchedOn}
-          onWatchedOnChange={(date) => {
-            setWatchedOn(date);
-            saveEpisodeInteraction({ watched_on: date || undefined });
-          }}
-        />
+      {/* Tracking Form (Parity Layout) */}
+      <div className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 p-6 md:p-8 dark:border-zinc-800 dark:bg-zinc-900/50">
+
+        <div className="mb-6">
+          <StatusChipGroup
+            status={status}
+            onStatusChange={handleStatusClick}
+            showWatchedOn
+            watchedOn={watchedOn}
+            onWatchedOnChange={setWatchedOn}
+          />
+        </div>
 
         <ReviewSection
           rating={rating}
@@ -413,12 +507,33 @@ export default function EpisodePage({
         />
       </div>
 
+      {/* ── Action Bar ── */}
+      <StickyActionBar
+        onSave={handleSave}
+        onCancel={handleCancel}
+        saving={saving}
+        isDirty={isDirty}
+      />
+
+      {/* Remove confirmation */}
       <UntrackConfirmation
         open={showRemove}
         mediaType="episode"
         onConfirm={handleDeleteEpisode}
         onCancel={() => setShowRemove(false)}
       />
+
+      {/* Unsaved changes guard */}
+      {showUnsavedDialog && (
+        <ConfirmDialog
+          title="Unsaved Changes"
+          description="You have unsaved tracking data. Discard changes?"
+          confirmLabel="Discard"
+          cancelLabel="Keep Editing"
+          onConfirm={handleDiscardAndNavigate}
+          onCancel={closeUnsavedDialog}
+        />
+      )}
     </div>
   );
 }

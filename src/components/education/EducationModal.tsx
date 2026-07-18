@@ -29,27 +29,11 @@ interface EducationDraft {
 interface EducationModalProps {
   education: Education | null;
   documents: Document[];
-  /** ALL educations (needed for standalone mode dropdown) */
-  allEducations?: Education[];
   userId: string;
   onClose: () => void;
   onSave: (draft: EducationDraft, existingEducation: Education | null, pendingDoc?: { file: File; label: string }, pendingLinkDocId?: string, pendingUnlinkDocIds?: string[], pendingDeleteDocIds?: string[]) => Promise<void>;
   onDelete: (educationId: string, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
-  onUploadDocument: (educationId: string, file: File, label: string) => Promise<Document>;
   onDownloadDocument: (document: Document) => Promise<void>;
-  onDeleteDocument: (document: Document, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
-  onLinkDocument: (educationId: string, documentId: string) => Promise<void>;
-  onUnlinkDocument: (educationId: string, documentId: string) => Promise<void>;
-  // --- Standalone mode ---
-  /** When true: form becomes "link existing OR create new" instead of standard education edit */
-  isStandaloneMode?: boolean;
-  /** Called instead of onSave in standalone mode */
-  onSaveStandalone?: (params: {
-    file: File;
-    label: string;
-    linkedEducationId?: string;
-    newEducation?: { name: string; provider: string };
-  }) => Promise<void>;
 }
 
 // ============================================================
@@ -59,14 +43,11 @@ interface EducationModalProps {
 export default function EducationModal({
   education,
   documents,
-  allEducations,
   userId,
   onClose,
   onSave,
   onDelete,
   onDownloadDocument,
-  isStandaloneMode = false,
-  onSaveStandalone,
 }: EducationModalProps) {
   // --- Form state ---
   const [name, setName] = useState("");
@@ -86,7 +67,7 @@ export default function EducationModal({
   const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(new Set());
   const [markedForUnlink, setMarkedForUnlink] = useState<Set<string>>(new Set());
   const [selectedDocId, setSelectedDocId] = useState<string | null>(() => {
-    if (isStandaloneMode || !education) return null;
+    if (!education) return null;
     const docs = docsForEducation(education.id, documents);
     return docs.length > 0 ? docs[0].id : null;
   });
@@ -121,30 +102,15 @@ export default function EducationModal({
     markedForRemoval: markedForDeletion,
   });
 
-  // Standalone mode state
-  const [standaloneFile, setStandaloneFile] = useState<File | null>(null);
-  const [standaloneLinkedEduId, setStandaloneLinkedEduId] = useState("");
-  const [standaloneNewEduName, setStandaloneNewEduName] = useState("");
-  const [standaloneNewEduProvider, setStandaloneNewEduProvider] = useState("");
-
   // --- Reset on open ---
   useEffect(() => {
-    if (isStandaloneMode) {
-      setName("");
-      setProvider("");
-      setPriority("medium");
-      setDueDate("");
-      setDescription("");
-      setIsCompleted(false);
-    } else {
-      const todayStr = new Date().toISOString().split("T")[0];
-      setName(education?.name ?? "");
-      setProvider(education?.provider ?? "");
-      setPriority(education?.priority ?? "medium");
-      setDueDate(education ? (education?.due_date ?? "") : todayStr);
-      setDescription(education?.description ?? "");
-      setIsCompleted(education?.is_completed ?? false);
-    }
+    const todayStr = new Date().toISOString().split("T")[0];
+    setName(education?.name ?? "");
+    setProvider(education?.provider ?? "");
+    setPriority(education?.priority ?? "medium");
+    setDueDate(education ? (education?.due_date ?? "") : todayStr);
+    setDescription(education?.description ?? "");
+    setIsCompleted(education?.is_completed ?? false);
     setError(null);
     setShowDeleteConfirm(false);
     setNewFiles([]);
@@ -153,11 +119,7 @@ export default function EducationModal({
     hookResetFileState();
     const existingDocs = education ? docsForEducation(education.id, documents) : [];
     setSelectedDocId(existingDocs.length > 0 ? existingDocs[0].id : null);
-    setStandaloneFile(null);
-    setStandaloneLinkedEduId("");
-    setStandaloneNewEduName("");
-    setStandaloneNewEduProvider("");
-  }, [education, isStandaloneMode, documents, hookResetFileState]);
+  }, [education, documents, hookResetFileState]);
 
   // ── Baseline form values ──
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
@@ -180,24 +142,11 @@ export default function EducationModal({
     description !== formBaseline.description ||
     isCompleted !== formBaseline.isCompleted;
 
-  const isDirty = isStandaloneMode
-    ? standaloneFile !== null || standaloneLinkedEduId !== "" || standaloneNewEduName !== "" || standaloneNewEduProvider !== ""
-    : hasFormChanges || newFiles.length > 0 || stagedLinkDocId !== null || markedForDeletion.size > 0 || markedForUnlink.size > 0;
+  const isDirty = hasFormChanges || newFiles.length > 0 || stagedLinkDocId !== null || markedForDeletion.size > 0 || markedForUnlink.size > 0;
 
   // --- Build files array for GlobalActionModal ---
 
   const files: ModalFile[] = useMemo(() => {
-    if (isStandaloneMode) {
-      if (!standaloneFile) return [];
-      return [{
-        id: "standalone-file",
-        name: standaloneFile.name,
-        mime: standaloneFile.type,
-        file: standaloneFile,
-        isNew: true,
-      }];
-    }
-
     type FileEntry = {
       id: string;
       rawName: string;
@@ -281,17 +230,11 @@ export default function EducationModal({
     }
 
     return result;
-  }, [isStandaloneMode, standaloneFile, linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, documents]);
+  }, [linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, documents]);
 
   // --- File action handlers ---
 
   const handleFileDelete = (fileId: string) => {
-    if (isStandaloneMode) {
-      setStandaloneFile(null);
-      setSelectedDocId(null);
-      return;
-    }
-
     const newFile = newFiles.find(nf => nf.tempId === fileId);
     if (newFile) {
       setNewFiles(prev => prev.filter(nf => nf.tempId !== fileId));
@@ -315,7 +258,6 @@ export default function EducationModal({
   };
 
   const handleFileUnlink = (fileId: string) => {
-    if (isStandaloneMode) return;
     if (stagedLinkDocId === fileId) { setStagedLinkDocId(null); return; }
     if (newFiles.find(nf => nf.tempId === fileId)) return;
 
@@ -329,17 +271,6 @@ export default function EducationModal({
   };
 
   const handleFileDownloadWrapped = async (fileId: string) => {
-    if (isStandaloneMode) {
-      if (standaloneFile) {
-        const url = URL.createObjectURL(standaloneFile);
-        const a = document.createElement("a");
-        a.href = url; a.download = standaloneFile.name;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a); URL.revokeObjectURL(url);
-      }
-      return;
-    }
-
     // For new files (not yet on server), use local download
     const newFile = newFiles.find(nf => nf.tempId === fileId);
     if (newFile) {
@@ -364,15 +295,6 @@ export default function EducationModal({
   };
 
   const handleFileRenameWrapped = (fileId: string, newName: string) => {
-    if (isStandaloneMode && fileId === "standalone-file" && standaloneFile) {
-      const renamed = new File([standaloneFile], newName, {
-        type: standaloneFile.type,
-        lastModified: standaloneFile.lastModified,
-      });
-      setStandaloneFile(renamed);
-      return;
-    }
-
     const newFile = newFiles.find((nf) => nf.tempId === fileId);
     if (newFile) {
       setNewFiles((prev) =>
@@ -388,8 +310,6 @@ export default function EducationModal({
   };
 
   const handleLoadPreviewWrapped = async (fileId: string): Promise<Blob> => {
-    if (isStandaloneMode && standaloneFile) return standaloneFile;
-
     const newFile = newFiles.find(nf => nf.tempId === fileId);
     if (newFile) return newFile.file;
 
@@ -404,14 +324,6 @@ export default function EducationModal({
   };
 
   const handleFileUpload = (file: File) => {
-    if (isStandaloneMode) {
-      const existingNames = new Set(documents.map(d => d.label || ""));
-      const uniqueName = getUniqueFileName(file.name, existingNames);
-      const renamedFile = new File([file], uniqueName, { type: file.type, lastModified: file.lastModified });
-      setStandaloneFile(renamedFile);
-      return;
-    }
-
     const taken = new Set<string>();
     for (const doc of documents) {
       if (linkedDocs.some(ld => ld.id === doc.id)) {
@@ -449,35 +361,6 @@ export default function EducationModal({
 
   // --- Save handler ---
   const handleSaveWithFullProcessing = async () => {
-    if (isStandaloneMode) {
-      if (!standaloneFile) {
-        setError("Please upload a certificate file.");
-        return;
-      }
-      if (!standaloneLinkedEduId && !standaloneNewEduName.trim()) {
-        setError("Please select an education or create a new one.");
-        return;
-      }
-      setIsSaving(true);
-      setError(null);
-      try {
-        await onSaveStandalone?.({
-          file: standaloneFile,
-          label: standaloneFile.name,
-          linkedEducationId: standaloneLinkedEduId || undefined,
-          newEducation: standaloneNewEduName.trim()
-            ? { name: standaloneNewEduName.trim(), provider: standaloneNewEduProvider.trim() }
-            : undefined,
-        });
-        onClose();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to save certificate.");
-      } finally {
-        setIsSaving(false);
-      }
-      return;
-    }
-
     if (!name.trim()) {
       setError("Education name is required.");
       return;
@@ -525,7 +408,6 @@ export default function EducationModal({
 
   // --- Build link dropdown for rightPanelExtras ---
   const linkDropdownExtras = useMemo(() => {
-    if (isStandaloneMode) return null;
     if (standaloneDocs.length === 0 && !stagedLinkDocId) return null;
 
     const labelBuckets = new Map<string, Document[]>();
@@ -614,91 +496,11 @@ export default function EducationModal({
         )}
       </div>
     );
-  }, [isStandaloneMode, linkSearchQuery, linkDropdownOpen, filteredLinkDocs, stagedLinkDocId, standaloneDocs, isSaving, handleLinkDropdownSelectWrapped, setLinkDropdownOpen, setLinkSearchQuery, setStagedLinkDocId]);
+  }, [linkSearchQuery, linkDropdownOpen, filteredLinkDocs, stagedLinkDocId, standaloneDocs, isSaving, handleLinkDropdownSelectWrapped, setLinkDropdownOpen, setLinkSearchQuery, setStagedLinkDocId]);
 
   // --- Render ---
 
-  // Standalone mode
-  if (isStandaloneMode) {
-    const eduOptions = allEducations || [];
-    const standaloneFormDisabled = standaloneLinkedEduId !== "";
-
-    return (
-      <>
-        <GlobalActionModal
-          title="Add Certificate"
-          onClose={onClose}
-          isDirty={isDirty}
-          files={files}
-          selectedFileId={selectedDocId}
-          onSelectFile={(id) => setSelectedDocId(id)}
-          onFileDelete={standaloneFile ? handleFileDelete : undefined}
-          onFileDownload={standaloneFile ? handleFileDownloadWrapped : undefined}
-          onFileRename={standaloneFile ? handleFileRenameWrapped : undefined}
-          onFileUpload={handleFileUpload}
-          onLoadPreview={standaloneFile ? handleLoadPreviewWrapped : undefined}
-          onSave={handleSaveWithFullProcessing}
-          isSaving={isSaving}
-        >
-          <div className="flex flex-col h-full space-y-3">
-            <div>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Link to existing record
-                </span>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={standaloneLinkedEduId}
-                    onChange={(e) => {
-                      setStandaloneLinkedEduId(e.target.value);
-                      if (e.target.value) {
-                        setStandaloneNewEduName("");
-                        setStandaloneNewEduProvider("");
-                      }
-                    }}
-                    className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 min-w-0"
-                  >
-                    <option value="">— Select an education —</option>
-                    {eduOptions.map((edu) => (
-                      <option key={edu.id} value={edu.id}>
-                        {trunc(edu.name, 50)}{edu.is_completed ? " ✓" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {standaloneLinkedEduId && (
-                    <button
-                      type="button"
-                      onClick={() => setStandaloneLinkedEduId("")}
-                      className="shrink-0 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />
-              <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500 uppercase">— or —</span>
-              <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />
-            </div>
-
-            <fieldset disabled={standaloneFormDisabled} className="space-y-3">
-              <InputField label="Education Name" value={standaloneNewEduName} onChange={setStandaloneNewEduName} disabled={isSaving || standaloneFormDisabled} placeholder="e.g. AWS Solutions Architect" />
-              <InputField label="Provider" value={standaloneNewEduProvider} onChange={setStandaloneNewEduProvider} disabled={isSaving || standaloneFormDisabled} placeholder="e.g. Amazon Web Services" />
-            </fieldset>
-
-            {error && <ErrorBanner message={error} />}
-          </div>
-        </GlobalActionModal>
-      </>
-    );
-  }
-
   const hasFiles = files.length > 0;
-
-  // --- Standard mode ---
   return (
     <>
       <GlobalActionModal

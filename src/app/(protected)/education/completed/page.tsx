@@ -35,7 +35,6 @@ import PriorityBadge from "@/components/common/PriorityBadge";
 import { getPriorityColor } from "@/lib/priorityColors";
 import {
   byPriority,
-  docCountForEducation,
   completedByMonths,
   sortByCompletedDesc,
   formatShortDate,
@@ -75,6 +74,16 @@ export default function CompletedEducationsPage() {
 
   const priorityGroups = byPriority(completedEducations);
   const monthGroups = completedByMonths(completedEducations, nowYear);
+
+  const docCountsByEdu = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const d of documents) {
+      if (d.domain === "education" && d.linked_id) {
+        map.set(d.linked_id, (map.get(d.linked_id) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [documents]);
 
   const handleEditEducation = (edu: Education) => {
     setEduModalTarget(edu);
@@ -226,78 +235,6 @@ export default function CompletedEducationsPage() {
     await refreshData(userId);
   }
 
-  async function handleLinkDocument(educationId: string, documentId: string) {
-    if (!userId) throw new Error("No active session.");
-    const doc = documents.find((d) => d.id === documentId);
-    if (!doc) return;
-    const nowIso = new Date().toISOString();
-    await updateDocument(userId, documentId, {
-      ...doc,
-      linked_id: educationId,
-      updated_at: nowIso,
-    } as DocumentPlaintext);
-    const edu = educations.find(e => e.id === educationId);
-    if (edu && !edu.document_ids.includes(documentId)) {
-      await updateEducation(userId, educationId, {
-        ...edu,
-        document_ids: [...edu.document_ids, documentId],
-        updated_at: nowIso
-      } as EducationPlaintext);
-    }
-    await refreshData(userId);
-  }
-
-  async function handleUnlinkDocument(educationId: string, documentId: string) {
-    if (!userId) throw new Error("No active session.");
-    const doc = documents.find((d) => d.id === documentId);
-    if (!doc) return;
-    const nowIso = new Date().toISOString();
-    await updateDocument(userId, documentId, {
-      ...doc,
-      linked_id: "",
-      updated_at: nowIso,
-    } as DocumentPlaintext);
-    const edu = educations.find(e => e.id === educationId);
-    if (edu) {
-      const newDocIds = edu.document_ids.filter(id => id !== documentId);
-      await updateEducation(userId, educationId, {
-        ...edu,
-        document_ids: newDocIds,
-        updated_at: nowIso
-      } as EducationPlaintext);
-    }
-    await refreshData(userId);
-  }
-
-  async function handleUploadDocumentForEducation(
-    educationId: string,
-    file: File,
-    label: string
-  ) {
-    if (!userId) throw new Error("No active session.");
-    const nowIso = new Date().toISOString();
-    const { fileName, iv, mimeType } = await uploadDocumentFile(userId, file);
-    const doc = await createDocument(userId, {
-      label,
-      file_name: fileName,
-      file_iv: iv,
-      file_mime: mimeType,
-      domain: "education",
-      linked_id: educationId,
-      updated_at: nowIso,
-    });
-    const edu = educations.find(e => e.id === educationId);
-    if (edu) {
-      await updateEducation(userId, edu.id, {
-        ...edu,
-        document_ids: [...edu.document_ids, doc.id],
-        updated_at: nowIso,
-      } as EducationPlaintext);
-    }
-    await refreshData(userId);
-    return doc;
-  }
-
   async function handleDownloadDocument(doc: Document) {
     if (!userId) throw new Error("No active session.");
     const blob = await downloadDocumentFile(
@@ -314,32 +251,6 @@ export default function CompletedEducationsPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  }
-
-  async function handleDeleteDocumentFromEducation(doc: Document, cascadeMode: 'unlink' | 'cascade') {
-    if (!userId) throw new Error("No active session.");
-
-    if (cascadeMode === 'cascade' && doc.linked_id) {
-       await deleteEducation(doc.linked_id);
-    } else if (cascadeMode === 'unlink' && doc.linked_id) {
-      const edu = educations.find((e) => e.id === doc.linked_id);
-      if (edu) {
-        const nowIso = new Date().toISOString();
-        const newDocIds = edu.document_ids.filter((id) => id !== doc.id);
-        await updateEducation(userId, edu.id, {
-          ...edu,
-          document_ids: newDocIds,
-          updated_at: nowIso,
-        } as EducationPlaintext);
-      }
-    }
-
-    if (doc.file_name) {
-      try { await deleteDocumentFile(userId, doc.file_name); } catch {}
-    }
-
-    await deleteDocument(doc.id);
-    await refreshData(userId);
   }
 
   return (
@@ -384,7 +295,7 @@ export default function CompletedEducationsPage() {
                     </h3>
                     <div className="space-y-2">
                       {group.map((edu) => {
-                        const docCount = docCountForEducation(edu.id, documents);
+                        const docCount = docCountsByEdu.get(edu.id) ?? 0;
                         return (
                         <div
                           key={edu.id}
@@ -431,7 +342,7 @@ export default function CompletedEducationsPage() {
                     <div className="space-y-2">
                       {group.items.map((edu) => {
                         const colors = getPriorityColor((edu as Education).priority);
-                        const docCount = docCountForEducation(edu.id, documents);
+                        const docCount = docCountsByEdu.get(edu.id) ?? 0;
                         return (
                           <div
                             key={edu.id}
@@ -483,11 +394,7 @@ export default function CompletedEducationsPage() {
           onClose={closeEduModal}
           onSave={handleEducationSave}
           onDelete={handleEducationDelete}
-          onUploadDocument={handleUploadDocumentForEducation}
           onDownloadDocument={handleDownloadDocument}
-          onDeleteDocument={handleDeleteDocumentFromEducation}
-          onLinkDocument={handleLinkDocument}
-          onUnlinkDocument={handleUnlinkDocument}
         />
       )}
     </>
