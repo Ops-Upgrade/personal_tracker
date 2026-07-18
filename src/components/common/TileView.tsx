@@ -12,7 +12,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { LinkSlashIcon, LinkIcon } from "@/components/common/Icons";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 

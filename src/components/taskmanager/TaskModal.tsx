@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Priority, Task, TaskMode } from "@/types/taskmanager";
-import ConfirmDialog from "./ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import { InputField, SelectField, CheckboxField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";

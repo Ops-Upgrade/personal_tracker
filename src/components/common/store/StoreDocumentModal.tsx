@@ -6,7 +6,7 @@ import { downloadDocumentFile } from "@/api/common/documentStorage";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import type { ModalFile } from "@/components/common/GlobalActionModal";
 import ErrorBanner from "@/components/common/ErrorBanner";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getUniqueFileName } from "./helpers";
 
 // --- Types ---

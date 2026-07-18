@@ -12,6 +12,10 @@ import type {
 import { DISCOVER_GENRE_IDS, DISCOVER_ERA_DATES } from "@/types/media";
 import MediaGrid from "@/components/media/MediaGrid";
 import MediaCard from "@/components/media/MediaCard";
+import { Chip } from "@/components/common/Chip";
+import { FilterLabel } from "@/components/media/shared/FilterLabel";
+import { MobileFilterBar } from "@/components/media/shared/MobileFilterBar";
+import { FilterSidebar } from "@/components/media/shared/FilterSidebar";
 
 // ── Local filter types ──
 
@@ -135,58 +139,6 @@ function filterCount(filters: LocalFilters, statusFilter: StatusFilter): number 
   if (filters.reviewed) count++;
   if (statusFilter !== "all") count++;
   return count;
-}
-
-// ── Sub-components ──
-
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-        active
-          ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-          : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function FilterLabel({
-  children,
-  isActive,
-  onClear,
-}: {
-  children: React.ReactNode;
-  isActive?: boolean;
-  onClear?: () => void;
-}) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-        {children}
-      </span>
-      {isActive && onClear && (
-        <button
-          onClick={onClear}
-          className="text-[10px] font-bold uppercase tracking-wide text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300 transition-colors"
-        >
-          Clear
-        </button>
-      )}
-    </div>
-  );
 }
 
 // ── Props ──
@@ -458,129 +410,50 @@ export default function DefaultView({
   // ══════════════════════════════════════════════════════
 
   const mobileTabDefs = [
-    { key: "type", label: "Type" },
-    { key: "sort", label: "Sort" },
-    { key: "genre", label: "Genre" },
-    { key: "era", label: "Era" },
-    { key: "rating", label: "Rating" },
-    { key: "reviewed", label: "Reviewed" },
+    { id: "type", label: "Type" },
+    { id: "sort", label: "Sort" },
+    { id: "genre", label: "Genre" },
+    { id: "era", label: "Era" },
+    { id: "rating", label: "Rating" },
+    { id: "reviewed", label: "Reviewed" },
   ] as const;
-
-  const mobileFilterBar = (
-    <div className="md:hidden relative">
-      {/* Scrollable tab row */}
-      <div className="w-full overflow-x-auto scrollbar-hide pb-2">
-        <div className="flex gap-2 min-w-max">
-          {mobileTabDefs.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() =>
-                setMobileDropdown(mobileDropdown === key ? null : key)
-              }
-              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                mobileDropdown === key
-                  ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300"
-                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-750"
-              }`}
-            >
-              {label}
-              <span className="text-[10px]">
-                {mobileDropdown === key ? "⌃" : "⌄"}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Dropdown popover */}
-      {mobileDropdown && (
-        <>
-          <div
-            className="fixed inset-0 z-30"
-            onClick={() => setMobileDropdown(null)}
-          />
-          <div className="absolute top-full left-0 right-0 z-40 mt-1 rounded-xl border border-zinc-200 bg-white p-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-            {mobileDropdown === "type" && typeChips}
-            {mobileDropdown === "sort" && sortChips}
-            {mobileDropdown === "genre" && genreCheckboxes}
-            {mobileDropdown === "era" && eraChips}
-            {mobileDropdown === "rating" && ratingChips}
-            {mobileDropdown === "reviewed" && reviewedChip}
-          </div>
-        </>
-      )}
-    </div>
-  );
 
   // ══════════════════════════════════════════════════════
   //  Desktop sidebar
   // ══════════════════════════════════════════════════════
 
   const sidebar = (
-    <aside className="hidden md:block w-72 shrink-0 space-y-5 sticky top-4 self-start max-h-[calc(100vh-20rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-4 pb-6 dark:border-zinc-800 dark:bg-zinc-900 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-track]:bg-transparent">
+    <FilterSidebar className="max-h-[calc(100vh-20rem)]">
       <div>
-        <FilterLabel
-          isActive={filters.type !== "all"}
-          onClear={() => setType("all")}
-        >
-          Type
-        </FilterLabel>
+        <FilterLabel label="Type" isActive={filters.type !== "all"} onClear={() => setType("all")} />
         <div className="mt-1.5">{typeChips}</div>
       </div>
 
       <div>
-        <FilterLabel
-          isActive={filters.sortBy !== "status"}
-          onClear={() => setSort("status")}
-        >
-          Sort By
-        </FilterLabel>
+        <FilterLabel label="Sort By" isActive={filters.sortBy !== "status"} onClear={() => setSort("status")} />
         <div className="mt-1.5">{sortChips}</div>
       </div>
 
       <div>
-        <FilterLabel
-          isActive={filters.genre.length > 0}
-          onClear={() => setFilters((p) => ({ ...p, genre: [] }))}
-        >
-          Genre
-        </FilterLabel>
+        <FilterLabel label="Genre" isActive={filters.genre.length > 0} onClear={() => setFilters((p) => ({ ...p, genre: [] }))} />
         <div className="mt-1.5">{genreCheckboxes}</div>
       </div>
 
       <div>
-        <FilterLabel
-          isActive={filters.era !== "all"}
-          onClear={() => setEra("all")}
-        >
-          Era
-        </FilterLabel>
+        <FilterLabel label="Era" isActive={filters.era !== "all"} onClear={() => setEra("all")} />
         <div className="mt-1.5">{eraChips}</div>
       </div>
 
       <div>
-        <FilterLabel
-          isActive={filters.rating !== "all"}
-          onClear={() => setRating("all")}
-        >
-          Rating
-        </FilterLabel>
+        <FilterLabel label="Rating" isActive={filters.rating !== "all"} onClear={() => setRating("all")} />
         <div className="mt-1.5">{ratingChips}</div>
       </div>
 
       <div>
-        <FilterLabel
-          isActive={filters.reviewed}
-          onClear={() =>
-            setFilters((p) => ({ ...p, reviewed: false }))
-          }
-        >
-          Reviewed
-        </FilterLabel>
+        <FilterLabel label="Reviewed" isActive={filters.reviewed} onClear={() => setFilters((p) => ({ ...p, reviewed: false }))} />
         <div className="mt-1.5">{reviewedChip}</div>
       </div>
-    </aside>
+    </FilterSidebar>
   );
 
   // ══════════════════════════════════════════════════════
@@ -637,7 +510,19 @@ export default function DefaultView({
         </div>
 
         {/* Mobile filter bar */}
-        {mobileFilterBar}
+        <MobileFilterBar
+          tabs={[...mobileTabDefs]}
+          activeTab={mobileDropdown}
+          onTabChange={(id) => setMobileDropdown(mobileDropdown === id ? null : id as MobileDropdown)}
+          onClose={() => setMobileDropdown(null)}
+        >
+          {mobileDropdown === "type" && typeChips}
+          {mobileDropdown === "sort" && sortChips}
+          {mobileDropdown === "genre" && genreCheckboxes}
+          {mobileDropdown === "era" && eraChips}
+          {mobileDropdown === "rating" && ratingChips}
+          {mobileDropdown === "reviewed" && reviewedChip}
+        </MobileFilterBar>
 
         {/* Active filter count & Global Clear */}
         <div className="flex items-center justify-between">

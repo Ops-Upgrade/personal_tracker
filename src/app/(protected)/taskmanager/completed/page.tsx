@@ -13,7 +13,7 @@ import MonthTile from "@/components/common/MonthTile";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import PriorityBadge from "@/components/taskmanager/PriorityBadge";
+import PriorityBadge from "@/components/common/PriorityBadge";
 import {
   byPriority,
   completedByMonths,

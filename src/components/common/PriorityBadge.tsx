@@ -1,7 +1,7 @@
 "use client";
 
 import type { Priority } from "@/types/taskmanager";
-import { getPriorityColor } from "./helpers";
+import { getPriorityColor } from "@/lib/priorityColors";
 
 interface PriorityBadgeProps {
   priority: Priority;

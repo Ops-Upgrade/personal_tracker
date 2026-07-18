@@ -1,35 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import Image from "next/image";
 import {
   Search,
   X,
-  Film,
-  Tv,
   Library,
   ArrowLeft,
-  Star,
-  MessageSquare,
   Loader2,
 } from "lucide-react";
 import { searchMedia } from "@/api/media";
 import type { Media, TmdbSearchResult } from "@/types/media";
-
-const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w342";
+import MediaCard from "@/components/media/MediaCard";
 const DEBOUNCE_MS = 400;
-
-const statusColors: Record<Media["status"], string> = {
-  unwatched: "bg-red-500/90 text-white",
-  watching: "bg-yellow-500/90 text-white",
-  watched: "bg-green-600/90 text-white",
-};
-
-const statusLabels: Record<Media["status"], string> = {
-  unwatched: "Not Watched",
-  watching: "Watching",
-  watched: "Watched",
-};
 
 type Mode = "select_source" | "tracked" | "discover";
 
@@ -289,71 +271,13 @@ export default function AddMediaModal({
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                       {filteredTracked.map((media) => (
-                        <button
+                        <MediaCard
                           key={media.id}
-                          type="button"
+                          media={media}
+                          showStatus
+                          showBadges
                           onClick={() => handleSelectTracked(media)}
-                          className="group rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden cursor-pointer text-left"
-                        >
-                          {/* Poster */}
-                          <div className="relative aspect-[2/3] bg-zinc-100 dark:bg-zinc-800">
-                            {media.poster_path ? (
-                              <Image
-                                src={`${TMDB_POSTER_BASE}${media.poster_path}`}
-                                alt={media.title}
-                                fill
-                                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                                className="object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-full items-center justify-center text-zinc-400 dark:text-zinc-600">
-                                {media.type === "movie" ? (
-                                  <Film size={40} />
-                                ) : (
-                                  <Tv size={40} />
-                                )}
-                              </div>
-                            )}
-                            {/* Type badge */}
-                            <span className="absolute top-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white uppercase">
-                              {media.type === "movie" ? "Movie" : "TV"}
-                            </span>
-                            {/* Status badge */}
-                            <span
-                              className={`absolute top-2 left-2 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shadow-sm ${statusColors[media.status]}`}
-                            >
-                              {statusLabels[media.status]}
-                            </span>
-                          </div>
-                          {/* Info */}
-                          <div className="p-3">
-                            <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                              {media.title}
-                            </h4>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                {media.release_date
-                                  ? new Date(media.release_date).getFullYear()
-                                  : "—"}
-                              </p>
-                            </div>
-                            {(media.rating || media.review_notes) && (
-                              <div className="flex items-center gap-2 mt-2">
-                                {media.rating && (
-                                  <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-500 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                    <Star size={10} className="fill-current" />{" "}
-                                    {media.rating}
-                                  </span>
-                                )}
-                                {media.review_notes && (
-                                  <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                    <MessageSquare size={10} />
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </button>
+                        />
                       ))}
                     </div>
                   )}
@@ -386,59 +310,15 @@ export default function AddMediaModal({
 
                   {!searching && discoverResults.length > 0 && (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                      {discoverResults.map((item) => {
-                        const posterUrl = item.poster_path
-                          ? `${TMDB_POSTER_BASE}${item.poster_path}`
-                          : null;
-                        const year = item.release_date
-                          ? new Date(item.release_date).getFullYear()
-                          : undefined;
-
-                        return (
-                          <button
-                            key={`${item.type}-${item.tmdb_id}`}
-                            type="button"
-                            onClick={() => handleSelectDiscovered(item)}
-                            className="group rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden cursor-pointer text-left"
-                          >
-                            {/* Poster */}
-                            <div className="relative aspect-[2/3] bg-zinc-100 dark:bg-zinc-800">
-                              {posterUrl ? (
-                                <Image
-                                  src={posterUrl}
-                                  alt={item.title}
-                                  fill
-                                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                                  className="object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-full items-center justify-center text-zinc-400 dark:text-zinc-600">
-                                  {item.type === "movie" ? (
-                                    <Film size={40} />
-                                  ) : (
-                                    <Tv size={40} />
-                                  )}
-                                </div>
-                              )}
-                              {/* Type badge */}
-                              <span className="absolute top-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white uppercase">
-                                {item.type === "movie" ? "Movie" : "TV"}
-                              </span>
-                            </div>
-                            {/* Info */}
-                            <div className="p-3">
-                              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                                {item.title}
-                              </h4>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                                  {year ?? "—"}
-                                </p>
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
+                      {discoverResults.map((item) => (
+                        <MediaCard
+                          key={`${item.type}-${item.tmdb_id}`}
+                          media={item}
+                          showStatus={false}
+                          showBadges={false}
+                          onClick={() => handleSelectDiscovered(item)}
+                        />
+                      ))}
                     </div>
                   )}
                 </>

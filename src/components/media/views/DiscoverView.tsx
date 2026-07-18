@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
-import { Film, Tv, Search, Star, MessageSquare } from "lucide-react";
+import { Search } from "lucide-react";
 import { searchMedia, getDiscoverMedia } from "@/api/media";
 import type {
   TmdbSearchResult,
@@ -16,8 +15,11 @@ import type {
   Media,
 } from "@/types/media";
 import { DEFAULT_DISCOVER_FILTERS } from "@/types/media";
-
-const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w342";
+import { Chip } from "@/components/common/Chip";
+import { FilterLabel } from "@/components/media/shared/FilterLabel";
+import { MobileFilterBar } from "@/components/media/shared/MobileFilterBar";
+import { FilterSidebar } from "@/components/media/shared/FilterSidebar";
+import MediaCard from "@/components/media/MediaCard";
 const DEBOUNCE_MS = 400;
 const TMDB_PAGE_SIZE = 20;
 const TMDB_MAX_PAGE = 500;
@@ -85,60 +87,6 @@ function filterCount(filters: DiscoverFilters): number {
   if (filters.hideTracked) count++;
   return count;
 }
-
-// ── Chip sub-component ──
-
-function Chip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-        active
-          ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-          : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ── Section label ──
-
-function FilterLabel({
-    children,
-    isActive,
-    onClear
-  }: {
-    children: React.ReactNode;
-    isActive?: boolean;
-    onClear?: () => void;
-  }) {
-    return (
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          {children}
-        </span>
-        {isActive && onClear && (
-          <button
-            onClick={onClear}
-            className="text-[10px] font-bold uppercase tracking-wide text-violet-600 hover:text-violet-700 dark:text-violet-400 dark:hover:text-violet-300 transition-colors"
-          >
-            Clear
-          </button>
-        )}
-      </div>
-    );
-  }
 
 // ── Main component ──
 
@@ -369,12 +317,6 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
 
   const isSearching = query.trim().length > 0;
 
-  const statusColors = {
-    unwatched: "bg-red-500/90 text-white",
-    watching: "bg-yellow-500/90 text-white",
-    watched: "bg-green-600/90 text-white",
-  };
-
   // ══════════════════════════════════════════════════════
   //  Shared render helpers
   // ══════════════════════════════════════════════════════
@@ -495,63 +437,14 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   // ══════════════════════════════════════════════════════
 
   const mobileTabDefs = [
-    { key: "type", label: "Type" },
-    { key: "sort", label: "Sort" },
-    { key: "library", label: "Library" },
-    { key: "genre", label: "Genre" },
-    { key: "era", label: "Era" },
-    { key: "region", label: "Region" },
-    { key: "animation", label: "Animation" },
+    { id: "type", label: "Type" },
+    { id: "sort", label: "Sort" },
+    { id: "library", label: "Library" },
+    { id: "genre", label: "Genre" },
+    { id: "era", label: "Era" },
+    { id: "region", label: "Region" },
+    { id: "animation", label: "Animation" },
   ] as const;
-
-  const mobileFilterBar = (
-    <div className="md:hidden relative">
-      {/* Scrollable tab row */}
-      <div className="w-full overflow-x-auto scrollbar-hide pb-2">
-        <div className="flex gap-2 min-w-max">
-          {mobileTabDefs.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() =>
-                setMobileDropdown(mobileDropdown === key ? null : key)
-              }
-              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                mobileDropdown === key
-                  ? "border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300"
-                  : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-750"
-              }`}
-            >
-              {label}
-              <span className="text-[10px]">
-                {mobileDropdown === key ? "⌃" : "⌄"}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Dropdown popover (outside scroll container, avoids clipping) */}
-      {mobileDropdown && (
-        <>
-          {/* Backdrop to catch outside clicks */}
-          <div
-            className="fixed inset-0 z-30"
-            onClick={() => setMobileDropdown(null)}
-          />
-          <div className="absolute top-full left-0 right-0 z-40 mt-1 rounded-xl border border-zinc-200 bg-white p-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-            {mobileDropdown === "type" && typeChips}
-            {mobileDropdown === "sort" && sortChips}
-            {mobileDropdown === "library" && libraryChips}
-            {mobileDropdown === "genre" && genreCheckboxes}
-            {mobileDropdown === "era" && eraChips}
-            {mobileDropdown === "region" && regionCheckboxes}
-            {mobileDropdown === "animation" && animationChips}
-          </div>
-        </>
-      )}
-    </div>
-  );
 
   // ══════════════════════════════════════════════════════
   //  Results grid + sentinel
@@ -580,82 +473,22 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {visibleResults.map((item, index) => {
-              const posterUrl = item.poster_path
-                ? `${TMDB_POSTER_BASE}${item.poster_path}`
-                : null;
-              const year = item.release_date
-                ? new Date(item.release_date).getFullYear()
-                : undefined;
               const localMedia = mediaItems.find(
                 (m) => m.tmdb_id === item.tmdb_id && m.type === item.type
               );
 
               return (
-                <div
+                <MediaCard
                   key={`${item.type}-${item.tmdb_id}`}
+                  media={item}
+                  showStatus
+                  showBadges
+                  showTrackingChip
+                  showOverview
+                  trackingData={localMedia}
+                  priority={index < 10}
                   onClick={() => handleCardClick(item)}
-                  className="group rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden cursor-pointer"
-                >
-                  <div className="relative aspect-[2/3] bg-zinc-100 dark:bg-zinc-800">
-                    {posterUrl ? (
-                      <Image
-                        src={posterUrl}
-                        alt={item.title}
-                        fill
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                        className="object-cover"
-                        priority={index < 10}
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-zinc-400 dark:text-zinc-600">
-                        {item.type === "movie" ? <Film size={40} /> : <Tv size={40} />}
-                      </div>
-                    )}
-                    <span className="absolute top-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white uppercase">
-                      {item.type === "movie" ? "Movie" : "TV"}
-                    </span>
-                    {localMedia && localMedia.status && (
-                      <span className={`absolute top-2 left-2 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shadow-sm ${statusColors[localMedia.status]}`}>
-                        {localMedia.status === "unwatched" ? "Not Watched" : localMedia.status}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="p-3">
-                    <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-                      {item.title}
-                    </h4>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 m-0">
-                        {year ?? "—"}
-                      </p>
-                      {localMedia && (
-                        <span className="rounded bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider">
-                          Tracking
-                        </span>
-                      )}
-                    </div>
-                    {localMedia && (localMedia.rating || localMedia.review_notes) && (
-                      <div className="flex items-center gap-2 mt-2">
-                        {localMedia.rating ? (
-                          <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-500 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                            <Star size={10} className="fill-current" /> {localMedia.rating}
-                          </span>
-                        ) : null}
-                        {localMedia.review_notes ? (
-                          <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                            <MessageSquare size={10} /> 1
-                          </span>
-                        ) : null}
-                      </div>
-                    )}
-                    {item.overview && (
-                      <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500 line-clamp-2">
-                        {item.overview}
-                      </p>
-                    )}
-                  </div>
-                </div>
+                />
               );
             })}
           </div>
@@ -701,42 +534,42 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   // ══════════════════════════════════════════════════════
 
   const sidebar = (
-    <aside className="hidden md:block w-72 shrink-0 space-y-5 sticky top-4 self-start max-h-[calc(100vh-14rem)] overflow-y-auto rounded-xl border border-zinc-200 bg-white p-4 pb-6 dark:border-zinc-800 dark:bg-zinc-900 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600 [&::-webkit-scrollbar-track]:bg-transparent">
+    <FilterSidebar className="max-h-[calc(100vh-14rem)]">
       <div>
-        <FilterLabel isActive={filters.type !== "all"} onClear={() => setType("all")}>Type</FilterLabel>
+        <FilterLabel label="Type" isActive={filters.type !== "all"} onClear={() => setType("all")} />
         <div className="mt-1.5">{typeChips}</div>
       </div>
 
       <div>
-        <FilterLabel isActive={filters.sortBy !== "popularity"} onClear={() => setSort("popularity")}>Sort By</FilterLabel>
+        <FilterLabel label="Sort By" isActive={filters.sortBy !== "popularity"} onClear={() => setSort("popularity")} />
         <div className="mt-1.5">{sortChips}</div>
       </div>
 
       <div>
-        <FilterLabel isActive={filters.hideTracked} onClear={() => setFilters((p) => ({ ...p, hideTracked: false }))}>Library</FilterLabel>
+        <FilterLabel label="Library" isActive={filters.hideTracked} onClear={() => setFilters((p) => ({ ...p, hideTracked: false }))} />
         <div className="mt-1.5">{libraryChips}</div>
       </div>
 
       <div>
-        <FilterLabel isActive={filters.genre.length > 0} onClear={() => setFilters((p) => ({ ...p, genre: [] }))}>Genre</FilterLabel>
+        <FilterLabel label="Genre" isActive={filters.genre.length > 0} onClear={() => setFilters((p) => ({ ...p, genre: [] }))} />
         <div className="mt-1.5">{genreCheckboxes}</div>
       </div>
 
       <div>
-        <FilterLabel isActive={filters.era !== "all"} onClear={() => setEra("all")}>Era</FilterLabel>
+        <FilterLabel label="Era" isActive={filters.era !== "all"} onClear={() => setEra("all")} />
         <div className="mt-1.5">{eraChips}</div>
       </div>
 
       <div>
-        <FilterLabel isActive={filters.region.length > 0} onClear={() => setFilters((p) => ({ ...p, region: [] }))}>Region</FilterLabel>
+        <FilterLabel label="Region" isActive={filters.region.length > 0} onClear={() => setFilters((p) => ({ ...p, region: [] }))} />
         <div className="mt-1.5">{regionCheckboxes}</div>
       </div>
 
       <div>
-        <FilterLabel isActive={filters.animation !== "include"} onClear={() => setAnimation("include")}>Animation</FilterLabel>
+        <FilterLabel label="Animation" isActive={filters.animation !== "include"} onClear={() => setAnimation("include")} />
         <div className="mt-1.5">{animationChips}</div>
       </div>
-    </aside>
+    </FilterSidebar>
   );
 
   // ══════════════════════════════════════════════════════
@@ -766,7 +599,22 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
         </div>
 
         {/* Mobile filter bar */}
-        {!isSearching && mobileFilterBar}
+        {!isSearching && (
+          <MobileFilterBar
+            tabs={[...mobileTabDefs]}
+            activeTab={mobileDropdown}
+            onTabChange={(id) => setMobileDropdown(mobileDropdown === id ? null : id as MobileDropdown)}
+            onClose={() => setMobileDropdown(null)}
+          >
+            {mobileDropdown === "type" && typeChips}
+            {mobileDropdown === "sort" && sortChips}
+            {mobileDropdown === "library" && libraryChips}
+            {mobileDropdown === "genre" && genreCheckboxes}
+            {mobileDropdown === "era" && eraChips}
+            {mobileDropdown === "region" && regionCheckboxes}
+            {mobileDropdown === "animation" && animationChips}
+          </MobileFilterBar>
+        )}
 
         {/* Active filter count & Global Clear */}
         {!isSearching && (

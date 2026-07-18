@@ -40,7 +40,7 @@ export {
 export {
   listCollections,
   createCollection,
-  renameCollection,
+  updateCollection,
   deleteCollection,
 } from "./media";
 export {

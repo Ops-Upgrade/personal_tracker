@@ -61,9 +61,10 @@ export async function createCollection(
 }
 
 /**
- * Rename (update) an existing collection. Re-encrypts the full blob.
+ * Update an existing collection with any partial patch (name, color, description,
+ * ordered_media_ids, etc.). Re-encrypts the full blob.
  */
-export async function renameCollection(
+export async function updateCollection(
   userId: string,
   id: string,
   patch: Partial<MediaCollectionPlaintext>
@@ -97,18 +98,6 @@ export async function renameCollection(
   if (error) throw new Error(`Failed to update collection: ${error.message}`);
 
   return { id: data.id, created_at: data.created_at, ...merged };
-}
-
-/**
- * Update an existing collection with any partial patch (name, color, ordered_media_ids, etc.).
- * Re-encrypts the full blob.
- */
-export async function updateCollection(
-  userId: string,
-  id: string,
-  patch: Partial<MediaCollectionPlaintext>
-): Promise<MediaCollection> {
-  return renameCollection(userId, id, patch);
 }
 
 /**

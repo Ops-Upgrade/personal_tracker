@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Expense } from "@/types/expense";
 import type { Document } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import type { ModalFile } from "@/components/common/GlobalActionModal";
 import { InputField } from "@/components/common/FormField";

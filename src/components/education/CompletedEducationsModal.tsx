@@ -5,7 +5,7 @@ import type { Education, EducationViewMode } from "@/types/education";
 import { PRIORITIES } from "@/types/taskmanager";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import GenericCompletedModal from "@/components/common/GenericCompletedModal";
-import PriorityBadge from "@/components/taskmanager/PriorityBadge";
+import PriorityBadge from "@/components/common/PriorityBadge";
 import { getPriorityColor } from "@/lib/priorityColors";
 import {
   formatShortDate,

@@ -7,12 +7,14 @@ export {
   unlinkFromCollection,
   formatEpisodeKey,
   computeShowStatus,
+  getMediaByTmdbId,
+  clearMediaCache,
+  cleanupDuplicateMedia,
 } from "./media";
 
 export {
   listCollections,
   createCollection,
-  renameCollection,
   updateCollection,
   deleteCollection,
 } from "./collections";

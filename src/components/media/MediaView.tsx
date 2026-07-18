@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
 import ErrorBanner from "@/components/common/ErrorBanner";
+import Toast from "@/components/media/shared/Toast";
+import type { ToastType } from "@/components/media/shared/Toast";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import {
   listMedia,
@@ -24,20 +26,50 @@ export default function MediaView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTab = searchParams.get("tab") === "discover" ? "discover" : "manager";
+  const initialSubTab = searchParams.get("subtab") === "collections" ? "collections" : "default";
   const [mediaItems, setMediaItems] = useState<Media[]>([]);
   const [collections, setCollections] = useState<MediaCollection[]>([]);
   const [activeTopTab, setActiveTopTab] = useState<TopTab>(initialTab);
-  const [activeSubTab, setActiveSubTab] = useState<SubTab>("default");
+  const [activeSubTab, setActiveSubTab] = useState<SubTab>(initialSubTab);
 
-  // Sync tab if URL search param changes (e.g., from back navigation)
+  // ── Toast / popup state ──
+  const [toastConfig, setToastConfig] = useState<{
+    isVisible: boolean;
+    message: string;
+    type: ToastType;
+  }>({ isVisible: false, message: "", type: "success" });
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerToast = useCallback((message: string, type: ToastType = "error") => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToastConfig({ isVisible: true, message, type });
+    toastTimerRef.current = setTimeout(() => {
+      setToastConfig((prev) => ({ ...prev, isVisible: false }));
+    }, 2000);
+  }, []);
+
+  // Sync tab/subtab if URL search params change (e.g., from back navigation)
   useEffect(() => {
     setActiveTopTab(searchParams.get("tab") === "discover" ? "discover" : "manager");
+    setActiveSubTab(searchParams.get("subtab") === "collections" ? "collections" : "default");
   }, [searchParams]);
 
   const switchTopTab = useCallback((tab: TopTab) => {
     setActiveTopTab(tab);
-    router.replace(`?tab=${tab}`, { scroll: false });
-  }, [router]);
+    const subtab = tab === "manager" ? activeSubTab : undefined;
+    const params = new URLSearchParams();
+    params.set("tab", tab);
+    if (subtab) params.set("subtab", subtab);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }, [router, activeSubTab]);
+
+  const switchSubTab = useCallback((subtab: SubTab) => {
+    setActiveSubTab(subtab);
+    const params = new URLSearchParams();
+    params.set("tab", activeTopTab);
+    params.set("subtab", subtab);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }, [router, activeTopTab]);
 
   const loadAllData = useCallback(async (uid: string) => {
     const [media, cols] = await Promise.all([
@@ -62,8 +94,8 @@ export default function MediaView() {
       setMediaItems((prev) =>
         prev.map((m) => (m.id === id ? { ...m, status } : m))
       );
-    } catch (err) {
-      console.error("Failed to update status:", err);
+    } catch {
+      triggerToast("Failed to update status. Please try again.", "error");
     }
   }
 
@@ -74,8 +106,8 @@ export default function MediaView() {
       setMediaItems((prev) =>
         prev.map((m) => (m.id === id ? { ...m, rating: rating || undefined } : m))
       );
-    } catch (err) {
-      console.error("Failed to update rating:", err);
+    } catch {
+      triggerToast("Failed to update rating. Please try again.", "error");
     }
   }
 
@@ -142,14 +174,14 @@ export default function MediaView() {
         <div className="flex gap-2 border-b border-zinc-200 pb-2 dark:border-zinc-800">
           <button
             type="button"
-            onClick={() => setActiveSubTab("default")}
+            onClick={() => switchSubTab("default")}
             className={subTabClasses("default")}
           >
             Media
           </button>
           <button
             type="button"
-            onClick={() => setActiveSubTab("collections")}
+            onClick={() => switchSubTab("collections")}
             className={subTabClasses("collections")}
           >
             Collections
@@ -196,6 +228,12 @@ export default function MediaView() {
 
       {/* TMDB attribution */}
       <TmdbAttribution />
+
+      <Toast
+        isVisible={toastConfig.isVisible}
+        message={toastConfig.message}
+        type={toastConfig.type}
+      />
     </div>
   );
 }

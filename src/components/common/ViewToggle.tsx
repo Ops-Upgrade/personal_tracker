@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { LayoutGrid, List } from "lucide-react";
 
 // ---------- types ----------
 
@@ -12,10 +13,23 @@ export interface ViewToggleOption<T extends string> {
 interface ViewToggleProps<T extends string> {
   value: T;
   onChange: (next: T) => void;
-  options: readonly ViewToggleOption<T>[];
+  options?: readonly ViewToggleOption<T>[];
   /** Optional aria-label for the tablist; defaults to "View toggle" */
   ariaLabel?: string;
+  /**
+   * Styling variant.
+   * - "default" — border-based, hidden on mobile (original behaviour)
+   * - "media"    — background-based, always visible (used by media pages)
+   */
+  variant?: "default" | "media";
 }
+
+// ---------- built-in media options ----------
+
+const MEDIA_OPTIONS = [
+  { value: "detail", label: <List size={16} /> },
+  { value: "tile", label: <LayoutGrid size={16} /> },
+] as const;
 
 // ---------- component ----------
 
@@ -24,14 +38,24 @@ export default function ViewToggle<T extends string>({
   onChange,
   options,
   ariaLabel = "View toggle",
+  variant = "default",
 }: ViewToggleProps<T>) {
+  const opts =
+    options ?? (MEDIA_OPTIONS as unknown as readonly ViewToggleOption<T>[]);
+
+  const isMedia = variant === "media";
+
   return (
     <div
-      className="hidden md:inline-flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700"
+      className={
+        isMedia
+          ? "inline-flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1"
+          : "hidden md:inline-flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700"
+      }
       role="tablist"
       aria-label={ariaLabel}
     >
-      {options.map((opt) => {
+      {opts.map((opt) => {
         const active = value === opt.value;
         return (
           <button
@@ -40,11 +64,19 @@ export default function ViewToggle<T extends string>({
             role="tab"
             aria-selected={active}
             onClick={() => onChange(opt.value)}
-            className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              active
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            }`}
+            className={
+              isMedia
+                ? `p-1.5 rounded-md transition-colors ${
+                    active
+                      ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                  }`
+                : `cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                    active
+                      ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                      : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  }`
+            }
           >
             {opt.label}
           </button>

@@ -21,6 +21,11 @@ export const ROUTES = {
   MEDIA_COLLECTION: (id: string) => `/media/collection/${id}`,
   MEDIA_MOVIE: (tmdbId: number) => `/media/movie/${tmdbId}`,
   MEDIA_TV: (tmdbId: number) => `/media/tv/${tmdbId}`,
+  /** Convenience helper — resolves to MEDIA_MOVIE or MEDIA_TV based on type. */
+  MEDIA_DETAIL: (tmdbId: number, type: "movie" | "tv") =>
+    type === "movie"
+      ? (`/media/movie/${tmdbId}` as const)
+      : (`/media/tv/${tmdbId}` as const),
 } as const;
 
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];

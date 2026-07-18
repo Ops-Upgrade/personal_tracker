@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Note } from "@/types/taskmanager";
-import ConfirmDialog from "./ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import { TextareaField } from "@/components/common/FormField";
 import ErrorBanner from "@/components/common/ErrorBanner";

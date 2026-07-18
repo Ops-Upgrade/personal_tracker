@@ -19,7 +19,7 @@ import {
 import type { Document, DocumentPlaintext } from "@/types/document";
 import TileView, { DocumentTile } from "@/components/common/TileView";
 import BoxContainer from "@/components/common/BoxContainer";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import StoreDocumentModal from "./StoreDocumentModal";
 import type { StoreDocumentSaveParams, StoreParentRecord } from "./StoreDocumentModal";
 import BulkLinkModal from "./BulkLinkModal";

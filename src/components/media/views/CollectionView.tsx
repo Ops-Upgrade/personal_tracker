@@ -5,40 +5,17 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { List, LayoutGrid, ArrowUp, ArrowDown } from "lucide-react";
 import Button from "@/components/common/Button";
+import { Chip } from "@/components/common/Chip";
+import { useLocalStorage } from "@/lib/useLocalStorage";
 import type { Media, MediaCollection } from "@/types/media";
 import { getThemeStyles } from "@/lib/collectionThemes";
-
-const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w92";
+import { tmdbPosterUrl } from "@/components/media/constants";
+import { computeProgress, getCollectionItems } from "@/components/media/utils";
 
 interface CollectionViewProps {
   collections: MediaCollection[];
   mediaItems: Media[];
   onCreateCollection: () => void;
-}
-
-/** Compute progress percent for a collection based on runtime. */
-function computeProgress(
-  collectionId: string,
-  allMedia: Media[],
-): { percent: number; totalMins: number; watchedMins: number } {
-  let totalMins = 0;
-  let watchedMins = 0;
-
-  const collectionMedia = allMedia.filter(
-    (m) =>
-      m.collection_ids?.includes(collectionId) ||
-      m.collection_id === collectionId,
-  );
-
-  for (const m of collectionMedia) {
-    const rt = m.runtime || 0;
-    totalMins += rt;
-    if (m.status === "watched") watchedMins += rt;
-    if (m.status === "watching") watchedMins += rt * 0.5;
-  }
-
-  const percent = totalMins === 0 ? 0 : Math.round((watchedMins / totalMins) * 100);
-  return { percent, totalMins, watchedMins };
 }
 
 /** Get ordered poster list for a collection, capped at `limit`. */
@@ -84,7 +61,7 @@ export default function CollectionView({
   onCreateCollection,
 }: CollectionViewProps) {
   const router = useRouter();
-  const [viewMode, setViewMode] = useState<"single" | "grid">("single");
+  const [viewMode, setViewMode] = useLocalStorage<"single" | "grid">("mediaCollectionLayout", "single");
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -117,7 +94,7 @@ export default function CollectionView({
 
     // Hide completed (100% progress)
     if (hideCompleted) {
-      result = result.filter((c) => computeProgress(c.id, mediaItems).percent < 100);
+      result = result.filter((c) => computeProgress(getCollectionItems(c.id, mediaItems)).percent < 100);
     }
 
     result.sort((a, b) => {
@@ -130,8 +107,8 @@ export default function CollectionView({
           cmp = a.name.localeCompare(b.name);
           break;
         case "progress": {
-          const pA = computeProgress(a.id, mediaItems).percent;
-          const pB = computeProgress(b.id, mediaItems).percent;
+          const pA = computeProgress(getCollectionItems(a.id, mediaItems)).percent;
+          const pB = computeProgress(getCollectionItems(b.id, mediaItems)).percent;
           cmp = pA - pB;
           break;
         }
@@ -199,18 +176,14 @@ export default function CollectionView({
                     { value: "progress" as const, label: "Progress" },
                   ]
                 ).map((opt) => (
-                  <button
+                  <Chip
                     key={opt.value}
-                    type="button"
+                    active={sortBy === opt.value}
                     onClick={() => setSortBy(opt.value)}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors whitespace-nowrap ${
-                      sortBy === opt.value
-                        ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-                        : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-700"
-                    }`}
+                    className="whitespace-nowrap"
                   >
                     {opt.label}
-                  </button>
+                  </Chip>
                 ))}
               </div>
               <div className="flex rounded-full bg-zinc-100 dark:bg-zinc-800 p-0.5">
@@ -302,14 +275,10 @@ export default function CollectionView({
           const theme = getThemeStyles(colorValue);
           const posterLimit = viewMode === "single" ? 20 : 10;
           const posterItems = getPosterItems(c, mediaItems, posterLimit);
-          const { percent, totalMins, watchedMins } = computeProgress(c.id, mediaItems);
+          const { percent, totalMins, watchedMins } = computeProgress(getCollectionItems(c.id, mediaItems));
 
           // Total items in collection (before poster cap)
-          const collectionMedia = mediaItems.filter(
-            (m) =>
-              m.collection_ids?.includes(c.id) ||
-              m.collection_id === c.id,
-          );
+          const collectionMedia = getCollectionItems(c.id, mediaItems);
           const totalItemCount = collectionMedia.length;
 
           return (
@@ -392,7 +361,7 @@ export default function CollectionView({
                         >
                           {m.poster_path ? (
                             <Image
-                              src={`${TMDB_POSTER_BASE}${m.poster_path}`}
+                              src={tmdbPosterUrl(m.poster_path!, "w92")}
                               alt={m.title}
                               fill
                               sizes={`${posterSize.width}px`}

@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
 import Link from "next/link";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
+import { useLocalStorage } from "@/lib/useLocalStorage";
+import { useQueryModal } from "@/lib/useQueryModal";
 import {
   createEducation,
   deleteEducation,
@@ -30,17 +32,11 @@ import type { Priority } from "@/types/taskmanager";
 import ActiveEducationsBox from "./ActiveEducationsBox";
 import CompletedEducationsBox from "./CompletedEducationsBox";
 import EducationModal from "./EducationModal";
-
-function FolderIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
-    </svg>
-  );
-}
+import { FolderIcon } from "@/components/common/Icons";
 
 /**
  * Education feature shell.
+ * Query-param-driven modals (?modal=new-education, ?modal=edit-education-<id>).
  * Uses the global Document store for file attachments instead of the old certificates table.
  */
 export default function EducationView() {
@@ -60,61 +56,22 @@ export default function EducationView() {
   const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
     useAuthBootstrap({ loadData: loadAllData, fetchServerDate: false });
 
-  const [eduModalTarget, setEduModalTarget] = useState<Education | "create" | null>(() => {
-    if (typeof window === "undefined") return null;
-    const raw = window.location.hash.replace("#", "");
-    if (raw === "new-education") return "create";
-    return null;
-  });
-  const [activeView, setActiveView] = useState<EducationViewMode>("months");
+  const [activeView, setActiveView] = useLocalStorage<EducationViewMode>("educationActiveView", "months");
 
-  const clearHash = useCallback(() => {
-    if (window.location.hash) {
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  }, []);
+  // Query-param-driven modal state via shared hook
+  const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(educations, "education");
 
-  const resolveHashState = useCallback((raw: string, currentEdus: Education[]) => {
-    if (!raw) return null;
-    if (raw === "new-education") return "create" as const;
-    if (raw.startsWith("edit-education-")) {
-      const eduId = raw.slice(15);
-      const edu = currentEdus.find(e => e.id === eduId);
-      if (edu) return edu;
-    }
-    return null;
-  }, []);
+  // State bridge for quick-complete (overrides URL-derived target with a modified copy)
+  const [quickCompleteTarget, setQuickCompleteTarget] = useState<Education | null>(null);
 
-  useEffect(() => {
-    if (educations.length === 0) return;
-    const raw = window.location.hash.replace("#", "");
-    if (raw.startsWith("edit-education-")) {
-      const eduId = raw.slice(15);
-      const edu = educations.find(e => e.id === eduId);
-      if (edu) setEduModalTarget(edu);
-    }
-    if (raw === "new-education" && eduModalTarget !== "create") {
-      setEduModalTarget("create");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [educations]);
-
-  useEffect(() => {
-    const handler = () => {
-      const raw = window.location.hash.replace("#", "");
-      const resolved = resolveHashState(raw, educations);
-      if (resolved) {
-        setEduModalTarget(resolved);
-      }
-    };
-    window.addEventListener("hashchange", handler);
-    return () => window.removeEventListener("hashchange", handler);
-  }, [educations, resolveHashState]);
+  const eduModalTarget = quickCompleteTarget ?? modalTarget;
+  const openNewEducation = openCreate;
+  const openEditEducation = openEdit;
 
   const closeEduModal = useCallback(() => {
-    setEduModalTarget(null);
-    clearHash();
-  }, [clearHash]);
+    closeModal();
+    setQuickCompleteTarget(null);
+  }, [closeModal]);
 
   const activeEducations = useMemo(
     () => educations.filter((e) => !e.is_completed),
@@ -276,7 +233,7 @@ export default function EducationView() {
   }
 
   function handleQuickComplete(education: Education) {
-    setEduModalTarget({ ...education, is_completed: true });
+    setQuickCompleteTarget({ ...education, is_completed: true });
   }
 
   // ---- Document handlers (from EducationModal side panel) ----
@@ -426,8 +383,8 @@ export default function EducationView() {
           nowYear={nowYear}
           nowMonth={nowMonth}
           onViewChange={setActiveView}
-          onAdd={() => { window.location.hash = "new-education"; }}
-          onSelectEducation={(edu) => { window.location.hash = `edit-education-${edu.id}`; }}
+          onAdd={openNewEducation}
+          onSelectEducation={openEditEducation}
           onMarkComplete={handleQuickComplete}
         />
 
@@ -445,7 +402,7 @@ export default function EducationView() {
             documents={documents}
             isLoading={isLoading}
             onOpenExpanded={() => router.push(ROUTES.EDUCATION_COMPLETED)}
-            onSelectEducation={(edu) => { window.location.hash = `edit-education-${edu.id}`; }}
+            onSelectEducation={openEditEducation}
           />
         </div>
       </section>

@@ -5,7 +5,7 @@ import { PRIORITIES } from "@/types/taskmanager";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import GenericActiveBox from "@/components/common/GenericActiveBox";
 import Button from "@/components/common/Button";
-import PriorityBadge from "@/components/taskmanager/PriorityBadge";
+import PriorityBadge from "@/components/common/PriorityBadge";
 import { getPriorityColor } from "@/lib/priorityColors";
 import { trunc } from "./helpers";
 

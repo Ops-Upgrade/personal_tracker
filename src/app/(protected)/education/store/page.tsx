@@ -72,8 +72,8 @@ export default function EducationStorePage() {
     (docId: string) => {
       const doc = allDocuments.find((d) => d.id === docId);
       if (!doc?.linked_id) return;
-      // Navigate to education page with edit hash — EducationView will pick it up
-      router.push(`${ROUTES.EDUCATION}#edit-education-${doc.linked_id}`);
+      // Navigate to education page with modal query param — EducationView will pick it up
+      router.push(`${ROUTES.EDUCATION}?modal=edit-education-${doc.linked_id}`);
     },
     [allDocuments, router],
   );

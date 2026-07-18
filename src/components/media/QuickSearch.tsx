@@ -5,8 +5,7 @@ import Image from "next/image";
 import { Search, X, Film, Tv } from "lucide-react";
 import { searchMedia } from "@/api/media";
 import type { TmdbSearchResult } from "@/types/media";
-
-const TMDB_POSTER_BASE = "https://image.tmdb.org/t/p/w92";
+import { tmdbPosterUrl } from "@/components/media/constants";
 
 interface QuickSearchProps {
   onSelect: (item: TmdbSearchResult) => void;
@@ -129,7 +128,7 @@ export default function QuickSearch({
                   <div className="relative w-9 h-[54px] shrink-0 rounded overflow-hidden bg-zinc-100 dark:bg-zinc-800">
                     {item.poster_path ? (
                       <Image
-                        src={`${TMDB_POSTER_BASE}${item.poster_path}`}
+                        src={tmdbPosterUrl(item.poster_path!, "w92")}
                         alt={item.title}
                         fill
                         sizes="36px"

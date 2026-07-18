@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import DocPreviewPanel from "./DocPreviewPanel";
 import FileUploadZone from "./FileUploadZone";
 import Button from "./Button";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,

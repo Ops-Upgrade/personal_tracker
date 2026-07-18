@@ -282,6 +282,9 @@ After every episode save, `computeShowStatus(episodes, totalEpisodeCount)` is ca
 - **5.1** `next.config.ts` `remotePatterns` + CSP `img-src` update
 - **5.2** Debounced search, duplicate-add guard, poster/overview fallback states
 - **5.3** Loading/error states via `ErrorBanner`, responsive pass (mobile 2-across, desktop 4/5-across)
+- **5.4** Fix hardcoded TMDB image URL in `MediaHeroSection` by utilizing `tmdbPosterUrl`.
+- **5.5** Extend `StatusChipGroup` with an `isUntracked` prop and use it in `EpisodePage` to eliminate duplicate form logic.
+- **5.6** Extend `UntrackConfirmation` to support `"episode"` media type and replace the inline `ConfirmDialog` in `EpisodePage`.
 
 ## Roadmap (named, deferred — each names the new infrastructure it needs)
 | Phase | Feature | New infra required | Recommendation |
@@ -456,6 +459,9 @@ After every episode save, `computeShowStatus(episodes, totalEpisodeCount)` is ca
 - [ ] Collection modals are deep-linkable via hash and survive a page refresh.
 - [ ] Missing poster/overview renders a graceful fallback, not a broken image.
 - [ ] Mobile layout collapses the grid responsively with no horizontal scroll.
+- [ ] MediaHeroSection uses `tmdbPosterUrl` instead of a hardcoded string.
+- [ ] EpisodePage uses `StatusChipGroup` instead of inline buttons.
+- [ ] EpisodePage uses `UntrackConfirmation` instead of inline `ConfirmDialog`.
 
 
 ## Implementation Report & Solved Complexities
