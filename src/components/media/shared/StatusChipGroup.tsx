@@ -4,10 +4,8 @@ import type { MediaPlaintext } from "@/types/media";
 import { chipClasses } from "@/components/media/constants";
 
 interface StatusChipGroupProps {
-  status: MediaPlaintext["status"];
+  status?: MediaPlaintext["status"];
   onStatusChange: (newStatus: MediaPlaintext["status"]) => void;
-  /** When true, greys out all chips — used when the record doesn't exist yet in the DB. */
-  isUntracked?: boolean;
   /** When true, shows a "Watched on" date input next to the chips (movie-only) */
   showWatchedOn?: boolean;
   watchedOn?: string;
@@ -25,12 +23,11 @@ interface StatusChipGroupProps {
 export default function StatusChipGroup({
   status,
   onStatusChange,
-  isUntracked = false,
   showWatchedOn = false,
   watchedOn = "",
   onWatchedOnChange,
 }: StatusChipGroupProps) {
-  const active = (s: MediaPlaintext["status"]) => !isUntracked && status === s;
+  const active = (s: MediaPlaintext["status"]) => status === s;
 
   return (
     <div>

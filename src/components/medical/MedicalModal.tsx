@@ -53,10 +53,10 @@ export default function MedicalModal({
   onSave,
   onDelete,
 }: MedicalModalProps) {
-  const [name, setName] = useState("");
-  const [clinic, setClinic] = useState("");
-  const [date, setDate] = useState("");
-  const [diagnosisTimeline, setDiagnosisTimeline] = useState("");
+  const [name, setName] = useState(record?.name ?? "");
+  const [clinic, setClinic] = useState(record?.clinic ?? "");
+  const [date, setDate] = useState(record?.date ?? defaultDate ?? new Date().toISOString().split("T")[0]);
+  const [diagnosisTimeline, setDiagnosisTimeline] = useState(record?.diagnosis_timeline ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

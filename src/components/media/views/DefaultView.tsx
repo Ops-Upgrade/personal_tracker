@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import type {
   Media,
@@ -53,6 +53,20 @@ const DEFAULT_LOCAL_FILTERS: LocalFilters = {
   rating: "all",
   reviewed: false,
 };
+
+// ── Module-level cache: survives SPA navigation so back-button restores state ──
+
+const defaultViewCache = {
+  searchQuery: "",
+  filters: DEFAULT_LOCAL_FILTERS,
+  statusFilter: "all" as StatusFilter,
+};
+
+export function clearDefaultViewCache() {
+  defaultViewCache.searchQuery = "";
+  defaultViewCache.filters = DEFAULT_LOCAL_FILTERS;
+  defaultViewCache.statusFilter = "all";
+}
 
 // ── Option definitions ──
 
@@ -158,13 +172,20 @@ export default function DefaultView({
   onStatusChange,
   onRatingChange,
 }: DefaultViewProps) {
-  const [filters, setFilters] = useState<LocalFilters>(DEFAULT_LOCAL_FILTERS);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<LocalFilters>(() => defaultViewCache.filters);
+  const [searchQuery, setSearchQuery] = useState(() => defaultViewCache.searchQuery);
   const [searchFocused, setSearchFocused] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => defaultViewCache.statusFilter);
   const [mobileDropdown, setMobileDropdown] = useState<MobileDropdown>(null);
 
   const activeFilterCount = filterCount(filters, statusFilter);
+
+  // ── Sync state → module-level cache so it survives SPA navigation ──
+  useEffect(() => {
+    defaultViewCache.searchQuery = searchQuery;
+    defaultViewCache.filters = filters;
+    defaultViewCache.statusFilter = statusFilter;
+  }, [searchQuery, filters, statusFilter]);
 
   // ── Filter updaters ──
 

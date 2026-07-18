@@ -10,6 +10,9 @@ import { ROUTES } from "@/routes/paths";
 import { useTheme } from "@wrksz/themes/client";
 import ThemeSwitcher from "@/components/common/ThemeSwitcher";
 import { Menu, X } from "lucide-react";
+import { clearDiscoverCache } from "@/components/media/views/DiscoverView";
+import { clearDefaultViewCache } from "@/components/media/views/DefaultView";
+import { clearCollectionViewCache } from "@/components/media/views/CollectionView";
 
 interface NavbarProps {
   userEmail: string;
@@ -54,6 +57,9 @@ export default function Navbar({ userEmail, userName, userAvatarUrl }: NavbarPro
 
   async function handleLogout() {
     await logout();
+    clearDiscoverCache();
+    clearDefaultViewCache();
+    clearCollectionViewCache();
     router.push(ROUTES.LOGIN);
     router.refresh();
   }

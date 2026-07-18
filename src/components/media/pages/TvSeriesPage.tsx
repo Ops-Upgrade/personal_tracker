@@ -73,7 +73,7 @@ export default function TvSeriesPage({
 
   // ── Local form state ──
   const [parentStatus, setParentStatus] =
-    useState<MediaPlaintext["status"]>("unwatched");
+    useState<MediaPlaintext["status"] | undefined>(undefined);
   const [rating, setRating] = useState(0);
   const [reviewNotes, setReviewNotes] = useState("");
   const [collectionIds, setCollectionIds] = useState<string[]>([]);
@@ -89,7 +89,7 @@ export default function TvSeriesPage({
     setShowRemove(false);
     removeMedia(() => {
       setOriginalMedia(null);
-      setParentStatus("unwatched");
+      setParentStatus(undefined);
       setRating(0);
       setReviewNotes("");
       setCollectionIds([]);
@@ -128,7 +128,7 @@ export default function TvSeriesPage({
   // ── Load & hydrate ──
   const hydrateFromExisting = useCallback((existing: Media | undefined) => {
     if (existing) {
-      setParentStatus(existing.status ?? "unwatched");
+      setParentStatus(existing.status);
       setRating(existing.rating ?? 0);
       setReviewNotes(existing.review_notes ?? "");
       const ids =
@@ -137,7 +137,7 @@ export default function TvSeriesPage({
       setCollectionIds(ids);
       setEpisodeState(existing.episodes ?? {});
       setOriginalMedia({
-        status: existing.status ?? "unwatched",
+        status: existing.status,
         rating: existing.rating ?? 0,
         review_notes: existing.review_notes ?? "",
         collection_ids: ids.length > 0 ? [...ids].sort() : undefined,
@@ -178,7 +178,7 @@ export default function TvSeriesPage({
   const isDirty = useMemo(() => {
     if (!isTracked) {
       return (
-        parentStatus !== "unwatched" ||
+        parentStatus !== undefined ||
         rating !== 0 ||
         reviewNotes !== "" ||
         collectionIds.length > 0 ||
@@ -205,7 +205,7 @@ export default function TvSeriesPage({
   // ── Navigation guard ──
   function doCancel() {
     if (!isTracked) {
-      setParentStatus("unwatched");
+      setParentStatus(undefined);
       setRating(0);
       setReviewNotes("");
       setCollectionIds([]);
@@ -482,7 +482,7 @@ export default function TvSeriesPage({
                     ...rawLocal,
                     status:
                       rawLocal?.status ??
-                      (parentStatus === "watched" ? "watched" : "unwatched"),
+                      (parentStatus === "watched" && isTracked ? "watched" : undefined),
                   };
                   const stillUrl = ep.still_path
                     ? tmdbStillUrl(ep.still_path, "w300")

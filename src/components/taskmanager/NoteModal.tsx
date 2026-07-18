@@ -15,7 +15,7 @@ interface NoteModalProps {
 }
 
 export default function NoteModal({ note, onClose, onSave, onDelete }: NoteModalProps) {
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(note?.content ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);

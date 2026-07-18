@@ -12,6 +12,22 @@ import { getThemeStyles } from "@/lib/collectionThemes";
 import { tmdbPosterUrl } from "@/components/media/constants";
 import { computeProgress, getCollectionItems } from "@/components/media/utils";
 
+// ── Module-level cache: survives SPA navigation so back-button restores state ──
+
+const collectionViewCache = {
+  collectionSearch: "",
+  sortBy: "date_added" as "date_added" | "name" | "progress",
+  sortOrder: "desc" as "asc" | "desc",
+  hideCompleted: false,
+};
+
+export function clearCollectionViewCache() {
+  collectionViewCache.collectionSearch = "";
+  collectionViewCache.sortBy = "date_added";
+  collectionViewCache.sortOrder = "desc";
+  collectionViewCache.hideCompleted = false;
+}
+
 interface CollectionViewProps {
   collections: MediaCollection[];
   mediaItems: Media[];
@@ -77,10 +93,18 @@ export default function CollectionView({
   }, []);
 
   // Sort state
-  const [sortBy, setSortBy] = useState<"date_added" | "name" | "progress">("date_added");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [hideCompleted, setHideCompleted] = useState(false);
-  const [collectionSearch, setCollectionSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"date_added" | "name" | "progress">(() => collectionViewCache.sortBy);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(() => collectionViewCache.sortOrder);
+  const [hideCompleted, setHideCompleted] = useState(() => collectionViewCache.hideCompleted);
+  const [collectionSearch, setCollectionSearch] = useState(() => collectionViewCache.collectionSearch);
+
+  // ── Sync state → module-level cache so it survives SPA navigation ──
+  useEffect(() => {
+    collectionViewCache.collectionSearch = collectionSearch;
+    collectionViewCache.sortBy = sortBy;
+    collectionViewCache.sortOrder = sortOrder;
+    collectionViewCache.hideCompleted = hideCompleted;
+  }, [collectionSearch, sortBy, sortOrder, hideCompleted]);
 
   // Sort & filter collections
   const sortedCollections = useMemo(() => {

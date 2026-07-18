@@ -66,7 +66,7 @@ export default function EpisodePage({
   );
 
   // Local form state
-  const [status, setStatus] = useState<EpisodeTracking["status"]>("unwatched");
+  const [status, setStatus] = useState<EpisodeTracking["status"] | undefined>(undefined);
   const [rating, setRating] = useState(0);
   const [watchedOn, setWatchedOn] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
@@ -98,7 +98,7 @@ export default function EpisodePage({
         setLocalMedia(existing);
         const epData = existing.episodes?.[episodeKey];
         if (epData) {
-          setStatus(epData.status ?? "unwatched");
+          setStatus(epData.status);
           setRating(epData.rating ?? 0);
           setWatchedOn(epData.watched_on ?? "");
           setReviewNotes(epData.review_notes ?? "");
@@ -147,7 +147,7 @@ export default function EpisodePage({
       saveQueue.current = saveQueue.current.then(async () => {
         try {
           const episodeEntry: EpisodeTracking = {
-            status: patch.status ?? formStateRef.current.status,
+            status: patch.status ?? formStateRef.current.status ?? "unwatched",
             rating: (patch.rating !== undefined ? patch.rating : formStateRef.current.rating) || undefined,
             watched_on: (patch.watched_on !== undefined ? patch.watched_on : formStateRef.current.watchedOn) || undefined,
             review_notes: (patch.review_notes !== undefined ? patch.review_notes : formStateRef.current.reviewNotes) || undefined,
@@ -230,7 +230,7 @@ export default function EpisodePage({
   function handleRatingChange(newRating: number) {
     setRating(newRating);
     const patch: Partial<EpisodeTracking> = { rating: newRating || undefined };
-    if (formStateRef.current.status === "unwatched" && newRating > 0) {
+    if ((formStateRef.current.status ?? "unwatched") === "unwatched" && newRating > 0) {
       setStatus("watched");
       patch.status = "watched";
       if (!formStateRef.current.watchedOn) {
@@ -244,7 +244,7 @@ export default function EpisodePage({
 
   function handleNotesBlur() {
     const patch: Partial<EpisodeTracking> = { review_notes: formStateRef.current.reviewNotes || undefined };
-    if (formStateRef.current.status === "unwatched" && formStateRef.current.reviewNotes) {
+    if ((formStateRef.current.status ?? "unwatched") === "unwatched" && formStateRef.current.reviewNotes) {
       setStatus("watched");
       patch.status = "watched";
       if (!formStateRef.current.watchedOn) {
@@ -282,7 +282,7 @@ export default function EpisodePage({
       setLocalMedia(updated);
 
       // Reset the local UI state back to default
-      setStatus("unwatched");
+      setStatus(undefined);
       setRating(0);
       setWatchedOn("");
       setReviewNotes("");
@@ -296,8 +296,6 @@ export default function EpisodePage({
       setShowRemove(false);
     }
   }
-
-  const isTracked = !!localMedia?.episodes?.[episodeKey];
 
   const stillUrl = episode?.still_path
     ? tmdbStillUrl(episode.still_path, "w780")
@@ -396,7 +394,6 @@ export default function EpisodePage({
         <StatusChipGroup
           status={status}
           onStatusChange={handleStatusClick}
-          isUntracked={!isTracked}
           showWatchedOn
           watchedOn={watchedOn}
           onWatchedOnChange={(date) => {

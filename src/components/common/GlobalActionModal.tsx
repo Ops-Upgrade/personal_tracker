@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import DocPreviewPanel from "./DocPreviewPanel";
 import FileUploadZone from "./FileUploadZone";
 import Button from "./Button";
@@ -131,7 +131,10 @@ export default function GlobalActionModal({
 
   // --- isDirty ref so Esc handler never sees stale closure (Task 1.3) ---
   const isDirtyRef = useRef(isDirty);
-  useEffect(() => {
+  // useLayoutEffect fires synchronously after DOM commit but before paint,
+  // so event handlers always see the latest value (unlike useEffect which
+  // runs async after paint and can leave a stale ref in the gap).
+  useLayoutEffect(() => {
     isDirtyRef.current = isDirty;
   });
 

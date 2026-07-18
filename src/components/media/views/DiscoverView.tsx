@@ -24,6 +24,22 @@ const DEBOUNCE_MS = 400;
 const TMDB_PAGE_SIZE = 20;
 const TMDB_MAX_PAGE = 500;
 
+// ── Module-level cache: survives SPA navigation so back-button restores state ──
+
+const discoverCache = {
+  query: "",
+  filters: DEFAULT_DISCOVER_FILTERS,
+  results: [] as TmdbSearchResult[],
+  page: 1,
+};
+
+export function clearDiscoverCache() {
+  discoverCache.query = "";
+  discoverCache.filters = DEFAULT_DISCOVER_FILTERS;
+  discoverCache.results = [];
+  discoverCache.page = 1;
+}
+
 // ── Option definitions ──
 
 const TYPE_OPTIONS: { value: DiscoverFilters["type"]; label: string }[] = [
@@ -92,24 +108,40 @@ function filterCount(filters: DiscoverFilters): number {
 
 export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   const router = useRouter();
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<TmdbSearchResult[]>([]);
+  const [query, setQuery] = useState(() => discoverCache.query);
+  const [results, setResults] = useState<TmdbSearchResult[]>(() => discoverCache.results);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<DiscoverFilters>(DEFAULT_DISCOVER_FILTERS);
-  const [hasMore, setHasMore] = useState(true);
+  const [filters, setFilters] = useState<DiscoverFilters>(() => discoverCache.filters);
+  const [hasMore, setHasMore] = useState(() => discoverCache.results.length > 0);
   const [mobileDropdown, setMobileDropdown] = useState<MobileDropdown>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const initialLoadDone = useRef(false);
-  const pageRef = useRef(1);
+  const initialLoadDone = useRef(discoverCache.results.length > 0);
+  const pageRef = useRef(discoverCache.page);
   const totalPagesRef = useRef(1);
   const loadingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
+  // Fingerprint of the cache that produced the restored results — used to skip
+  // the initial fetch iff query + filters haven't changed since the cache was written.
+  const restoreFingerprintRef = useRef(
+    discoverCache.results.length > 0
+      ? `${discoverCache.query}|${JSON.stringify(discoverCache.filters)}`
+      : null,
+  );
+
   const activeFilterCount = filterCount(filters);
+
+  // ── Sync state → module-level cache so it survives SPA navigation ──
+  useEffect(() => {
+    discoverCache.query = query;
+    discoverCache.filters = filters;
+    discoverCache.results = results;
+    discoverCache.page = pageRef.current;
+  }, [query, filters, results]);
 
   // ── Fetch a page of results ──
 
@@ -223,6 +255,19 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   // ── Main effect: watch query and filters, reset pagination ──
 
   useEffect(() => {
+    // Skip fetch on remount if results were restored from cache and the
+    // query + filters haven't changed since they were written.
+    const currentFingerprint = `${query}|${JSON.stringify(filters)}`;
+    if (
+      restoreFingerprintRef.current &&
+      restoreFingerprintRef.current === currentFingerprint
+    ) {
+      restoreFingerprintRef.current = null; // one-shot guard
+      initialLoadDone.current = true;
+      return;
+    }
+    restoreFingerprintRef.current = null;
+
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
@@ -464,8 +509,15 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
       )}
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400">
-          {error}
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400 flex items-center justify-between gap-3">
+          <span className="flex-1 min-w-0">{error}</span>
+          <button
+            type="button"
+            onClick={() => fetchPage(pageRef.current, false)}
+            className="shrink-0 rounded-md bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-400 dark:hover:bg-red-900/60 transition-colors"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -594,8 +646,18 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
             value={query}
             onChange={(e) => handleQueryChange(e.target.value)}
             placeholder="Search TMDB for Movies, TV, or People..."
-            className="w-full rounded-xl border border-zinc-300 bg-white py-2.5 pl-10 pr-4 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            className="w-full rounded-xl border border-zinc-300 bg-white py-2.5 pl-10 pr-10 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => handleQueryChange("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          )}
         </div>
 
         {/* Mobile filter bar */}

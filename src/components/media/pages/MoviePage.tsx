@@ -52,7 +52,7 @@ export default function MoviePage({
   } = useMediaTracking({ tmdbId, userId, type: "movie", onRefresh });
 
   // ── Local form state ──
-  const [status, setStatus] = useState<MediaPlaintext["status"]>("unwatched");
+  const [status, setStatus] = useState<MediaPlaintext["status"] | undefined>(undefined);
   const [rating, setRating] = useState(0);
   const [watchedOn, setWatchedOn] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
@@ -69,7 +69,7 @@ export default function MoviePage({
     setShowRemove(false);
     removeMedia(() => {
       setOriginalMedia(null);
-      setStatus("unwatched");
+      setStatus(undefined);
       setRating(0);
       setWatchedOn("");
       setReviewNotes("");
@@ -89,7 +89,7 @@ export default function MoviePage({
       if (!result) return;
       const existing = result.existingMedia;
       if (existing) {
-        setStatus(existing.status ?? "unwatched");
+        setStatus(existing.status);
         setRating(existing.rating ?? 0);
         setWatchedOn(existing.watched_on ?? "");
         setReviewNotes(existing.review_notes ?? "");
@@ -98,7 +98,7 @@ export default function MoviePage({
           (existing.collection_id ? [existing.collection_id] : []);
         setCollectionIds(ids);
         setOriginalMedia({
-          status: existing.status ?? "unwatched",
+          status: existing.status,
           rating: existing.rating ?? 0,
           watched_on: existing.watched_on ?? "",
           review_notes: existing.review_notes ?? "",
@@ -114,7 +114,7 @@ export default function MoviePage({
   const isDirty = useMemo(() => {
     if (!isTracked) {
       return (
-        status !== "unwatched" ||
+        status !== undefined ||
         rating !== 0 ||
         watchedOn !== "" ||
         reviewNotes !== "" ||
@@ -137,7 +137,7 @@ export default function MoviePage({
   // ── Navigation guard ──
   function doCancel() {
     if (!isTracked) {
-      setStatus("unwatched");
+      setStatus(undefined);
       setRating(0);
       setWatchedOn("");
       setReviewNotes("");

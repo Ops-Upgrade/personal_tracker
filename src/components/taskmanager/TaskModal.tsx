@@ -28,12 +28,12 @@ interface TaskModalProps {
 const PRIORITY_OPTIONS: Priority[] = ["low", "medium", "high", "critical"];
 
 export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete }: TaskModalProps) {
-  const [name, setName] = useState("");
-  const [priority, setPriority] = useState<Priority>("medium");
-  const [dueDate, setDueDate] = useState("");
-  const [mode, setMode] = useState<TaskMode>("online");
-  const [description, setDescription] = useState("");
-  const [isCompleted, setIsCompleted] = useState(false);
+  const [name, setName] = useState(task?.name ?? "");
+  const [priority, setPriority] = useState<Priority>(task?.priority ?? "medium");
+  const [dueDate, setDueDate] = useState(task?.due_date ?? defaultDate ?? "");
+  const [mode, setMode] = useState<TaskMode>(task?.mode ?? "online");
+  const [description, setDescription] = useState(task?.description ?? "");
+  const [isCompleted, setIsCompleted] = useState(task?.is_completed ?? false);
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +127,7 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
         isSaving={isSaving}
         onDelete={task ? handleDeleteClick : undefined}
         deleteLabel="Delete"
+        maxWidthClassName="max-w-lg"
       >
         <div className="space-y-3">
           <InputField label="Task Name" value={name} onChange={setName} />

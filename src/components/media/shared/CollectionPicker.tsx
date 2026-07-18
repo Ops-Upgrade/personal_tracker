@@ -176,6 +176,7 @@ export default function CollectionPicker({
         return (
           <span
             key={c.id}
+            onClick={() => router.push(`/media/collection/${c.id}`)}
             className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs rounded-full border cursor-pointer transition-opacity hover:opacity-80 ${t.titleClass} ml-2`}
             style={{
               background:
