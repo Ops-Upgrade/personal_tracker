@@ -83,8 +83,6 @@ function hasOverview(media: TmdbSearchResult | Media): string | undefined {
 export default function MediaCard({
   media,
   collections,
-  onStatusChange: _onStatusChange,
-  onRatingChange: _onRatingChange,
   showType = true,
   showStatus = true,
   showBadges = true,

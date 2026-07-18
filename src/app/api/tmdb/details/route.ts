@@ -55,16 +55,30 @@ export async function POST(request: Request) {
 
     const data = await tmdbRes.json();
 
+    // TMDB API response shapes
+    interface TmdbReleaseDateResult {
+      iso_3166_1: string;
+      release_dates?: Array<{ certification: string }>;
+    }
+    interface TmdbContentRatingResult {
+      iso_3166_1: string;
+      rating?: string;
+    }
+    interface TmdbWatchProviderResult {
+      link?: string;
+      flatrate?: Array<{ provider_name: string; logo_path: string }>;
+    }
+
     // Extract US content rating (movies use release_dates, TV uses content_ratings)
     let contentRating = "";
     if (type === "movie") {
-      const usRelease = (data.release_dates?.results as any[])?.find(
-        (r: any) => r.iso_3166_1 === "US" || r.iso_3166_1 === "IN",
+      const usRelease = (data.release_dates?.results as TmdbReleaseDateResult[] | undefined)?.find(
+        (r) => r.iso_3166_1 === "US" || r.iso_3166_1 === "IN",
       );
       contentRating = usRelease?.release_dates?.[0]?.certification || "";
     } else {
-      const usRating = (data.content_ratings?.results as any[])?.find(
-        (r: any) => r.iso_3166_1 === "US" || r.iso_3166_1 === "IN",
+      const usRating = (data.content_ratings?.results as TmdbContentRatingResult[] | undefined)?.find(
+        (r) => r.iso_3166_1 === "US" || r.iso_3166_1 === "IN",
       );
       contentRating = usRating?.rating || "";
     }
@@ -89,7 +103,7 @@ export async function POST(request: Request) {
         ? (data.episode_run_time as number[] | undefined)
         : undefined,
       content_rating: contentRating,
-      watch_providers: (data["watch/providers"]?.results?.IN as any) ?? undefined,
+      watch_providers: (data["watch/providers"]?.results?.IN as TmdbWatchProviderResult | undefined) ?? undefined,
     };
 
     return NextResponse.json(details);

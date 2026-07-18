@@ -56,6 +56,7 @@ export default function EpisodePage({
   const [localMedia, setLocalMedia] = useState<Media | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [saving, setSaving] = useState(false);
   const [showRemove, setShowRemove] = useState(false);
 
@@ -210,7 +211,7 @@ export default function EpisodePage({
         setSaving(false);
       });
     },
-    [userId, tmdbId, episodeKey, showData, onRefresh],
+    [userId, tmdbId, episodeKey, showData, onRefresh, triggerToast],
   );
 
   // ── Interaction handlers ──

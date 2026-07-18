@@ -165,14 +165,14 @@ export function useMediaTracking({
         triggerToast("✓ You are now tracking this", "success");
         onRefresh?.();
         return newMedia;
-      } catch (err) {
+      } catch {
         triggerToast("Save failed. Please try again.", "error");
         return null;
       } finally {
         setSaving(false);
       }
     },
-    [userId, localMedia, tmdbId, type, allMedia, onRefresh],
+    [userId, localMedia, tmdbId, type, allMedia, onRefresh, triggerToast],
   );
 
   const removeMedia = useCallback(
@@ -184,11 +184,11 @@ export function useMediaTracking({
         setAllMedia((prev) => prev.filter((m) => m.id !== localMedia.id));
         onResetForm?.();
         onRefresh?.();
-      } catch (err) {
+      } catch {
         triggerToast("Failed to remove media. Please try again.", "error");
       }
     },
-    [localMedia, onRefresh],
+    [localMedia, onRefresh, triggerToast],
   );
 
   return {

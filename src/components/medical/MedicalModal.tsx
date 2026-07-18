@@ -82,6 +82,7 @@ export default function MedicalModal({
     handleFileDownload,
     handleFileRename,
     handleLoadPreview,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     handleLinkDropdownSelect,
     resetFileState,
   } = useModalDocumentState({
@@ -151,7 +152,7 @@ export default function MedicalModal({
       else next.add(fileId);
       return next;
     });
-  }, [newFiles, selectedFileId, stagedLinkDocId, removeNewFile]);
+  }, [newFiles, selectedFileId, stagedLinkDocId, removeNewFile, setStagedLinkDocId, setSelectedFileId]);
 
   const hasFiles = files.length > 0;
 
@@ -293,7 +294,7 @@ export default function MedicalModal({
         )}
       </div>
     );
-  }, [availableStandalone.length, stagedLinkDocId, linkDisplayValue, linkDropdownOpen, filteredLinkDocs, linkSearchQuery, isSaving]);
+  }, [availableStandalone.length, stagedLinkDocId, linkDisplayValue, linkDropdownOpen, filteredLinkDocs, linkSearchQuery, isSaving, setLinkDropdownOpen, setLinkSearchQuery, setSelectedFileId, setStagedLinkDocId]);
 
   // --- Render ---
 

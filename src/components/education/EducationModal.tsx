@@ -157,7 +157,7 @@ export default function EducationModal({
     setStandaloneLinkedEduId("");
     setStandaloneNewEduName("");
     setStandaloneNewEduProvider("");
-  }, [education, isStandaloneMode, documents]);
+  }, [education, isStandaloneMode, documents, hookResetFileState]);
 
   // ── Baseline form values ──
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
@@ -614,7 +614,7 @@ export default function EducationModal({
         )}
       </div>
     );
-  }, [isStandaloneMode, linkSearchQuery, linkDropdownOpen, filteredLinkDocs, stagedLinkDocId, standaloneDocs, isSaving]);
+  }, [isStandaloneMode, linkSearchQuery, linkDropdownOpen, filteredLinkDocs, stagedLinkDocId, standaloneDocs, isSaving, handleLinkDropdownSelectWrapped, setLinkDropdownOpen, setLinkSearchQuery, setStagedLinkDocId]);
 
   // --- Render ---
 

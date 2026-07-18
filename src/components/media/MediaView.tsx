@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
@@ -25,12 +25,13 @@ type SubTab = "default" | "collections";
 export default function MediaView() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get("tab") === "discover" ? "discover" : "manager";
-  const initialSubTab = searchParams.get("subtab") === "collections" ? "collections" : "default";
   const [mediaItems, setMediaItems] = useState<Media[]>([]);
   const [collections, setCollections] = useState<MediaCollection[]>([]);
-  const [activeTopTab, setActiveTopTab] = useState<TopTab>(initialTab);
-  const [activeSubTab, setActiveSubTab] = useState<SubTab>(initialSubTab);
+
+  // Tab state is derived from URL search params — the URL is the single source of truth.
+  // switchTopTab / switchSubTab update the URL, which triggers a re-render with fresh searchParams.
+  const activeTopTab: TopTab = searchParams.get("tab") === "discover" ? "discover" : "manager";
+  const activeSubTab: SubTab = searchParams.get("subtab") === "collections" ? "collections" : "default";
 
   // ── Toast / popup state ──
   const [toastConfig, setToastConfig] = useState<{
@@ -48,14 +49,7 @@ export default function MediaView() {
     }, 2000);
   }, []);
 
-  // Sync tab/subtab if URL search params change (e.g., from back navigation)
-  useEffect(() => {
-    setActiveTopTab(searchParams.get("tab") === "discover" ? "discover" : "manager");
-    setActiveSubTab(searchParams.get("subtab") === "collections" ? "collections" : "default");
-  }, [searchParams]);
-
   const switchTopTab = useCallback((tab: TopTab) => {
-    setActiveTopTab(tab);
     const subtab = tab === "manager" ? activeSubTab : undefined;
     const params = new URLSearchParams();
     params.set("tab", tab);
@@ -64,7 +58,6 @@ export default function MediaView() {
   }, [router, activeSubTab]);
 
   const switchSubTab = useCallback((subtab: SubTab) => {
-    setActiveSubTab(subtab);
     const params = new URLSearchParams();
     params.set("tab", activeTopTab);
     params.set("subtab", subtab);
@@ -133,7 +126,6 @@ export default function MediaView() {
         : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
     }`;
 
-  const title = activeTopTab === "discover" ? "Discovery" : "My Media";
   const subtitle =
     activeTopTab === "discover"
       ? "Search and browse movies and TV shows from TMDB."

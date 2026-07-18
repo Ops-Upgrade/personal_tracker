@@ -31,7 +31,7 @@ import ReviewSection from "@/components/media/shared/ReviewSection";
 import StickyActionBar from "@/components/media/shared/StickyActionBar";
 import UntrackConfirmation from "@/components/media/shared/UntrackConfirmation";
 import Toast from "@/components/media/shared/Toast";
-import { tmdbPosterUrl, tmdbStillUrl } from "@/components/media/constants";
+import { tmdbStillUrl } from "@/components/media/constants";
 import StatusBadge from "@/components/media/shared/StatusBadge";
 
 interface TvSeriesPageProps {
@@ -65,7 +65,9 @@ export default function TvSeriesPage({
     load,
     save,
     removeMedia,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setLocalMedia,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setAllMedia,
   } = useMediaTracking({ tmdbId, userId, type: "tv", onRefresh });
 
@@ -142,7 +144,7 @@ export default function TvSeriesPage({
         episodes: existing.episodes ?? {},
       } as MediaPlaintext);
     }
-  }, []);
+  }, [setParentStatus, setRating, setReviewNotes, setCollectionIds, setEpisodeState, setOriginalMedia]);
 
   useEffect(() => {
     load().then((result) => {
