@@ -168,6 +168,7 @@ export default function ProfileForm({
                   alt="Avatar"
                   width={80}
                   height={80}
+                  unoptimized
                   className="h-20 w-20 rounded-full object-cover ring-2 ring-zinc-200 dark:ring-zinc-700"
                 />
               ) : (
