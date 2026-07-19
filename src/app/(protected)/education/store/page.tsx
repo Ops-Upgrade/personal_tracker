@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ROUTES } from "@/routes/paths";
 import { getSession } from "@/api/auth";
 import {
@@ -10,12 +9,23 @@ import {
   deleteEducation,
   createEducation,
 } from "@/api/education";
-import { fetchDocuments } from "@/api/common/documents";
+import {
+  fetchDocuments,
+  createDocument,
+  updateDocument,
+  deleteDocument,
+} from "@/api/common/documents";
+import {
+  uploadDocumentFile,
+  downloadDocumentFile,
+  deleteDocumentFile,
+} from "@/api/common/documentStorage";
 import { InputField, TextareaField, SelectField } from "@/components/common/FormField";
-import type { EducationPlaintext } from "@/types/education";
-import type { Document } from "@/types/document";
+import type { Education, EducationPlaintext } from "@/types/education";
+import type { Document, DocumentPlaintext } from "@/types/document";
 import { PRIORITIES, type Priority } from "@/types/taskmanager";
 import GlobalStoreView from "@/components/common/store/GlobalStoreView";
+import EducationModal from "@/components/education/EducationModal";
 
 /**
  * Education Document Store.
@@ -26,10 +36,13 @@ import GlobalStoreView from "@/components/common/store/GlobalStoreView";
  * - Standalone upload offers inline "create new education" form
  */
 export default function EducationStorePage() {
-  const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
+  const [allEducations, setAllEducations] = useState<Education[]>([]);
   const [parentRecords, setParentRecords] = useState<{ id: string; name: string }[]>([]);
   const [allDocuments, setAllDocuments] = useState<Document[]>([]);
+
+  // Inline modal state: linked document → open EducationModal for parent record
+  const [linkedRecord, setLinkedRecord] = useState<Education | null>(null);
 
   // --- Auth + data loading ---
   useEffect(() => {
@@ -49,6 +62,7 @@ export default function EducationStorePage() {
         fetchDocuments(userId),
       ]);
       if (!cancelled) {
+        setAllEducations(edus);
         setAllDocuments(docs);
         setParentRecords(edus.map((e) => ({ id: e.id, name: e.name })));
       }
@@ -63,20 +77,31 @@ export default function EducationStorePage() {
       fetchEducations(userId),
       fetchDocuments(userId),
     ]);
+    setAllEducations(edus);
     setAllDocuments(docs);
     setParentRecords(edus.map((e) => ({ id: e.id, name: e.name })));
   }, [userId]);
 
-  // --- Action click: linked doc → navigate to education page to edit parent ---
+  // --- Action click: linked doc → open EducationModal inline for parent ---
   const handleActionClick = useCallback(
     (docId: string) => {
       const doc = allDocuments.find((d) => d.id === docId);
-      if (!doc?.linked_id) return;
-      // Navigate to education page with edit hash — EducationView will pick it up
-      router.push(`${ROUTES.EDUCATION}#edit-education-${doc.linked_id}`);
+      // Return false so GlobalStoreView opens the StoreDocumentModal for unlinked docs
+      if (!doc?.linked_id) return false;
+      const record = allEducations.find((e) => e.id === doc.linked_id);
+      if (record) {
+        setLinkedRecord(record);
+        return true; // Handled
+      }
+      return false; // Not handled
     },
-    [allDocuments, router],
+    [allDocuments, allEducations],
   );
+
+  const closeLinkedRecord = useCallback(() => {
+    setLinkedRecord(null);
+    refreshAll();
+  }, [refreshAll]);
 
   // --- Parent CRUD handlers ---
   const handleDeleteParent = useCallback(
@@ -178,21 +203,147 @@ export default function EducationStorePage() {
     [userId, refreshAll],
   );
 
+  // --- Inline EducationModal handlers (mirrors EducationView) ---
+
+  const handleEducationSave = useCallback(
+    async (
+      draft: { name: string; provider: string; priority: Priority; due_date: string | null; description: string; is_completed: boolean },
+      existingEducation: Education | null,
+      pendingDoc?: { file: File; label: string },
+      pendingLinkDocId?: string,
+      pendingUnlinkDocIds?: string[],
+      pendingDeleteDocIds?: string[],
+    ) => {
+      if (!userId) throw new Error("No active session.");
+      const freshEdus = await fetchEducations(userId);
+      const freshDocs = await fetchDocuments(userId);
+      const freshEdu = existingEducation ? freshEdus.find(e => e.id === existingEducation.id) : null;
+      let currentDocIds = [...(freshEdu?.document_ids ?? [])];
+      const nowIso = new Date().toISOString();
+      const completedAt = draft.is_completed ? freshEdu?.completed_at ?? nowIso : null;
+
+      if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0 && existingEducation) {
+        for (const docId of pendingUnlinkDocIds) {
+          const doc = freshDocs.find(d => d.id === docId);
+          if (doc) {
+            await updateDocument(userId, docId, { ...doc, linked_id: "", updated_at: nowIso } as DocumentPlaintext);
+          }
+          currentDocIds = currentDocIds.filter(id => id !== docId);
+        }
+      }
+
+      if (pendingDeleteDocIds && pendingDeleteDocIds.length > 0) {
+        for (const docId of pendingDeleteDocIds) {
+          const doc = freshDocs.find(d => d.id === docId);
+          if (doc) {
+            currentDocIds = currentDocIds.filter(id => id !== docId);
+            if (doc.file_name) {
+              try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+            }
+            await deleteDocument(docId);
+          }
+        }
+      }
+
+      const payload = { ...draft, completed_at: completedAt, document_ids: currentDocIds, updated_at: nowIso };
+      let savedEdu: Education;
+      if (existingEducation) {
+        savedEdu = await updateEducation(userId, existingEducation.id, payload);
+      } else {
+        savedEdu = await createEducation(userId, payload);
+      }
+
+      let needsUpdate = false;
+      const newDocIds = [...currentDocIds];
+
+      if (pendingDoc) {
+        const { fileName, iv, mimeType } = await uploadDocumentFile(userId, pendingDoc.file);
+        const doc = await createDocument(userId, { label: pendingDoc.label, file_name: fileName, file_iv: iv, file_mime: mimeType, domain: "education", linked_id: savedEdu.id, updated_at: nowIso });
+        newDocIds.push(doc.id);
+        needsUpdate = true;
+      }
+
+      if (pendingLinkDocId) {
+        const pdoc = freshDocs.find(d => d.id === pendingLinkDocId);
+        if (pdoc) {
+          await updateDocument(userId, pendingLinkDocId, { ...pdoc, linked_id: savedEdu.id, updated_at: nowIso } as DocumentPlaintext);
+          if (!newDocIds.includes(pendingLinkDocId)) newDocIds.push(pendingLinkDocId);
+          needsUpdate = true;
+        }
+      }
+
+      if (needsUpdate) {
+        await updateEducation(userId, savedEdu.id, { ...payload, document_ids: newDocIds, updated_at: new Date().toISOString() });
+      }
+
+      await refreshAll();
+    },
+    [userId, refreshAll],
+  );
+
+  const handleEducationDelete = useCallback(
+    async (educationId: string, cascadeMode: 'unlink' | 'cascade') => {
+      if (!userId) throw new Error("No active session.");
+      const eduDocs = allDocuments.filter(d => d.domain === "education" && d.linked_id === educationId);
+      if (cascadeMode === 'unlink') {
+        const nowIso = new Date().toISOString();
+        for (const doc of eduDocs) {
+          await updateDocument(userId, doc.id, { ...doc, linked_id: "", updated_at: nowIso } as DocumentPlaintext);
+        }
+      } else {
+        for (const doc of eduDocs) {
+          if (doc.file_name) {
+            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+          }
+          await deleteDocument(doc.id);
+        }
+      }
+      await deleteEducation(educationId);
+      await refreshAll();
+    },
+    [userId, allDocuments, refreshAll],
+  );
+
+  const handleDownloadDocument = useCallback(async (doc: Document) => {
+    if (!userId) throw new Error("No active session.");
+    const blob = await downloadDocumentFile(userId, doc.file_name, doc.file_iv, doc.file_mime);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = doc.label || "document";
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }, [userId]);
+
   return (
-    <GlobalStoreView
-      domain="education"
-      title="Certificate Store"
-      description="View all uploaded certificates across all your educations."
-      backHref={ROUTES.EDUCATION}
-      backLabel="← Back to Education"
-      parentRecords={parentRecords}
-      onDeleteParentRecord={handleDeleteParent}
-      onUnlinkFromParent={handleUnlinkFromParent}
-      onBulkLinkToParent={handleBulkLinkToParent}
-      onActionClick={handleActionClick}
-      renderNewRecordForm={renderNewRecordForm}
-      extractNewRecordData={extractNewRecordData}
-      onCreateParentFromStore={onCreateParentFromStore}
-    />
+    <>
+      <GlobalStoreView
+        domain="education"
+        title="Certificate Store"
+        description="View all uploaded certificates across all your educations."
+        backHref={ROUTES.EDUCATION}
+        backLabel="← Back to Education"
+        parentRecords={parentRecords}
+        onDeleteParentRecord={handleDeleteParent}
+        onUnlinkFromParent={handleUnlinkFromParent}
+        onBulkLinkToParent={handleBulkLinkToParent}
+        onActionClick={handleActionClick}
+        renderNewRecordForm={renderNewRecordForm}
+        extractNewRecordData={extractNewRecordData}
+        onCreateParentFromStore={onCreateParentFromStore}
+      />
+
+      {/* EducationModal for linked record editing */}
+      {linkedRecord && userId && (
+        <EducationModal
+          education={linkedRecord}
+          documents={allDocuments}
+          userId={userId}
+          onClose={closeLinkedRecord}
+          onSave={handleEducationSave}
+          onDelete={handleEducationDelete}
+          onDownloadDocument={handleDownloadDocument}
+        />
+      )}
+    </>
   );
 }

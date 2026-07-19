@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
 import { useLocalStorage } from "@/lib/useLocalStorage";
@@ -26,11 +26,13 @@ import TaskModal from "./TaskModal";
 
 /**
  * Task Manager feature shell.
- * Refactored: hash-driven modals (#new-task, #edit-<id>, #edit-note-<id>),
+ * Query-param-driven modals (?modal=new-task, ?modal=edit-task-<id>, ?modal=edit-note-<id>),
  * "View all" → dedicated routes.
  */
 export default function TaskManagerView() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const modal = searchParams.get("modal");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
 
@@ -45,77 +47,43 @@ export default function TaskManagerView() {
 
   const [activeView, setActiveView] = useLocalStorage<TaskView>("taskManagerActiveView", "months");
 
-  const [taskModalTarget, setTaskModalTarget] = useState<Task | "create" | null>(null);
-  const [noteModalTarget, setNoteModalTarget] = useState<Note | "create" | null>(null);
+  // --- Query-param-driven modal state (derived, not stored in useState) ---
 
-  // --- Hash-driven modal triggers ---
-  // Supported hashes: #new-task, #edit-<taskId>, #edit-note-<noteId>
-
-  const clearHash = useCallback(() => {
-    if (window.location.hash) {
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  }, []);
-
-  // Hash change handler (does NOT call setState itself — returns the derived state)
-  const resolveHashState = useCallback((raw: string, currentTasks: Task[], currentNotes: Note[]) => {
-    if (raw === "new-task") {
-      return { taskTarget: "create" as const, noteTarget: null };
-    }
-    if (raw.startsWith("edit-note-")) {
-      const noteId = raw.slice(10);
-      const note = currentNotes.find((n) => n.id === noteId);
-      if (note) return { taskTarget: null, noteTarget: note };
-    }
-    if (raw.startsWith("edit-task-")) {
-      const taskId = raw.slice(10);
-      const task = currentTasks.find((t) => t.id === taskId);
-      if (task) return { taskTarget: task, noteTarget: null };
+  const taskModalTarget = useMemo<Task | "create" | null>(() => {
+    if (modal === "new-task") return "create";
+    if (modal?.startsWith("edit-task-")) {
+      const taskId = modal.slice(10);
+      return tasks.find((t) => t.id === taskId) ?? null;
     }
     return null;
-  }, []);
+  }, [modal, tasks]);
 
-  // Listen for hash changes
-  useEffect(() => {
-    const handler = () => {
-      const raw = window.location.hash.replace("#", "");
-      const resolved = resolveHashState(raw, tasks, notes);
-      if (resolved) {
-        if (resolved.taskTarget !== null) setTaskModalTarget(resolved.taskTarget);
-        if (resolved.noteTarget !== null) setNoteModalTarget(resolved.noteTarget);
-      }
-    };
-    window.addEventListener("hashchange", handler);
-    return () => window.removeEventListener("hashchange", handler);
-  }, [tasks, notes, resolveHashState]);
+  const noteModalTarget = useMemo<Note | "create" | null>(() => {
+    if (modal === "new-note") return "create";
+    if (modal?.startsWith("edit-note-")) {
+      const noteId = modal.slice(10);
+      return notes.find((n) => n.id === noteId) ?? null;
+    }
+    return null;
+  }, [modal, notes]);
 
-  // --- Helpers to set hash from UI clicks ---
+  // --- Helpers to set query param from UI clicks ---
 
-  const openNewTask = () => {
-    window.location.hash = "new-task";
-  };
+  const setModalParam = useCallback((value: string) => {
+    router.replace(`?modal=${encodeURIComponent(value)}`, { scroll: false });
+  }, [router]);
 
-  const openEditTask = (task: Task) => {
-    window.location.hash = `edit-task-${task.id}`;
-  };
+  const clearModalParam = useCallback(() => {
+    router.replace(window.location.pathname, { scroll: false });
+  }, [router]);
 
-  const openEditNote = (note: Note) => {
-    window.location.hash = `edit-note-${note.id}`;
-  };
+  const openNewTask = () => setModalParam("new-task");
+  const openEditTask = (task: Task) => setModalParam(`edit-task-${task.id}`);
+  const openEditNote = (note: Note) => setModalParam(`edit-note-${note.id}`);
+  const openNewNote = () => setModalParam("new-note");
 
-  const openNewNote = () => {
-    setNoteModalTarget("create");
-  };
-
-  const closeTaskModal = () => {
-    setTaskModalTarget(null);
-    clearHash();
-  };
-
-  const closeNoteModal = () => {
-    setNoteModalTarget(null);
-    clearHash();
-  };
+  const closeTaskModal = () => clearModalParam();
+  const closeNoteModal = () => clearModalParam();
 
   // --- Derived ---
 
@@ -219,7 +187,7 @@ export default function TaskManagerView() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col items-start gap-4">
-        <BackButton href={ROUTES.DASHBOARD}>← Back</BackButton>
+        <BackButton href={ROUTES.DASHBOARD} />
         <div>
           <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
             Task Manager
@@ -269,7 +237,7 @@ export default function TaskManagerView() {
         />
       )}
 
-      {/* Hash-driven modals */}
+      {/* Query-param-driven modals */}
       {taskModalTarget && (
         <TaskModal
           task={taskModalTarget === "create" ? null : taskModalTarget}

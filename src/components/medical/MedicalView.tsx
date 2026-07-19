@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
 import Link from "next/link";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
+import { useQueryModal } from "@/lib/useQueryModal";
 import {
   createMedicalRecord,
   deleteMedicalRecord,
@@ -27,10 +28,11 @@ import type { Document, DocumentPlaintext } from "@/types/document";
 import GenericActiveBox from "@/components/common/GenericActiveBox";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import { PRIORITIES } from "@/types/taskmanager";
-import PriorityBadge from "@/components/taskmanager/PriorityBadge";
+import PriorityBadge from "@/components/common/PriorityBadge";
 import { getPriorityColor } from "@/lib/priorityColors";
 import MedicalModal from "./MedicalModal";
 import { trunc } from "@/lib/viewHelpers";
+import { FolderIcon } from "@/components/common/Icons";
 
 const VIEW_OPTIONS: readonly ViewToggleOption<string>[] = [
   { value: "months", label: "Months" },
@@ -43,14 +45,6 @@ interface MedicalItem {
   name: string;
   clinic: string;
   date: string;
-}
-
-function FolderIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" />
-    </svg>
-  );
 }
 
 /**
@@ -76,64 +70,8 @@ export default function MedicalView() {
 
   const [view, setView] = useState<string>("months");
 
-  // Hash-driven modal state
-  const [modalTarget, setModalTarget] = useState<MedicalRecord | "create" | null>(() => {
-    if (typeof window === "undefined") return null;
-    const raw = window.location.hash.replace("#", "");
-    if (raw === "new-medical") return "create";
-    return null;
-  });
-
-  const clearHash = useCallback(() => {
-    if (window.location.hash) {
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  }, []);
-
-  const resolveHash = useCallback(
-    (raw: string) => {
-      if (!raw) return null;
-      if (raw === "new-medical") return "create" as const;
-      if (raw.startsWith("edit-medical-")) {
-        const id = raw.slice(13);
-        const found = records.find((r) => r.id === id);
-        if (found) return found;
-      }
-      return null;
-    },
-    [records],
-  );
-
-  // Sync initial hash when records load (e.g. navigating from store page)
-  useEffect(() => {
-    if (records.length === 0) return;
-    const raw = window.location.hash.replace("#", "");
-    if (raw.startsWith("edit-medical-")) {
-      const id = raw.slice(13);
-      const found = records.find((r) => r.id === id);
-      if (found) setModalTarget(found);
-    }
-    if (raw === "new-medical" && modalTarget !== "create") {
-      setModalTarget("create");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [records]);
-
-  // Listen for hash changes (Add button, edit clicks)
-  useEffect(() => {
-    const handler = () => {
-      const raw = window.location.hash.replace("#", "");
-      const resolved = resolveHash(raw);
-      if (resolved) setModalTarget(resolved);
-    };
-    window.addEventListener("hashchange", handler);
-    return () => window.removeEventListener("hashchange", handler);
-  }, [resolveHash]);
-
-  const closeModal = useCallback(() => {
-    setModalTarget(null);
-    clearHash();
-  }, [clearHash]);
+  // Query-param-driven modal state (replaces old hash-driven logic)
+  const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(records, "medical");
 
   // Convert medical records to active items for GenericActiveBox
   const activeItems: MedicalItem[] = useMemo(
@@ -159,7 +97,7 @@ export default function MedicalView() {
       diagnosis_timeline: string;
     },
     existingRecord: MedicalRecord | null,
-    fileAction?: { newFiles: File[]; removeDocIds: string[]; linkDocId?: string },
+    fileAction?: { newFiles: File[]; removeDocIds: string[]; unlinkDocIds?: string[]; linkDocId?: string },
   ) {
     if (!userId) throw new Error("No active session.");
 
@@ -174,6 +112,21 @@ export default function MedicalView() {
             try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
           }
           try { await deleteDocument(docId); } catch { /* best-effort */ }
+        }
+        document_ids = document_ids.filter((id) => id !== docId);
+      }
+    }
+
+    // --- Process unlinks: clear linked_id, remove from parent, keep file ---
+    if (fileAction?.unlinkDocIds) {
+      for (const docId of fileAction.unlinkDocIds) {
+        const doc = documents.find((d) => d.id === docId);
+        if (doc) {
+          await updateDocument(userId, docId, {
+            ...doc,
+            linked_id: "",
+            updated_at: nowIso,
+          } as DocumentPlaintext);
         }
         document_ids = document_ids.filter((id) => id !== docId);
       }
@@ -247,18 +200,32 @@ export default function MedicalView() {
     await refreshData(userId);
   }
 
-  async function handleDelete(recordId: string) {
+  async function handleDelete(recordId: string, cascadeMode: 'unlink' | 'cascade' = 'cascade') {
     if (!userId) throw new Error("No active session.");
 
     const record = records.find((r) => r.id === recordId);
     if (record?.document_ids) {
-      for (const docId of record.document_ids) {
-        const doc = documents.find((d) => d.id === docId);
-        if (doc) {
-          if (doc.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+      if (cascadeMode === 'unlink') {
+        const nowIso = new Date().toISOString();
+        for (const docId of record.document_ids) {
+          const doc = documents.find((d) => d.id === docId);
+          if (doc) {
+            await updateDocument(userId, docId, {
+              ...doc,
+              linked_id: "",
+              updated_at: nowIso,
+            } as DocumentPlaintext);
           }
-          try { await deleteDocument(docId); } catch { /* best-effort */ }
+        }
+      } else {
+        for (const docId of record.document_ids) {
+          const doc = documents.find((d) => d.id === docId);
+          if (doc) {
+            if (doc.file_name) {
+              try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+            }
+            try { await deleteDocument(docId); } catch { /* best-effort */ }
+          }
         }
       }
     }
@@ -270,7 +237,7 @@ export default function MedicalView() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col items-start gap-4">
-        <BackButton href={ROUTES.DASHBOARD}>← Back</BackButton>
+        <BackButton href={ROUTES.DASHBOARD} />
         <div>
           <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
             Medical Records
@@ -289,9 +256,7 @@ export default function MedicalView() {
           nowYear={nowYear}
           nowMonth={nowMonth}
           onViewChange={setView}
-          onAdd={() => {
-            window.location.hash = "new-medical";
-          }}
+          onAdd={openCreate}
           title="Active Records"
           viewOptions={VIEW_OPTIONS}
           priorities={[...PRIORITIES]}
@@ -302,9 +267,7 @@ export default function MedicalView() {
               type="button"
               onClick={() => {
                 const record = records.find((r) => r.id === item.id);
-                if (record) {
-                  window.location.hash = `edit-medical-${record.id}`;
-                }
+                if (record) openEdit(record);
               }}
               className="w-full text-left"
             >
@@ -341,7 +304,7 @@ export default function MedicalView() {
         />
       )}
 
-      {/* CRUD modal (hash-driven) */}
+      {/* CRUD modal (query-param-driven) */}
       {modalTarget && (
         <MedicalModal
           record={modalTarget === "create" ? null : modalTarget}

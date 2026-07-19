@@ -85,9 +85,14 @@ export default function MedicalStorePage() {
   const handleActionClick = useCallback(
     (docId: string) => {
       const doc = allDocuments.find((d) => d.id === docId);
-      if (!doc || !doc.linked_id) return;
+      // Return false so GlobalStoreView opens the StoreDocumentModal for unlinked docs
+      if (!doc?.linked_id) return false;
       const record = allRecords.find((r) => r.id === doc.linked_id);
-      if (record) setLinkedRecord(record);
+      if (record) {
+        setLinkedRecord(record);
+        return true; // Handled
+      }
+      return false; // Not handled
     },
     [allDocuments, allRecords],
   );
@@ -153,7 +158,7 @@ export default function MedicalStorePage() {
     async (
       draft: { name: string; clinic: string; date: string; diagnosis_timeline: string },
       existingRecord: MedicalRecord | null,
-      fileAction?: { newFiles: File[]; removeDocIds: string[]; linkDocId?: string },
+      fileAction?: { newFiles: File[]; removeDocIds: string[]; unlinkDocIds?: string[]; linkDocId?: string },
     ) => {
       if (!userId) throw new Error("No active session.");
       const nowIso = new Date().toISOString();
@@ -166,6 +171,17 @@ export default function MedicalStorePage() {
             try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
           }
           try { await deleteDocument(docId); } catch { /* best-effort */ }
+          document_ids = document_ids.filter((id) => id !== docId);
+        }
+      }
+
+      // Process unlinks: clear linked_id, remove from parent, keep file
+      if (fileAction?.unlinkDocIds) {
+        for (const docId of fileAction.unlinkDocIds) {
+          const doc = allDocuments.find((d) => d.id === docId);
+          if (doc) {
+            await updateDocument(userId, docId, { ...doc, linked_id: "", updated_at: nowIso } as DocumentPlaintext);
+          }
           document_ids = document_ids.filter((id) => id !== docId);
         }
       }
@@ -232,16 +248,26 @@ export default function MedicalStorePage() {
   );
 
   const handleMedicalDelete = useCallback(
-    async (recordId: string) => {
+    async (recordId: string, cascadeMode: 'unlink' | 'cascade' = 'cascade') => {
       if (!userId) throw new Error("No active session.");
       const record = allRecords.find((r) => r.id === recordId);
       if (record?.document_ids) {
-        for (const docId of record.document_ids) {
-          const doc = allDocuments.find((d) => d.id === docId);
-          if (doc?.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+        if (cascadeMode === 'unlink') {
+          const nowIso = new Date().toISOString();
+          for (const docId of record.document_ids) {
+            const doc = allDocuments.find((d) => d.id === docId);
+            if (doc) {
+              await updateDocument(userId, docId, { ...doc, linked_id: "", updated_at: nowIso } as DocumentPlaintext);
+            }
           }
-          try { await deleteDocument(docId); } catch { /* best-effort */ }
+        } else {
+          for (const docId of record.document_ids) {
+            const doc = allDocuments.find((d) => d.id === docId);
+            if (doc?.file_name) {
+              try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+            }
+            try { await deleteDocument(docId); } catch { /* best-effort */ }
+          }
         }
       }
       await deleteMedicalRecord(recordId);

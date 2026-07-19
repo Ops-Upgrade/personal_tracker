@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Note } from "@/types/taskmanager";
-import ConfirmDialog from "./ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import { TextareaField } from "@/components/common/FormField";
 import ErrorBanner from "@/components/common/ErrorBanner";
@@ -15,7 +15,7 @@ interface NoteModalProps {
 }
 
 export default function NoteModal({ note, onClose, onSave, onDelete }: NoteModalProps) {
-  const [content, setContent] = useState("");
+  const [content, setContent] = useState(note?.content ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);

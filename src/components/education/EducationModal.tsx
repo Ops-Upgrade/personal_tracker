@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Education } from "@/types/education";
 import type { Document } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
 import type { Priority } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import type { ModalFile } from "@/components/common/GlobalActionModal";
+import { useModalDocumentState } from "@/lib/useModalDocumentState";
 import { InputField, SelectField, CheckboxField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
@@ -28,27 +29,11 @@ interface EducationDraft {
 interface EducationModalProps {
   education: Education | null;
   documents: Document[];
-  /** ALL educations (needed for standalone mode dropdown) */
-  allEducations?: Education[];
   userId: string;
   onClose: () => void;
   onSave: (draft: EducationDraft, existingEducation: Education | null, pendingDoc?: { file: File; label: string }, pendingLinkDocId?: string, pendingUnlinkDocIds?: string[], pendingDeleteDocIds?: string[]) => Promise<void>;
   onDelete: (educationId: string, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
-  onUploadDocument: (educationId: string, file: File, label: string) => Promise<Document>;
   onDownloadDocument: (document: Document) => Promise<void>;
-  onDeleteDocument: (document: Document, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
-  onLinkDocument: (educationId: string, documentId: string) => Promise<void>;
-  onUnlinkDocument: (educationId: string, documentId: string) => Promise<void>;
-  // --- Standalone mode ---
-  /** When true: form becomes "link existing OR create new" instead of standard education edit */
-  isStandaloneMode?: boolean;
-  /** Called instead of onSave in standalone mode */
-  onSaveStandalone?: (params: {
-    file: File;
-    label: string;
-    linkedEducationId?: string;
-    newEducation?: { name: string; provider: string };
-  }) => Promise<void>;
 }
 
 // ============================================================
@@ -58,14 +43,11 @@ interface EducationModalProps {
 export default function EducationModal({
   education,
   documents,
-  allEducations,
   userId,
   onClose,
   onSave,
   onDelete,
   onDownloadDocument,
-  isStandaloneMode = false,
-  onSaveStandalone,
 }: EducationModalProps) {
   // --- Form state ---
   const [name, setName] = useState("");
@@ -84,55 +66,60 @@ export default function EducationModal({
   const [newFiles, setNewFiles] = useState<{ file: File; label: string; tempId: string }[]>([]);
   const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(new Set());
   const [markedForUnlink, setMarkedForUnlink] = useState<Set<string>>(new Set());
-  const [stagedLinkDocId, setStagedLinkDocId] = useState<string | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(() => {
-    if (isStandaloneMode || !education) return null;
+    if (!education) return null;
     const docs = docsForEducation(education.id, documents);
     return docs.length > 0 ? docs[0].id : null;
   });
 
-  const [linkSearchQuery, setLinkSearchQuery] = useState("");
-  const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
+  // Moved up: needed by the hook below
+  const linkedDocs = useMemo(
+    () => education ? docsForEducation(education.id, documents) : [],
+    [education, documents]
+  );
+  const standaloneDocs = documents.filter(
+    (d) => d.domain === "education" && !d.linked_id
+  );
 
-  // Standalone mode state
-  const [standaloneFile, setStandaloneFile] = useState<File | null>(null);
-  const [standaloneLinkedEduId, setStandaloneLinkedEduId] = useState("");
-  const [standaloneNewEduName, setStandaloneNewEduName] = useState("");
-  const [standaloneNewEduProvider, setStandaloneNewEduProvider] = useState("");
+  // Shared file state and handlers (staged link, search, dropdown, download/preview/rename)
+  const {
+    stagedLinkDocId,
+    setStagedLinkDocId,
+    linkSearchQuery,
+    setLinkSearchQuery,
+    linkDropdownOpen,
+    setLinkDropdownOpen,
+    filteredLinkDocs,
+    handleFileDownload: hookHandleFileDownload,
+    handleFileRename: hookHandleFileRename,
+    handleLoadPreview: hookHandleLoadPreview,
+    handleLinkDropdownSelect,
+    resetFileState: hookResetFileState,
+  } = useModalDocumentState({
+    attachedDocuments: linkedDocs,
+    standaloneDocuments: standaloneDocs,
+    userId,
+    markedForRemoval: markedForDeletion,
+  });
 
   // --- Reset on open ---
   useEffect(() => {
-    if (isStandaloneMode) {
-      setName("");
-      setProvider("");
-      setPriority("medium");
-      setDueDate("");
-      setDescription("");
-      setIsCompleted(false);
-    } else {
-      const todayStr = new Date().toISOString().split("T")[0];
-      setName(education?.name ?? "");
-      setProvider(education?.provider ?? "");
-      setPriority(education?.priority ?? "medium");
-      setDueDate(education ? (education?.due_date ?? "") : todayStr);
-      setDescription(education?.description ?? "");
-      setIsCompleted(education?.is_completed ?? false);
-    }
+    const todayStr = new Date().toISOString().split("T")[0];
+    setName(education?.name ?? "");
+    setProvider(education?.provider ?? "");
+    setPriority(education?.priority ?? "medium");
+    setDueDate(education ? (education?.due_date ?? "") : todayStr);
+    setDescription(education?.description ?? "");
+    setIsCompleted(education?.is_completed ?? false);
     setError(null);
     setShowDeleteConfirm(false);
     setNewFiles([]);
     setMarkedForDeletion(new Set());
     setMarkedForUnlink(new Set());
-    setStagedLinkDocId(null);
+    hookResetFileState();
     const existingDocs = education ? docsForEducation(education.id, documents) : [];
     setSelectedDocId(existingDocs.length > 0 ? existingDocs[0].id : null);
-    setLinkSearchQuery("");
-    setLinkDropdownOpen(false);
-    setStandaloneFile(null);
-    setStandaloneLinkedEduId("");
-    setStandaloneNewEduName("");
-    setStandaloneNewEduProvider("");
-  }, [education, isStandaloneMode, documents]);
+  }, [education, documents, hookResetFileState]);
 
   // ── Baseline form values ──
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
@@ -147,14 +134,6 @@ export default function EducationModal({
 
   // --- Dirty check ---
 
-  const linkedDocs = useMemo(
-    () => education ? docsForEducation(education.id, documents) : [],
-    [education, documents]
-  );
-  const standaloneDocs = documents.filter(
-    (d) => d.domain === "education" && !d.linked_id
-  );
-
   const hasFormChanges =
     name !== formBaseline.name ||
     provider !== formBaseline.provider ||
@@ -163,24 +142,11 @@ export default function EducationModal({
     description !== formBaseline.description ||
     isCompleted !== formBaseline.isCompleted;
 
-  const isDirty = isStandaloneMode
-    ? standaloneFile !== null || standaloneLinkedEduId !== "" || standaloneNewEduName !== "" || standaloneNewEduProvider !== ""
-    : hasFormChanges || newFiles.length > 0 || stagedLinkDocId !== null || markedForDeletion.size > 0 || markedForUnlink.size > 0;
+  const isDirty = hasFormChanges || newFiles.length > 0 || stagedLinkDocId !== null || markedForDeletion.size > 0 || markedForUnlink.size > 0;
 
   // --- Build files array for GlobalActionModal ---
 
   const files: ModalFile[] = useMemo(() => {
-    if (isStandaloneMode) {
-      if (!standaloneFile) return [];
-      return [{
-        id: "standalone-file",
-        name: standaloneFile.name,
-        mime: standaloneFile.type,
-        file: standaloneFile,
-        isNew: true,
-      }];
-    }
-
     type FileEntry = {
       id: string;
       rawName: string;
@@ -264,17 +230,11 @@ export default function EducationModal({
     }
 
     return result;
-  }, [isStandaloneMode, standaloneFile, linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, documents]);
+  }, [linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, documents]);
 
   // --- File action handlers ---
 
   const handleFileDelete = (fileId: string) => {
-    if (isStandaloneMode) {
-      setStandaloneFile(null);
-      setSelectedDocId(null);
-      return;
-    }
-
     const newFile = newFiles.find(nf => nf.tempId === fileId);
     if (newFile) {
       setNewFiles(prev => prev.filter(nf => nf.tempId !== fileId));
@@ -298,7 +258,6 @@ export default function EducationModal({
   };
 
   const handleFileUnlink = (fileId: string) => {
-    if (isStandaloneMode) return;
     if (stagedLinkDocId === fileId) { setStagedLinkDocId(null); return; }
     if (newFiles.find(nf => nf.tempId === fileId)) return;
 
@@ -311,18 +270,8 @@ export default function EducationModal({
     setMarkedForDeletion(prev => { const next = new Set(prev); next.delete(fileId); return next; });
   };
 
-  const handleFileDownload = async (fileId: string) => {
-    if (isStandaloneMode) {
-      if (standaloneFile) {
-        const url = URL.createObjectURL(standaloneFile);
-        const a = document.createElement("a");
-        a.href = url; a.download = standaloneFile.name;
-        document.body.appendChild(a); a.click();
-        document.body.removeChild(a); URL.revokeObjectURL(url);
-      }
-      return;
-    }
-
+  const handleFileDownloadWrapped = async (fileId: string) => {
+    // For new files (not yet on server), use local download
     const newFile = newFiles.find(nf => nf.tempId === fileId);
     if (newFile) {
       const url = URL.createObjectURL(newFile.file);
@@ -333,23 +282,19 @@ export default function EducationModal({
       return;
     }
 
+    // For docs from the global store, use the Education-specific download callback
     const doc = [...linkedDocs, ...documents].find(d => d.id === fileId);
-    if (!doc) return;
-
-    try { await onDownloadDocument(doc); }
-    catch (err) { alert(err instanceof Error ? err.message : "Failed to download document."); }
-  };
-
-  const handleFileRename = (fileId: string, newName: string) => {
-    if (isStandaloneMode && fileId === "standalone-file" && standaloneFile) {
-      const renamed = new File([standaloneFile], newName, {
-        type: standaloneFile.type,
-        lastModified: standaloneFile.lastModified,
-      });
-      setStandaloneFile(renamed);
+    if (doc) {
+      try { await onDownloadDocument(doc); }
+      catch (err) { alert(err instanceof Error ? err.message : "Failed to download document."); }
       return;
     }
 
+    // Fallback to hook's download (attached documents from R2)
+    await hookHandleFileDownload(fileId);
+  };
+
+  const handleFileRenameWrapped = (fileId: string, newName: string) => {
     const newFile = newFiles.find((nf) => nf.tempId === fileId);
     if (newFile) {
       setNewFiles((prev) =>
@@ -359,17 +304,26 @@ export default function EducationModal({
       );
       return;
     }
+
+    // Delegate to hook for attached doc renames
+    hookHandleFileRename(fileId, newName);
+  };
+
+  const handleLoadPreviewWrapped = async (fileId: string): Promise<Blob> => {
+    const newFile = newFiles.find(nf => nf.tempId === fileId);
+    if (newFile) return newFile.file;
+
+    // For docs from the store, try via download callback
+    const doc = [...linkedDocs, ...documents].find(d => d.id === fileId);
+    if (doc?.file_name && doc?.file_iv) {
+      return downloadDocumentFile(userId, doc.file_name, doc.file_iv, doc.file_mime ?? "application/octet-stream");
+    }
+
+    // Fallback to hook
+    return hookHandleLoadPreview(fileId);
   };
 
   const handleFileUpload = (file: File) => {
-    if (isStandaloneMode) {
-      const existingNames = new Set(documents.map(d => d.label || ""));
-      const uniqueName = getUniqueFileName(file.name, existingNames);
-      const renamedFile = new File([file], uniqueName, { type: file.type, lastModified: file.lastModified });
-      setStandaloneFile(renamedFile);
-      return;
-    }
-
     const taken = new Set<string>();
     for (const doc of documents) {
       if (linkedDocs.some(ld => ld.id === doc.id)) {
@@ -393,39 +347,11 @@ export default function EducationModal({
     setSelectedDocId(null);
   };
 
-  const handleLinkDropdownSelect = (docId: string) => {
-    if (!docId) return;
-    setStagedLinkDocId(docId);
-    setLinkSearchQuery("");
-    setLinkDropdownOpen(false);
+  // Wrap hook's linkDropdownSelect to also clear Education-specific selectedDocId
+  const handleLinkDropdownSelectWrapped = useCallback((docId: string) => {
+    handleLinkDropdownSelect(docId);
     setSelectedDocId(null);
-  };
-
-  // Standalone docs available for linking (excludes currently staged)
-  const filteredLinkDocs = useMemo(() => {
-    const available = stagedLinkDocId
-      ? standaloneDocs.filter(d => d.id !== stagedLinkDocId)
-      : standaloneDocs;
-    if (!linkSearchQuery.trim()) return available;
-    const q = linkSearchQuery.toLowerCase();
-    return available.filter(d =>
-      (d.label || "").toLowerCase().includes(q) ||
-      (d.file_name || "").toLowerCase().includes(q)
-    );
-  }, [standaloneDocs, linkSearchQuery, stagedLinkDocId]);
-
-  const handleLoadPreview = async (fileId: string): Promise<Blob> => {
-    if (isStandaloneMode && standaloneFile) return standaloneFile;
-
-    const newFile = newFiles.find(nf => nf.tempId === fileId);
-    if (newFile) return newFile.file;
-
-    const doc = [...linkedDocs, ...documents].find(d => d.id === fileId);
-    if (!doc || !doc.file_name || !doc.file_iv || !doc.file_mime) {
-      throw new Error("Cannot load preview for this file.");
-    }
-    return downloadDocumentFile(userId, doc.file_name, doc.file_iv, doc.file_mime);
-  };
+  }, [handleLinkDropdownSelect, setSelectedDocId]);
 
   // --- Delete handler ---
   async function handleDelete() {
@@ -435,35 +361,6 @@ export default function EducationModal({
 
   // --- Save handler ---
   const handleSaveWithFullProcessing = async () => {
-    if (isStandaloneMode) {
-      if (!standaloneFile) {
-        setError("Please upload a certificate file.");
-        return;
-      }
-      if (!standaloneLinkedEduId && !standaloneNewEduName.trim()) {
-        setError("Please select an education or create a new one.");
-        return;
-      }
-      setIsSaving(true);
-      setError(null);
-      try {
-        await onSaveStandalone?.({
-          file: standaloneFile,
-          label: standaloneFile.name,
-          linkedEducationId: standaloneLinkedEduId || undefined,
-          newEducation: standaloneNewEduName.trim()
-            ? { name: standaloneNewEduName.trim(), provider: standaloneNewEduProvider.trim() }
-            : undefined,
-        });
-        onClose();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to save certificate.");
-      } finally {
-        setIsSaving(false);
-      }
-      return;
-    }
-
     if (!name.trim()) {
       setError("Education name is required.");
       return;
@@ -511,7 +408,6 @@ export default function EducationModal({
 
   // --- Build link dropdown for rightPanelExtras ---
   const linkDropdownExtras = useMemo(() => {
-    if (isStandaloneMode) return null;
     if (standaloneDocs.length === 0 && !stagedLinkDocId) return null;
 
     const labelBuckets = new Map<string, Document[]>();
@@ -584,7 +480,7 @@ export default function EducationModal({
                     key={doc.id}
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleLinkDropdownSelect(doc.id)}
+                    onClick={() => handleLinkDropdownSelectWrapped(doc.id)}
                     className="w-full px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-zinc-300 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400"
                   >
                     {fmt(doc)}
@@ -600,91 +496,11 @@ export default function EducationModal({
         )}
       </div>
     );
-  }, [isStandaloneMode, linkSearchQuery, linkDropdownOpen, filteredLinkDocs, stagedLinkDocId, standaloneDocs, isSaving]);
+  }, [linkSearchQuery, linkDropdownOpen, filteredLinkDocs, stagedLinkDocId, standaloneDocs, isSaving, handleLinkDropdownSelectWrapped, setLinkDropdownOpen, setLinkSearchQuery, setStagedLinkDocId]);
 
   // --- Render ---
 
-  // Standalone mode
-  if (isStandaloneMode) {
-    const eduOptions = allEducations || [];
-    const standaloneFormDisabled = standaloneLinkedEduId !== "";
-
-    return (
-      <>
-        <GlobalActionModal
-          title="Add Certificate"
-          onClose={onClose}
-          isDirty={isDirty}
-          files={files}
-          selectedFileId={selectedDocId}
-          onSelectFile={(id) => setSelectedDocId(id)}
-          onFileDelete={standaloneFile ? handleFileDelete : undefined}
-          onFileDownload={standaloneFile ? handleFileDownload : undefined}
-          onFileRename={standaloneFile ? handleFileRename : undefined}
-          onFileUpload={handleFileUpload}
-          onLoadPreview={standaloneFile ? handleLoadPreview : undefined}
-          onSave={handleSaveWithFullProcessing}
-          isSaving={isSaving}
-        >
-          <div className="flex flex-col h-full space-y-3">
-            <div>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Link to existing record
-                </span>
-                <div className="flex items-center gap-2">
-                  <select
-                    value={standaloneLinkedEduId}
-                    onChange={(e) => {
-                      setStandaloneLinkedEduId(e.target.value);
-                      if (e.target.value) {
-                        setStandaloneNewEduName("");
-                        setStandaloneNewEduProvider("");
-                      }
-                    }}
-                    className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 min-w-0"
-                  >
-                    <option value="">— Select an education —</option>
-                    {eduOptions.map((edu) => (
-                      <option key={edu.id} value={edu.id}>
-                        {trunc(edu.name, 50)}{edu.is_completed ? " ✓" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {standaloneLinkedEduId && (
-                    <button
-                      type="button"
-                      onClick={() => setStandaloneLinkedEduId("")}
-                      className="shrink-0 text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </label>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />
-              <span className="text-xs font-medium text-zinc-400 dark:text-zinc-500 uppercase">— or —</span>
-              <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />
-            </div>
-
-            <fieldset disabled={standaloneFormDisabled} className="space-y-3">
-              <InputField label="Education Name" value={standaloneNewEduName} onChange={setStandaloneNewEduName} disabled={isSaving || standaloneFormDisabled} placeholder="e.g. AWS Solutions Architect" />
-              <InputField label="Provider" value={standaloneNewEduProvider} onChange={setStandaloneNewEduProvider} disabled={isSaving || standaloneFormDisabled} placeholder="e.g. Amazon Web Services" />
-            </fieldset>
-
-            {error && <ErrorBanner message={error} />}
-          </div>
-        </GlobalActionModal>
-      </>
-    );
-  }
-
   const hasFiles = files.length > 0;
-
-  // --- Standard mode ---
   return (
     <>
       <GlobalActionModal
@@ -696,10 +512,10 @@ export default function EducationModal({
         onSelectFile={(id) => setSelectedDocId(id)}
         onFileDelete={hasFiles ? handleFileDelete : undefined}
         onFileUnlink={hasFiles ? handleFileUnlink : undefined}
-        onFileDownload={hasFiles ? handleFileDownload : undefined}
-        onFileRename={hasFiles ? handleFileRename : undefined}
+        onFileDownload={hasFiles ? handleFileDownloadWrapped : undefined}
+        onFileRename={hasFiles ? handleFileRenameWrapped : undefined}
         onFileUpload={handleFileUpload}
-        onLoadPreview={handleLoadPreview}
+        onLoadPreview={handleLoadPreviewWrapped}
         onSave={handleSaveWithFullProcessing}
         isSaving={isSaving}
         onDelete={education ? handleDelete : undefined}

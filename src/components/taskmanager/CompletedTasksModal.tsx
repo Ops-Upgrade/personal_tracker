@@ -4,7 +4,7 @@ import type { Task, TaskView } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/taskmanager";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import GenericCompletedModal from "@/components/common/GenericCompletedModal";
-import PriorityBadge from "./PriorityBadge";
+import PriorityBadge from "@/components/common/PriorityBadge";
 import Button from "@/components/common/Button";
 import {
   formatShortDate,

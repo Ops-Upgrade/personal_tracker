@@ -50,7 +50,6 @@ export default function NotesPage() {
   return (
     <PageShell
       backHref={ROUTES.TASK_MANAGER}
-      backLabel="← Back to Task Manager"
       title="Notes"
       description="All your notes."
       error={error}

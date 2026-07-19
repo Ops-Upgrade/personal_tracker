@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react";
 import {
-  Search,
   Download,
   Trash2,
   File,
@@ -12,8 +11,9 @@ import {
   Pencil,
 } from "lucide-react";
 import { LinkSlashIcon, LinkIcon } from "@/components/common/Icons";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import ViewToggle from "@/components/common/ViewToggle";
+import SearchBar from "@/components/common/SearchBar";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 
 const STORE_VIEW_OPTIONS: readonly ViewToggleOption<"tiles" | "list">[] = [
@@ -180,18 +180,12 @@ export default function TileView({
             bulkActions
           ) : (
             <>
-              <div className="relative flex-1 sm:w-64">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-400">
-                  <Search className="h-4 w-4" />
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search files..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="block w-full rounded-md border-0 py-2 pl-9 pr-3 text-zinc-900 ring-1 ring-inset ring-zinc-300 placeholder:text-zinc-400 focus:ring-2 focus:ring-inset focus:ring-emerald-600 sm:text-sm sm:leading-6 dark:bg-zinc-900 dark:text-zinc-100 dark:ring-zinc-700 dark:focus:ring-emerald-500"
-                />
-              </div>
+              <SearchBar
+                value={searchQuery}
+                onChange={setSearchQuery}
+                placeholder="Search files..."
+                className="flex-1 sm:w-64"
+              />
               {onAdd && (
                 <button
                   onClick={onAdd}

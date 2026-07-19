@@ -8,7 +8,7 @@ const cspDirectives = isProduction
       "script-src 'self' 'wasm-unsafe-eval'",
       "style-src 'self' 'unsafe-inline'",
       "connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com",
-      "img-src 'self' blob: data: https://*.supabase.co",
+      "img-src 'self' blob: data: https://*.supabase.co https://image.tmdb.org",
        "frame-ancestors 'none'",
        "frame-src blob:",
      ].join("; ")
@@ -18,7 +18,7 @@ const cspDirectives = isProduction
        "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
        "style-src 'self' 'unsafe-inline'",
        "connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com ws://localhost:3000",
-       "img-src 'self' blob: data: https://*.supabase.co",
+       "img-src 'self' blob: data: https://*.supabase.co https://image.tmdb.org",
        "frame-ancestors 'none'",
        "frame-src blob:",
      ].join("; ");
@@ -29,6 +29,10 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "*.supabase.co",
+      },
+      {
+        protocol: "https",
+        hostname: "image.tmdb.org",
       },
     ],
   },

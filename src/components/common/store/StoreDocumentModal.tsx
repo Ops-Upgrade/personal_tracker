@@ -6,7 +6,7 @@ import { downloadDocumentFile } from "@/api/common/documentStorage";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import type { ModalFile } from "@/components/common/GlobalActionModal";
 import ErrorBanner from "@/components/common/ErrorBanner";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { getUniqueFileName } from "./helpers";
 
 // --- Types ---
@@ -134,7 +134,7 @@ export default function StoreDocumentModal({
   // --- Dirty check ---
   const formDisabled = linkedParentId !== "";
   const isDirty = isEditing
-    ? storeFile !== null || linkedParentId !== (doc?.linked_id ?? "")
+    ? storeFile !== null || linkedParentId !== (doc?.linked_id ?? "") || (!!extractNewRecordData && !!extractNewRecordData())
     : storeFile !== null || linkedParentId !== "" || (!!extractNewRecordData && !!extractNewRecordData());
 
   // --- File handlers ---
@@ -354,8 +354,8 @@ export default function StoreDocumentModal({
             </div>
           )}
 
-          {/* --- or --- divider + inline creation form (mirrors StoreCertificateModal) */}
-          {renderNewRecordForm && !isEditing && (
+          {/* --- or --- divider + inline creation form */}
+          {renderNewRecordForm && (
             <>
               <div className="flex items-center gap-2">
                 <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />

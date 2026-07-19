@@ -1,14 +1,15 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
+  --background: #fafafa;
   --foreground: #171717;
 }
 
 .dark {
-  --background: #0a0a0a;
+  --background: #09090b;
   --foreground: #ededed;
 }
 
@@ -23,4 +24,55 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ── Matrix digital rain animation ── */
+@keyframes matrix-rain {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 40px;
+  }
+}
+
+/* ── Gem & Glass tile shared pseudo-element overlays ── */
+.gem-tile {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Diagonal highlight streak — sits above the background */
+.gem-tile::before {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: 10%;
+  width: 55%;
+  height: 50%;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0)
+  );
+  transform: rotate(-15deg);
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Tiny specular glint dot */
+.gem-tile::after {
+  content: "";
+  position: absolute;
+  bottom: 18%;
+  right: 12%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff, rgba(255, 255, 255, 0));
+  box-shadow: 0 0 8px 2px rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+  z-index: 2;
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import DocPreviewPanel from "./DocPreviewPanel";
 import FileUploadZone from "./FileUploadZone";
 import Button from "./Button";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -14,7 +14,7 @@ import {
   ArrowPathIcon,
   DocumentIcon,
 } from "@/components/common/Icons";
-import { Eye, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 
 // --- Types ---
 
@@ -101,7 +101,6 @@ export default function GlobalActionModal({
 }: GlobalActionModalProps) {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [fileDropdownOpen, setFileDropdownOpen] = useState(false);
-  const [previewTrigger, setPreviewTrigger] = useState(0);
 
   // Inline rename state
   const [renamingFileId, setRenamingFileId] = useState<string | null>(null);
@@ -131,7 +130,10 @@ export default function GlobalActionModal({
 
   // --- isDirty ref so Esc handler never sees stale closure (Task 1.3) ---
   const isDirtyRef = useRef(isDirty);
-  useEffect(() => {
+  // useLayoutEffect fires synchronously after DOM commit but before paint,
+  // so event handlers always see the latest value (unlike useEffect which
+  // runs async after paint and can leave a stale ref in the gap).
+  useLayoutEffect(() => {
     isDirtyRef.current = isDirty;
   });
 
@@ -376,16 +378,6 @@ export default function GlobalActionModal({
                           <Pencil className="h-4 w-4" />
                         </button>
                       )}
-                      {onLoadPreview && !selectedFile.file && (
-                        <button
-                          type="button"
-                          onClick={() => setPreviewTrigger((prev) => prev + 1)}
-                          className="p-1 rounded text-zinc-400 hover:text-sky-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:text-sky-400 dark:hover:bg-zinc-800 transition-colors"
-                          title="Preview"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                      )}
                       {onFileUnlink && (
                         <button
                           type="button"
@@ -501,20 +493,6 @@ export default function GlobalActionModal({
                             To delete
                           </span>
                         )}
-                        {/* Preview button — select file and trigger preview load */}
-                        {onLoadPreview && !f.file && f.iv && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onSelectFile?.(f.id);
-                              setPreviewTrigger((prev) => prev + 1);
-                            }}
-                            className="p-1 rounded text-zinc-400 hover:text-sky-500 hover:bg-zinc-100 dark:text-zinc-500 dark:hover:text-sky-400 dark:hover:bg-zinc-800 transition-colors shrink-0"
-                            title="Preview"
-                          >
-                            <Eye className="h-3.5 w-3.5" />
-                          </button>
-                        )}
                         {/* Rename button */}
                         {onFileRename && renamingFileId !== f.id && (
                           <button
@@ -557,7 +535,6 @@ export default function GlobalActionModal({
                           ? () => onLoadPreview(selectedFile.id)
                           : undefined
                       }
-                      loadPreviewTrigger={previewTrigger}
                     />
                   </div>
                 )}

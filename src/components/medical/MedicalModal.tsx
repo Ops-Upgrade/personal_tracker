@@ -3,10 +3,9 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import type { MedicalRecord } from "@/types/medical";
 import type { Document } from "@/types/document";
-import { downloadDocumentFile } from "@/api/common/documentStorage";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
-import type { ModalFile } from "@/components/common/GlobalActionModal";
+import { useModalDocumentState } from "@/lib/useModalDocumentState";
 import { InputField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
@@ -23,6 +22,8 @@ interface MedicalDraft {
 export interface MedicalFileAction {
   newFiles: File[];
   removeDocIds: string[];
+  /** IDs of existing documents to unlink (clear linked_id but keep file) */
+  unlinkDocIds?: string[];
   /** ID of an existing standalone document to link to this record */
   linkDocId?: string;
 }
@@ -41,7 +42,7 @@ interface MedicalModalProps {
     existingRecord: MedicalRecord | null,
     fileAction?: MedicalFileAction,
   ) => Promise<void>;
-  onDelete: (recordId: string) => Promise<void>;
+  onDelete: (recordId: string, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
 }
 
 export default function MedicalModal({
@@ -54,21 +55,45 @@ export default function MedicalModal({
   onSave,
   onDelete,
 }: MedicalModalProps) {
-  const [name, setName] = useState("");
-  const [clinic, setClinic] = useState("");
-  const [date, setDate] = useState("");
-  const [diagnosisTimeline, setDiagnosisTimeline] = useState("");
+  const [name, setName] = useState(record?.name ?? "");
+  const [clinic, setClinic] = useState(record?.clinic ?? "");
+  const [date, setDate] = useState(record?.date ?? defaultDate ?? new Date().toISOString().split("T")[0]);
+  const [diagnosisTimeline, setDiagnosisTimeline] = useState(record?.diagnosis_timeline ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // --- File state ---
-  const [newFiles, setNewFiles] = useState<{ file: File; tempId: string }[]>([]);
+  // --- File state (from shared hook) ---
   const [markedForRemoval, setMarkedForRemoval] = useState<Set<string>>(new Set());
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
-  const [stagedLinkDocId, setStagedLinkDocId] = useState<string | null>(null);
-  const [linkSearchQuery, setLinkSearchQuery] = useState("");
-  const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
+  const [markedForUnlink, setMarkedForUnlink] = useState<Set<string>>(new Set());
+
+  const {
+    newFiles,
+    stagedLinkDocId,
+    setStagedLinkDocId,
+    selectedFileId,
+    setSelectedFileId,
+    linkSearchQuery,
+    setLinkSearchQuery,
+    linkDropdownOpen,
+    setLinkDropdownOpen,
+    files,
+    availableStandalone,
+    filteredLinkDocs,
+    addNewFile,
+    removeNewFile,
+    handleFileDownload,
+    handleFileRename,
+    handleLoadPreview,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    handleLinkDropdownSelect,
+    resetFileState,
+  } = useModalDocumentState({
+    attachedDocuments,
+    standaloneDocuments,
+    userId,
+    markedForRemoval,
+  });
 
   const isEditing = Boolean(record);
 
@@ -89,13 +114,10 @@ export default function MedicalModal({
     setIsSaving(false);
     setError(null);
     setShowDeleteConfirm(false);
-    setNewFiles([]);
     setMarkedForRemoval(new Set());
-    setSelectedFileId(null);
-    setStagedLinkDocId(null);
-    setLinkSearchQuery("");
-    setLinkDropdownOpen(false);
-  }, [baseline]);
+    setMarkedForUnlink(new Set());
+    resetFileState();
+  }, [baseline, resetFileState]);
 
   // Dirty check
   const isDirty =
@@ -105,59 +127,16 @@ export default function MedicalModal({
     diagnosisTimeline !== baseline.diagnosisTimeline ||
     newFiles.length > 0 ||
     markedForRemoval.size > 0 ||
+    markedForUnlink.size > 0 ||
     stagedLinkDocId !== null;
 
-  // --- Build files array for GlobalActionModal ---
+  // --- File handlers (wrap shared hook with modal-specific logic) ---
 
-  const files: ModalFile[] = useMemo(() => {
-    const result: ModalFile[] = [];
+  const handleFileUploadWrapped = useCallback((file: File) => {
+    addNewFile(file);
+  }, [addNewFile]);
 
-    for (const doc of attachedDocuments) {
-      if (markedForRemoval.has(doc.id)) continue;
-      result.push({
-        id: doc.id,
-        name: doc.label || doc.file_name || "Unnamed Document",
-        mime: doc.file_mime,
-        iv: doc.file_iv,
-      });
-    }
-
-    for (const nf of newFiles) {
-      result.push({
-        id: nf.tempId,
-        name: nf.file.name,
-        mime: nf.file.type,
-        file: nf.file,
-        isNew: true,
-      });
-    }
-
-    // Staged link (existing standalone document being linked)
-    if (stagedLinkDocId) {
-      const sd = standaloneDocuments.find((d) => d.id === stagedLinkDocId);
-      if (sd) {
-        result.push({
-          id: sd.id,
-          name: sd.label || sd.file_name || "Unnamed Document",
-          mime: sd.file_mime,
-          iv: sd.file_iv,
-          isNew: true,
-        });
-      }
-    }
-
-    return result;
-  }, [attachedDocuments, newFiles, markedForRemoval, stagedLinkDocId, standaloneDocuments]);
-
-  // --- File handlers ---
-
-  const handleFileUpload = useCallback((file: File) => {
-    const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    setNewFiles((prev) => [...prev, { file, tempId }]);
-    setSelectedFileId(null);
-  }, []);
-
-  const handleFileDelete = useCallback((fileId: string) => {
+  const handleFileDeleteWrapped = useCallback((fileId: string) => {
     // If it's the staged link, unstage it
     if (stagedLinkDocId === fileId) {
       setStagedLinkDocId(null);
@@ -167,7 +146,7 @@ export default function MedicalModal({
 
     const newFile = newFiles.find((nf) => nf.tempId === fileId);
     if (newFile) {
-      setNewFiles((prev) => prev.filter((nf) => nf.tempId !== fileId));
+      removeNewFile(fileId);
       if (selectedFileId === fileId) setSelectedFileId(null);
       return;
     }
@@ -178,56 +157,22 @@ export default function MedicalModal({
       else next.add(fileId);
       return next;
     });
-  }, [newFiles, selectedFileId, stagedLinkDocId]);
+  }, [newFiles, selectedFileId, stagedLinkDocId, removeNewFile, setStagedLinkDocId, setSelectedFileId]);
 
-  const handleFileDownload = useCallback(async (fileId: string) => {
-    const newFile = newFiles.find((nf) => nf.tempId === fileId);
-    if (newFile) {
-      const url = URL.createObjectURL(newFile.file);
-      const a = document.createElement("a");
-      a.href = url; a.download = newFile.file.name;
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a); URL.revokeObjectURL(url);
-      return;
-    }
+  const handleFileUnlinkWrapped = useCallback((fileId: string) => {
+    if (stagedLinkDocId === fileId) { setStagedLinkDocId(null); return; }
+    if (newFiles.find((nf) => nf.tempId === fileId)) return;
 
-    const doc = attachedDocuments.find((d) => d.id === fileId);
-    if (!doc || !doc.file_name || !doc.file_iv || !doc.file_mime) return;
-    try {
-      const blob = await downloadDocumentFile(userId, doc.file_name, doc.file_iv, doc.file_mime);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = doc.label || "document";
-      document.body.appendChild(a); a.click();
-      document.body.removeChild(a); URL.revokeObjectURL(url);
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : "Failed to download document.");
-    }
-  }, [newFiles, attachedDocuments, userId]);
+    setMarkedForUnlink((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+    setMarkedForRemoval((prev) => { const next = new Set(prev); next.delete(fileId); return next; });
+  }, [newFiles, stagedLinkDocId, setStagedLinkDocId]);
 
-  const handleLoadPreview = useCallback(async (fileId: string): Promise<Blob> => {
-    const newFile = newFiles.find((nf) => nf.tempId === fileId);
-    if (newFile) return newFile.file;
-
-    const doc = attachedDocuments.find((d) => d.id === fileId);
-    if (!doc || !doc.file_name || !doc.file_iv || !doc.file_mime) {
-      throw new Error("Cannot load preview.");
-    }
-    return downloadDocumentFile(userId, doc.file_name, doc.file_iv, doc.file_mime);
-  }, [newFiles, attachedDocuments, userId]);
-
-  const handleFileRename = useCallback((fileId: string, newName: string) => {
-    const newFile = newFiles.find((nf) => nf.tempId === fileId);
-    if (newFile) {
-      const renamed = new File([newFile.file], newName, {
-        type: newFile.file.type,
-        lastModified: newFile.file.lastModified,
-      });
-      setNewFiles((prev) =>
-        prev.map((nf) => (nf.tempId === fileId ? { ...nf, file: renamed } : nf))
-      );
-    }
-  }, [newFiles]);
+  const hasFiles = files.length > 0;
 
   // --- Save handler ---
 
@@ -246,10 +191,11 @@ export default function MedicalModal({
 
     try {
       const fileAction: MedicalFileAction | undefined =
-        newFiles.length > 0 || markedForRemoval.size > 0 || stagedLinkDocId
+        newFiles.length > 0 || markedForRemoval.size > 0 || markedForUnlink.size > 0 || stagedLinkDocId
           ? {
               newFiles: newFiles.map((nf) => nf.file),
               removeDocIds: [...markedForRemoval],
+              unlinkDocIds: markedForUnlink.size > 0 ? [...markedForUnlink] : undefined,
               linkDocId: stagedLinkDocId ?? undefined,
             }
           : undefined;
@@ -274,51 +220,48 @@ export default function MedicalModal({
 
   // --- Delete handler ---
 
+  const linkedDocCount = attachedDocuments.length;
+
   async function handleDelete() {
     if (!record) return;
     setShowDeleteConfirm(true);
   }
 
-  async function confirmDelete() {
-    if (!record) return;
-    try {
-      await onDelete(record.id);
-      setShowDeleteConfirm(false);
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete medical record.");
-    }
-  }
-
-  const hasFiles = files.length > 0;
-
-  // --- Filtered standalone docs for link dropdown ---
-  const availableStandalone = useMemo(() => {
-    const linked = new Set(attachedDocuments.map((d) => d.id));
-    return standaloneDocuments.filter((d) => !linked.has(d.id) && d.id !== stagedLinkDocId);
-  }, [standaloneDocuments, attachedDocuments, stagedLinkDocId]);
-
-  const filteredLinkDocs = useMemo(() => {
-    if (!linkSearchQuery.trim()) return availableStandalone;
-    const q = linkSearchQuery.toLowerCase();
-    return availableStandalone.filter(
-      (d) =>
-        (d.label || "").toLowerCase().includes(q) ||
-        (d.file_name || "").toLowerCase().includes(q),
-    );
-  }, [availableStandalone, linkSearchQuery]);
-
-  // --- Link dropdown for rightPanelExtras (mirrors EducationModal) ---
-  const stagedLinkDoc = stagedLinkDocId
-    ? standaloneDocuments.find((d) => d.id === stagedLinkDocId)
-    : null;
-  const stagedLinkLabel = stagedLinkDoc
-    ? (stagedLinkDoc.label || stagedLinkDoc.file_name || "Unnamed")
-    : null;
-  const linkDisplayValue = stagedLinkDocId ? (stagedLinkLabel ?? "") : linkSearchQuery;
-
+  // --- Link dropdown for rightPanelExtras ---
   const linkDropdownExtras = useMemo(() => {
     if (availableStandalone.length === 0 && !stagedLinkDocId) return null;
+
+    // Deduplicate names: same-name docs get chronological numbering (mirrors EducationModal)
+    const labelBuckets = new Map<string, Document[]>();
+    for (const doc of availableStandalone) {
+      const key = doc.label || doc.file_name || "Unnamed";
+      if (!labelBuckets.has(key)) labelBuckets.set(key, []);
+      labelBuckets.get(key)!.push(doc);
+    }
+    const displayName = new Map<string, string>();
+    for (const [, bucket] of labelBuckets) {
+      if (bucket.length === 1) {
+        const label = bucket[0].label || bucket[0].file_name || "Unnamed";
+        displayName.set(bucket[0].id, label.length > 55 ? label.slice(0, 55) + "…" : label);
+      } else {
+        bucket.sort((a, b) => a.created_at.localeCompare(b.created_at));
+        bucket.forEach((doc, i) => {
+          const label = doc.label || doc.file_name || "Unnamed";
+          displayName.set(doc.id, `${label.length > 50 ? label.slice(0, 50) + "…" : label} (${i + 1})`);
+        });
+      }
+    }
+    const fmt = (doc: Document): string =>
+      displayName.get(doc.id) || (() => {
+        const label = doc.label || doc.file_name || "Unnamed";
+        return label.length > 55 ? label.slice(0, 55) + "…" : label;
+      })();
+
+    const stagedDoc = stagedLinkDocId
+      ? availableStandalone.find(d => d.id === stagedLinkDocId)
+      : null;
+    const stagedLabel = stagedDoc ? fmt(stagedDoc) : null;
+    const displayValue = stagedLinkDocId ? (stagedLabel ?? "") : linkSearchQuery;
 
     return (
       <div className="relative w-full">
@@ -328,7 +271,7 @@ export default function MedicalModal({
         <div className="relative flex items-center">
           <input
             type="text"
-            value={linkDisplayValue.length > 55 ? linkDisplayValue.slice(0, 55) + "…" : linkDisplayValue}
+            value={displayValue}
             onChange={(e) => {
               if (stagedLinkDocId) setStagedLinkDocId(null);
               setLinkSearchQuery(e.target.value);
@@ -370,9 +313,7 @@ export default function MedicalModal({
                     }}
                     className="w-full px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-zinc-300 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400"
                   >
-                    {(doc.label || doc.file_name || "Unnamed").length > 55
-                      ? (doc.label || doc.file_name || "Unnamed").slice(0, 55) + "…"
-                      : (doc.label || doc.file_name || "Unnamed")}
+                    {fmt(doc)}
                   </button>
                 ))}
               </div>
@@ -385,7 +326,7 @@ export default function MedicalModal({
         )}
       </div>
     );
-  }, [availableStandalone.length, stagedLinkDocId, linkDisplayValue, linkDropdownOpen, filteredLinkDocs, linkSearchQuery, isSaving]);
+  }, [availableStandalone, stagedLinkDocId, linkSearchQuery, linkDropdownOpen, filteredLinkDocs, isSaving, setLinkDropdownOpen, setLinkSearchQuery, setSelectedFileId, setStagedLinkDocId]);
 
   // --- Render ---
 
@@ -398,11 +339,12 @@ export default function MedicalModal({
         files={files}
         selectedFileId={selectedFileId}
         onSelectFile={(id) => setSelectedFileId(id)}
-        onFileUpload={handleFileUpload}
-        onFileDelete={hasFiles ? handleFileDelete : undefined}
+        onFileUpload={handleFileUploadWrapped}
+        onFileDelete={hasFiles ? handleFileDeleteWrapped : undefined}
+        onFileUnlink={hasFiles ? handleFileUnlinkWrapped : undefined}
         onFileDownload={hasFiles ? handleFileDownload : undefined}
         onFileRename={hasFiles ? handleFileRename : undefined}
-        onLoadPreview={hasFiles ? handleLoadPreview : undefined}
+        onLoadPreview={handleLoadPreview}
         onSave={handleSave}
         isSaving={isSaving}
         onDelete={isEditing ? handleDelete : undefined}
@@ -452,9 +394,28 @@ export default function MedicalModal({
       {showDeleteConfirm && record && (
         <ConfirmDialog
           title="Delete medical record?"
-          description="This action cannot be undone. The medical record will be permanently removed."
+          description={
+            linkedDocCount > 0
+              ? `This record has ${linkedDocCount} linked file(s).`
+              : "This action cannot be undone. The medical record will be permanently removed."
+          }
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          showDeleteFilesCheckbox={linkedDocCount > 0}
+          deleteFilesLabel="Delete associated files"
           onCancel={() => setShowDeleteConfirm(false)}
-          onConfirm={confirmDelete}
+          onConfirm={async (deleteFiles) => {
+            setShowDeleteConfirm(false);
+            setIsSaving(true);
+            try {
+              await onDelete(record.id, deleteFiles ? 'cascade' : 'unlink');
+              onClose();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Failed to delete medical record.");
+            } finally {
+              setIsSaving(false);
+            }
+          }}
         />
       )}
     </>

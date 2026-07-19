@@ -20,6 +20,11 @@ interface HasPriority {
   priority: string;
 }
 
+/** Minimum shape for media status grouping */
+interface HasStatus {
+  status: string;
+}
+
 // ---- Sorting utilities ----
 
 export function sortByCompletedDesc<T extends HasCompletedAt>(a: T, b: T): number {
@@ -198,6 +203,47 @@ export function trunc(text: string | null | undefined, max = 70): string {
   return clean.length <= max ? clean : `${clean.slice(0, max)}...`;
 }
 
+// ---- Media status grouping ----
+
+const STATUS_ORDER: Record<string, number> = {
+  watching: 0,
+  unwatched: 1,
+  watched: 2,
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  watching: "Watching",
+  unwatched: "Not Watched",
+  watched: "Watched",
+};
+
+/**
+ * Group items by their `status` field in the canonical Media order:
+ * Watching → Not Watched → Watched.
+ */
+export function groupByStatus<T extends HasStatus>(
+  items: T[]
+): Array<{ label: string; status: string; items: T[] }> {
+  const groups = new Map<string, T[]>();
+
+  for (const item of items) {
+    const key = item.status;
+    const bucket = groups.get(key) ?? [];
+    bucket.push(item);
+    groups.set(key, bucket);
+  }
+
+  return Array.from(groups.entries())
+    .map(([status, groupItems]) => ({
+      label: STATUS_LABELS[status] ?? status,
+      status,
+      items: groupItems,
+    }))
+    .sort(
+      (a, b) =>
+        (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99)
+    );
+}
 /**
  * Returns a unique file name by appending (1), (2), ... if the desired name
  * already exists in the provided set of taken names.

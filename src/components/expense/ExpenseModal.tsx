@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Expense } from "@/types/expense";
 import type { Document } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
-import ConfirmDialog from "@/components/taskmanager/ConfirmDialog";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import type { ModalFile } from "@/components/common/GlobalActionModal";
 import { InputField } from "@/components/common/FormField";
@@ -48,12 +48,12 @@ export default function ExpenseModal({
   onDelete,
   zClassName,
 }: ExpenseModalProps) {
-  const [item, setItem] = useState("");
-  const [seller, setSeller] = useState("");
-  const [cost, setCost] = useState("");
-  const [date, setDate] = useState("");
-  const [reason, setReason] = useState("");
-  const [invoice, setInvoice] = useState("");
+  const [item, setItem] = useState(expense?.item ?? "");
+  const [seller, setSeller] = useState(expense?.seller ?? "");
+  const [cost, setCost] = useState(expense?.cost != null ? String(expense.cost) : "");
+  const [date, setDate] = useState(expense?.date ?? defaultDate ?? "");
+  const [reason, setReason] = useState(expense?.reason ?? "");
+  const [invoice, setInvoice] = useState(expense?.invoice ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);

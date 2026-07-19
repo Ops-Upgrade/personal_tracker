@@ -22,6 +22,8 @@ Target deployment: Vercel with custom domain `ops-upgrade.com` and subdomains.
 | Tailwind CSS       | ^4       | Via `@tailwindcss/postcss`                   |
 | @supabase/ssr      | ^0.8.0   | Replaces deprecated `auth-helpers`           |
 | @supabase/supabase-js | ^2.95.3 |                                           |
+| @tiptap/react      | ^3.27.3  | Headless rich-text editor core               |
+| @tiptap/starter-kit| ^3.27.3  | Basic rich-text formatting extensions        |
 | hash-wasm          | ^4.12.0  | Argon2id WASM (~11 KB). Used only in `primitives.ts` |
 | @wrksz/themes      | ^0.9.7   | Theme provider (light/dark/system). Fixes React 19 hydration issues present in `next-themes`. |
 | @aws-sdk/client-s3 | ^3.1085.0 | AWS S3 SDK for Cloudflare R2-compatible object storage |
@@ -44,7 +46,8 @@ src/
 │   │   ├── taskmanager/        # Task manager feature page
 │   │   ├── expense/            # Expense tracker feature page
 │   │   ├── education/          # Education manager feature page
-│   │   │   └── store/          # Certificate Store sub-page
+│   │   ├── medical/            # Medical records feature page
+│   │   │   └── store/          # Medical Document Store sub-page
 │   │   └── settings/
 │   │       └── change-password/ # Change password page
 │   ├── api/auth/callback/      # Supabase auth callback endpoint
@@ -58,6 +61,9 @@ src/
 │   │   ├── auth.ts             # login, logout, changePassword, getSession
 │   │   ├── keys.ts             # fetchUserKeys, upsertUserKeys
 │   │   └── index.ts            # auth sub-barrel
+│   ├── common/                 # Global API utilities
+│   │   ├── documents.ts        # encrypted CRUD for global documents table
+│   │   └── documentStorage.ts  # encrypted file upload/download for documents
 │   ├── taskmanager/
 │   │   ├── tasks.ts            # encrypted CRUD for tasks table
 │   │   ├── notes.ts            # encrypted CRUD for notes table
@@ -68,9 +74,15 @@ src/
 │   │   └── index.ts            # expense sub-barrel
 │   ├── education/
 │   │   ├── educations.ts       # encrypted CRUD for educations table
-│   │   ├── certificates.ts     # encrypted CRUD for certificates table
-│   │   ├── certificateStorage.ts # encrypted file upload/download for certificates bucket
 │   │   └── index.ts            # education sub-barrel
+│   ├── medical/
+│   │   ├── records.ts          # encrypted CRUD for medical_records table
+│   │   └── index.ts            # medical sub-barrel
+│   ├── media/
+│   │   ├── media.ts            # encrypted CRUD for media table
+│   │   ├── collections.ts      # encrypted CRUD for media_collections table
+│   │   ├── tmdb.ts             # client wrappers for TMDB proxy routes
+│   │   └── index.ts            # media sub-barrel
 │   ├── serverDate.ts           # getServerDateIST() — IST date from Supabase RPC
 │   └── index.ts                # Barrel export
 ├── components/                 # Reusable UI
@@ -82,19 +94,41 @@ src/
 │   │   ├── ThemeSwitcher.tsx   # Light/Dark/System theme toggle
 │   │   ├── MonthTile.tsx       # Month tile with current-month highlight support
 │   │   ├── DocPreviewPanel.tsx # Encrypted file preview panel (PDF/image)
-│   │   ├── TileView.tsx        # Tile grid view for certificate store
-│   │   └── ViewToggle.tsx      # Toggle between list/tile views
+│   │   ├── TileView.tsx        # Tile grid view for generic document store
+│   │   ├── ViewToggle.tsx      # Toggle between list/tile views
+│   │   ├── RichTextEditor.tsx  # Tiptap-powered global rich text area
+│   │   └── store/              # Global Document Store components
+│   │       ├── GlobalStoreView.tsx
+│   │       └── StoreDocumentModal.tsx
 │   ├── taskmanager/            # Task manager feature components + helpers
 │   ├── expense/                # Expense tracker feature components
-│   └── education/              # Education manager feature components
-│       ├── EducationView.tsx   # Main controller for education page
-│       ├── ActiveEducationsBox.tsx
-│       ├── CompletedEducationsBox.tsx
-│       ├── CompletedEducationsModal.tsx
-│       ├── EducationModal.tsx  # Create/edit education + certificate attachment
-│       ├── CertificateModal.tsx
-│       ├── CertificateStoreView.tsx # Certificate Store sub-page controller
-│       └── helpers.ts
+│   ├── education/              # Education manager feature components
+│   │   ├── EducationView.tsx   # Main controller for education page
+│   │   ├── ActiveEducationsBox.tsx
+│   │   ├── CompletedEducationsBox.tsx
+│   │   ├── CompletedEducationsModal.tsx
+│   │   ├── EducationModal.tsx  # Create/edit education + document attachment
+│   │   └── helpers.ts
+│   ├── medical/                # Medical Records feature components
+│   │   ├── MedicalView.tsx     # Main controller for medical records
+│   │   └── MedicalModal.tsx    # Create/edit medical record + document attachment
+│   └── media/                  # Media Tracker feature components
+│       ├── MediaView.tsx       # Main orchestrator (tabs, data, CRUD)
+│       ├── CollectionFilterBar.tsx # Filter bar for DefaultView
+│       ├── CollectionModal.tsx # Create/rename/delete collection + color picker
+│       ├── MediaStatusSection.tsx # One BoxContainer per status group
+│       ├── MediaGrid.tsx       # CSS grid for media posters
+│       ├── MediaCard.tsx       # Poster, title, quick status/rating controls
+│       ├── TmdbAttribution.tsx # TMDB ToS attribution footer
+│       ├── views/
+│       │   ├── DefaultView.tsx # Tracked library (Watching/Not Watched/Watched)
+│       │   ├── CollectionView.tsx # Grid of color-coded collections
+│       │   └── DiscoverView.tsx # Untracked TMDB search/trending browser
+│       └── pages/
+│           ├── MoviePage.tsx   # Movie details, form, collections, remove
+│           ├── TvSeriesPage.tsx # TV details, season selector, episode matrix
+│           ├── EpisodePage.tsx  # Single episode details, form, comments
+│           └── CollectionDetailPage.tsx # Views all media for a collection
 ├── lib/                        # Core utilities
 │   ├── crypto/                 # Client-side encryption (see below)
 │   │   ├── primitives.ts       # Web Crypto + Argon2id wrappers
@@ -125,6 +159,7 @@ src/
 - Task Manager feature plan and progress tracked in [`plans/PLAN-taskmanager.md`](./plans/PLAN-taskmanager.md).
 - Expense Tracker feature plan and progress tracked in [`plans/PLAN-expense.md`](./plans/PLAN-expense.md).
 - Education feature plan tracked in [`plans/PLAN-education.md`](./plans/PLAN-education.md).
+- Medical Records + Global Document Store plan tracked in [`plans/PLAN-medical-records.md`](./plans/PLAN-medical-records.md).
 - Global QoL (buttons, boxcontainer, date) plan in [`plans/PLAN-qol-global.md`](./plans/PLAN-qol-global.md).
 - **All pages must be responsive** (laptop + mobile). Use Tailwind breakpoints (`sm`, `md`, `lg`) — no fixed-width layouts.
 - UI preferences (view modes, sort state) are persisted via `useLocalStorage` hook — no server-side changes needed.
@@ -207,6 +242,8 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-07-07 | Education feature plan drafted (`plans/PLAN-education.md`). `educations` + `certificates` tables + RLS + `certificates` storage bucket created in Supabase. |
 | 2026-07-08 | Education Manager feature completed: `/education` route (3-box layout: Active, Completed, Certificate Store), `/education/store` sub-page (tile view), encrypted CRUD for educations + certificates, multi-file certificate upload/download with `DocPreviewPanel` and `TileView`, full modal flows for Education + Certificate + Certificate Store. Dashboard tile integration. |
 | 2026-07-12 | Migrated file storage from Supabase Storage to Cloudflare R2. Added `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`, R2 client singleton (`src/lib/r2/`), presigned-URL API routes (`src/app/api/storage/`), rewrote `encryptedFileStorage.ts` to use R2 via API routes. Removed all `supabase.storage` SDK calls. Updated CSP, docs, and UI text. |
+| 2026-07-13 | Medical Records, Global Document Store & Rich Text Editor completed: Extracted Store out of Education into reusable `documents` table + global components. Tiptap Rich Text Editor integrated into Task, Expense, Education, and new Medical domains. Built `/medical` feature route with `MedicalModal` and `MedicalView`. |
+| 2026-07-15 | Media Tracker feature completed: `/media` route, `media` + `media_collections` tables (HLD documented in schema.md), 4 TMDB proxy routes (`/api/tmdb/*`), encrypted CRUD API layer (`src/api/media/`), 12 UI components (MediaView orchestrator, DefaultView with Watching/Unwatched/Watched lanes, CollectionView, DiscoverView with TMDB search, MoviePage, TvSeriesPage with episode matrix, EpisodePage, CollectionDetailPage, MediaCard with inline status/rating, CollectionModal with color picker, CollectionFilterBar, TmdbAttribution), dashboard tile integration (violet), `next.config.ts` TMDB image domain + CSP update, StarRating common component. |
 
 ---
 

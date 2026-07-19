@@ -170,7 +170,7 @@ export default function RichTextEditor({
     editorProps: {
       attributes: {
         class:
-          "prose prose-sm max-w-none min-h-[var(--editor-min-h)] rounded-b-lg border border-t-0 border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-500",
+          "prose prose-sm max-w-none min-h-[var(--editor-min-h)] max-h-[35vh] overflow-y-auto rounded-b-lg border border-t-0 border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-500",
         style: `--editor-min-h: ${minHeight}`,
       },
     },

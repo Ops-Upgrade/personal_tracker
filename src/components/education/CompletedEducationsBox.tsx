@@ -1,10 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
 import type { Education } from "@/types/education";
 import type { Document } from "@/types/document";
 import GenericCompletedBox from "@/components/common/GenericCompletedBox";
 import { getPriorityColor } from "@/lib/priorityColors";
-import { docCountForEducation, formatShortDate, sortByCompletedDesc, trunc } from "./helpers";
+import { formatShortDate, sortByCompletedDesc, trunc } from "./helpers";
 
 interface CompletedEducationsBoxProps {
   educations: Education[];
@@ -23,13 +24,23 @@ export default function CompletedEducationsBox({
 }: CompletedEducationsBoxProps) {
   const sorted = [...educations].sort(sortByCompletedDesc);
 
+  const docCountsByEdu = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const d of documents) {
+      if (d.domain === "education" && d.linked_id) {
+        map.set(d.linked_id, (map.get(d.linked_id) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [documents]);
+
   return (
     <GenericCompletedBox
       items={sorted}
       isLoading={isLoading}
       onOpenExpanded={onOpenExpanded}
       renderItem={(edu) => {
-        const docCount = docCountForEducation(edu.id, documents);
+        const docCount = docCountsByEdu.get(edu.id) ?? 0;
         const colors = edu.priority ? getPriorityColor(edu.priority) : { dot: "bg-zinc-400" };
         return (
           <div

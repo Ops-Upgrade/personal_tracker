@@ -164,6 +164,38 @@ export default async function DashboardPage() {
           </div>
         </Link>
 
+        {/* Media Tracker Card */}
+        <Link
+          href={ROUTES.MEDIA}
+          className="rounded-xl border border-violet-200 bg-white p-6 shadow-sm transition hover:border-violet-300 hover:shadow-md dark:border-violet-900/60 dark:bg-zinc-900 dark:hover:border-violet-800"
+        >
+          <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-900/30">
+            <svg
+              className="h-5 w-5 text-violet-600 dark:text-violet-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z"
+              />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+            Media Tracker
+          </h3>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Track movies and TV shows with ratings and collections.
+          </p>
+          <div className="mt-4">
+            <span className="inline-block rounded-full bg-violet-100 px-3 py-1 text-xs font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+              Open feature
+            </span>
+          </div>
+        </Link>
         {/* Analytics Card */}
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-violet-100 dark:bg-violet-900/30">
