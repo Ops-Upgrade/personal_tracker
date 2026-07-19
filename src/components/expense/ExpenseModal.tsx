@@ -12,6 +12,7 @@ import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
 import type { ToastType } from "@/components/common/Toast";
+import { normalizeDateForInput } from "@/lib/utils";
 
 // --- Types ---
 
@@ -84,7 +85,7 @@ export default function ExpenseModal({
     item: expense?.item ?? "",
     seller: expense?.seller ?? "",
     cost: expense?.cost != null ? String(expense.cost) : "",
-    date: expense?.date ?? defaultDate ?? "",
+    date: normalizeDateForInput(expense?.date, defaultDate ?? ""),
     reason: expense?.reason ?? "",
     invoice: expense?.invoice ?? "",
   }), [expense, defaultDate]);

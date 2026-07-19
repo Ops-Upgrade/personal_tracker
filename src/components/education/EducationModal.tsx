@@ -16,6 +16,7 @@ import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
 import type { ToastType } from "@/components/common/Toast";
 import { docsForEducation, getUniqueFileName, trunc } from "./helpers";
+import { stripHtml, normalizeDateForInput } from "@/lib/utils";
 
 // --- Types ---
 
@@ -122,7 +123,7 @@ export default function EducationModal({
     setName(education?.name ?? "");
     setProvider(education?.provider ?? "");
     setPriority(education?.priority ?? "medium");
-    setDueDate(education ? (education?.due_date ?? "") : todayStr);
+    setDueDate(initialDueDate);
     setDescription(education?.description ?? "");
     setIsCompleted(education?.is_completed ?? false);
     setError(null);
@@ -137,14 +138,18 @@ export default function EducationModal({
 
   // ── Baseline form values ──
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const initialDueDate = useMemo(
+    () => normalizeDateForInput(education?.due_date, education ? "" : todayStr),
+    [education, todayStr],
+  );
   const formBaseline = useMemo(() => ({
     name: education?.name ?? "",
     provider: education?.provider ?? "",
     priority: education?.priority ?? "medium",
-    dueDate: education ? (education.due_date ?? "") : todayStr,
+    dueDate: initialDueDate,
     description: education?.description ?? "",
     isCompleted: education?.is_completed ?? false,
-  }), [education, todayStr]);
+  }), [education, initialDueDate]);
 
   // --- Dirty check ---
 
@@ -153,7 +158,7 @@ export default function EducationModal({
     provider !== formBaseline.provider ||
     priority !== formBaseline.priority ||
     dueDate !== formBaseline.dueDate ||
-    description !== formBaseline.description ||
+    stripHtml(description) !== stripHtml(formBaseline.description) ||
     isCompleted !== formBaseline.isCompleted;
 
   const isDirty = hasFormChanges || newFiles.length > 0 || stagedLinkDocId !== null || markedForDeletion.size > 0 || markedForUnlink.size > 0;
@@ -209,7 +214,7 @@ export default function EducationModal({
 
     // Staged link doc
     if (stagedLinkDocId) {
-      const sd = documents.find(d => d.id === stagedLinkDocId);
+      const sd = standaloneDocs.find(d => d.id === stagedLinkDocId);
       if (sd) {
         entries.push({
           id: sd.id,

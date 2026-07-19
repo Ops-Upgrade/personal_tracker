@@ -41,6 +41,7 @@ export default function MedicalStorePage() {
 
   // Modal state for linked document → open parent MedicalModal
   const [linkedRecord, setLinkedRecord] = useState<MedicalRecord | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // --- Auth + data loading (single source of truth) ---
   useEffect(() => {
@@ -79,6 +80,7 @@ export default function MedicalStorePage() {
     setAllRecords(records);
     setAllDocuments(docs);
     setParentRecords(records.map((r) => ({ id: r.id, name: r.name })));
+    setRefreshTrigger((prev) => prev + 1);
   }, [userId]);
 
   // --- Action click override: linked doc → open MedicalModal for parent ---
@@ -147,6 +149,49 @@ export default function MedicalStorePage() {
           updated_at: new Date().toISOString(),
         } as MedicalPlaintext);
       }
+      await refreshAll();
+    },
+    [userId, refreshAll],
+  );
+
+  // --- onDocumentSaved: sync parent medical-record document_ids after store-modal save ---
+  const handleDocumentSaved = useCallback(
+    async (documentId: string, newLinkedId: string, oldLinkedId: string) => {
+      if (!userId) return;
+      if (oldLinkedId === newLinkedId) {
+        await refreshAll();
+        return;
+      }
+
+      const records = await fetchMedicalRecords(userId);
+
+      // Remove from old parent
+      if (oldLinkedId) {
+        const oldRecord = records.find((r) => r.id === oldLinkedId);
+        if (oldRecord) {
+          const newDocIds = oldRecord.document_ids.filter((id) => id !== documentId);
+          await updateMedicalRecord(userId, oldLinkedId, {
+            ...oldRecord,
+            document_ids: newDocIds,
+            updated_at: new Date().toISOString(),
+          } as MedicalPlaintext);
+        }
+      }
+
+      // Add to new parent
+      if (newLinkedId) {
+        const newRecord = records.find((r) => r.id === newLinkedId);
+        if (newRecord) {
+          const merged = [...new Set([...newRecord.document_ids, documentId])];
+          await updateMedicalRecord(userId, newLinkedId, {
+            ...newRecord,
+            document_ids: merged,
+            updated_at: new Date().toISOString(),
+          } as MedicalPlaintext);
+          setLinkedRecord(newRecord);
+        }
+      }
+
       await refreshAll();
     },
     [userId, refreshAll],
@@ -243,8 +288,16 @@ export default function MedicalStorePage() {
       }
 
       await refreshAll();
+
+      // When unlinking from the Store page, close the parent modal and open
+      // the unlinked file in StoreDocumentModal via URL hash.
+      if (fileAction?.unlinkDocIds && fileAction.unlinkDocIds.length > 0) {
+        closeLinkedRecord();
+        const unlinkedId = fileAction.unlinkDocIds[fileAction.unlinkDocIds.length - 1];
+        window.location.hash = `#edit-document-${unlinkedId}`;
+      }
     },
-    [userId, allDocuments, refreshAll],
+    [userId, allDocuments, refreshAll, closeLinkedRecord],
   );
 
   const handleMedicalDelete = useCallback(
@@ -350,6 +403,8 @@ export default function MedicalStorePage() {
         renderNewRecordForm={renderNewRecordForm}
         extractNewRecordData={extractNewRecordData}
         onCreateParentFromStore={onCreateParentFromStore}
+        onDocumentSaved={handleDocumentSaved}
+        refreshTrigger={refreshTrigger}
       />
 
       {/* MedicalModal for linked record editing (mirrors Education's CertificateStoreView) */}

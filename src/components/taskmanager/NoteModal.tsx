@@ -15,6 +15,7 @@ import Toast from "@/components/common/Toast";
 import type { ToastType } from "@/components/common/Toast";
 import { trunc } from "./helpers";
 import { getUniqueFileName } from "@/lib/viewHelpers";
+import { stripHtml } from "@/lib/utils";
 
 // --- Types ---
 
@@ -151,7 +152,7 @@ export default function NoteModal({
   // --- Dirty check ---
 
   const hasFormChanges =
-    name !== formBaseline.name || content !== formBaseline.content;
+    name !== formBaseline.name || stripHtml(content) !== stripHtml(formBaseline.content);
 
   const isDirty =
     hasFormChanges ||
@@ -211,7 +212,7 @@ export default function NoteModal({
 
     // Staged link doc
     if (stagedLinkDocId) {
-      const sd = documents.find((d) => d.id === stagedLinkDocId);
+      const sd = standaloneDocs.find((d) => d.id === stagedLinkDocId);
       if (sd) {
         entries.push({
           id: sd.id,

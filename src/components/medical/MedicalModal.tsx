@@ -11,6 +11,7 @@ import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
 import type { ToastType } from "@/components/common/Toast";
+import { stripHtml, normalizeDateForInput } from "@/lib/utils";
 
 // --- Types ---
 
@@ -113,7 +114,7 @@ export default function MedicalModal({
   const baseline = useMemo(() => ({
     name: record?.name ?? "",
     clinic: record?.clinic ?? "",
-    date: record?.date ?? defaultDate ?? new Date().toISOString().split("T")[0],
+    date: normalizeDateForInput(record?.date, defaultDate ?? new Date().toISOString().split("T")[0]),
     diagnosisTimeline: record?.diagnosis_timeline ?? "",
   }), [record, defaultDate]);
 
@@ -136,7 +137,7 @@ export default function MedicalModal({
     name !== baseline.name ||
     clinic !== baseline.clinic ||
     date !== baseline.date ||
-    diagnosisTimeline !== baseline.diagnosisTimeline ||
+    stripHtml(diagnosisTimeline) !== stripHtml(baseline.diagnosisTimeline) ||
     newFiles.length > 0 ||
     markedForRemoval.size > 0 ||
     markedForUnlink.size > 0 ||

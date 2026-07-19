@@ -43,6 +43,7 @@ export default function EducationStorePage() {
 
   // Inline modal state: linked document → open EducationModal for parent record
   const [linkedRecord, setLinkedRecord] = useState<Education | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // --- Auth + data loading ---
   useEffect(() => {
@@ -80,6 +81,7 @@ export default function EducationStorePage() {
     setAllEducations(edus);
     setAllDocuments(docs);
     setParentRecords(edus.map((e) => ({ id: e.id, name: e.name })));
+    setRefreshTrigger((prev) => prev + 1);
   }, [userId]);
 
   // --- Action click: linked doc → open EducationModal inline for parent ---
@@ -140,6 +142,49 @@ export default function EducationStorePage() {
           ...edu, document_ids: merged, updated_at: new Date().toISOString(),
         } as EducationPlaintext);
       }
+      await refreshAll();
+    },
+    [userId, refreshAll],
+  );
+
+  // --- onDocumentSaved: sync parent education document_ids after store-modal save ---
+  const handleDocumentSaved = useCallback(
+    async (documentId: string, newLinkedId: string, oldLinkedId: string) => {
+      if (!userId) return;
+      if (oldLinkedId === newLinkedId) {
+        await refreshAll();
+        return;
+      }
+
+      const edus = await fetchEducations(userId);
+
+      // Remove from old parent
+      if (oldLinkedId) {
+        const oldEdu = edus.find((e) => e.id === oldLinkedId);
+        if (oldEdu) {
+          const newDocIds = oldEdu.document_ids.filter((id) => id !== documentId);
+          await updateEducation(userId, oldLinkedId, {
+            ...oldEdu,
+            document_ids: newDocIds,
+            updated_at: new Date().toISOString(),
+          } as EducationPlaintext);
+        }
+      }
+
+      // Add to new parent
+      if (newLinkedId) {
+        const newEdu = edus.find((e) => e.id === newLinkedId);
+        if (newEdu) {
+          const merged = [...new Set([...newEdu.document_ids, documentId])];
+          await updateEducation(userId, newLinkedId, {
+            ...newEdu,
+            document_ids: merged,
+            updated_at: new Date().toISOString(),
+          } as EducationPlaintext);
+          setLinkedRecord(newEdu);
+        }
+      }
+
       await refreshAll();
     },
     [userId, refreshAll],
@@ -277,8 +322,16 @@ export default function EducationStorePage() {
       }
 
       await refreshAll();
+
+      // When unlinking from the Store page, close the parent modal and open
+      // the unlinked file in StoreDocumentModal via URL hash.
+      if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0) {
+        closeLinkedRecord();
+        const unlinkedId = pendingUnlinkDocIds[pendingUnlinkDocIds.length - 1];
+        window.location.hash = `#edit-document-${unlinkedId}`;
+      }
     },
-    [userId, refreshAll],
+    [userId, refreshAll, closeLinkedRecord],
   );
 
   const handleEducationDelete = useCallback(
@@ -330,6 +383,8 @@ export default function EducationStorePage() {
         renderNewRecordForm={renderNewRecordForm}
         extractNewRecordData={extractNewRecordData}
         onCreateParentFromStore={onCreateParentFromStore}
+        onDocumentSaved={handleDocumentSaved}
+        refreshTrigger={refreshTrigger}
       />
 
       {/* EducationModal for linked record editing */}

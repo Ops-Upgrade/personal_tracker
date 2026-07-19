@@ -9,6 +9,7 @@ import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
 import type { ToastType } from "@/components/common/Toast";
+import { stripHtml, normalizeDateForInput } from "@/lib/utils";
 
 interface TaskDraft {
   name: string;
@@ -54,7 +55,7 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
   const baseline = useMemo(() => ({
     name: task?.name ?? "",
     priority: task?.priority ?? "medium",
-    dueDate: task?.due_date ?? defaultDate ?? "",
+    dueDate: normalizeDateForInput(task?.due_date, defaultDate ?? ""),
     mode: task?.mode ?? "online",
     description: task?.description ?? "",
     isCompleted: task?.is_completed ?? false,
@@ -78,7 +79,7 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
     priority !== baseline.priority ||
     dueDate !== baseline.dueDate ||
     mode !== baseline.mode ||
-    description !== baseline.description ||
+    stripHtml(description) !== stripHtml(baseline.description) ||
     isCompleted !== baseline.isCompleted;
 
   async function handleSave() {

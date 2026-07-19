@@ -36,6 +36,7 @@ export default function TaskManagerStorePage() {
 
   // Inline modal state: linked document → open NoteModal for parent note
   const [linkedRecord, setLinkedRecord] = useState<Note | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // --- Auth + data loading ---
   useEffect(() => {
@@ -73,6 +74,7 @@ export default function TaskManagerStorePage() {
     setAllNotes(notes);
     setAllDocuments(docs);
     setParentRecords(notes.map((n) => ({ id: n.id, name: n.name?.trim() || "Untitled Note" })));
+    setRefreshTrigger((prev) => prev + 1);
   }, [userId]);
 
   // --- Action click: linked doc → open NoteModal inline for parent ---
@@ -141,6 +143,49 @@ export default function TaskManagerStorePage() {
     [userId, refreshAll],
   );
 
+  // --- onDocumentSaved: sync parent note document_ids after store-modal save ---
+  const handleDocumentSaved = useCallback(
+    async (documentId: string, newLinkedId: string, oldLinkedId: string) => {
+      if (!userId) return;
+      if (oldLinkedId === newLinkedId) {
+        await refreshAll();
+        return;
+      }
+
+      const notes = await fetchNotes(userId);
+
+      // Remove from old parent
+      if (oldLinkedId) {
+        const oldNote = notes.find((n) => n.id === oldLinkedId);
+        if (oldNote) {
+          const newDocIds = (oldNote.document_ids ?? []).filter((id) => id !== documentId);
+          await updateNote(userId, oldLinkedId, {
+            ...oldNote,
+            document_ids: newDocIds,
+            updated_at: new Date().toISOString(),
+          } as NotePlaintext);
+        }
+      }
+
+      // Add to new parent
+      if (newLinkedId) {
+        const newNote = notes.find((n) => n.id === newLinkedId);
+        if (newNote) {
+          const merged = [...new Set([...(newNote.document_ids ?? []), documentId])];
+          await updateNote(userId, newLinkedId, {
+            ...newNote,
+            document_ids: merged,
+            updated_at: new Date().toISOString(),
+          } as NotePlaintext);
+          setLinkedRecord(newNote);
+        }
+      }
+
+      await refreshAll();
+    },
+    [userId, refreshAll],
+  );
+
   // --- Inline note creation form state ---
   const [newNoteName, setNewNoteName] = useState("");
 
@@ -181,8 +226,23 @@ export default function TaskManagerStorePage() {
     [userId, refreshAll],
   );
 
-  const { handleNoteSave, handleNoteDelete, handleDownloadDocument } =
+  const { handleNoteSave: originalHandleNoteSave, handleNoteDelete, handleDownloadDocument } =
     useNoteActions({ userId, refresh: refreshAll });
+
+  /** Wraps handleNoteSave to redirect to StoreDocumentModal when files are unlinked from the Store page. */
+  const handleNoteSave = useCallback(
+    async (...args: Parameters<typeof originalHandleNoteSave>) => {
+      await originalHandleNoteSave(...args);
+      // args[4] corresponds to pendingUnlinkDocIds
+      const pendingUnlinkDocIds = args[4];
+      if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0) {
+        closeLinkedRecord();
+        const unlinkedId = pendingUnlinkDocIds[pendingUnlinkDocIds.length - 1];
+        window.location.hash = `#edit-document-${unlinkedId}`;
+      }
+    },
+    [originalHandleNoteSave, closeLinkedRecord],
+  );
 
   return (
     <>
@@ -201,6 +261,8 @@ export default function TaskManagerStorePage() {
         extractNewRecordData={extractNewRecordData}
         onCreateParentFromStore={onCreateParentFromStore}
         hideParentRecordsList={true}
+        onDocumentSaved={handleDocumentSaved}
+        refreshTrigger={refreshTrigger}
       />
 
       {/* NoteModal for linked record editing */}
