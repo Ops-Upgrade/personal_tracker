@@ -23,7 +23,9 @@ export interface TaskPlaintext {
 }
 
 export interface NotePlaintext {
+  name: string;
   content: string;
+  document_ids: string[];
   updated_at: string;
 }
 

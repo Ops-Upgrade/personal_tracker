@@ -1,22 +1,34 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
-import { deleteNote, fetchNotes, updateNote } from "@/api/taskmanager";
+import {
+  fetchNotes,
+} from "@/api/taskmanager";
+import {
+  fetchDocuments,
+} from "@/api/common/documents";
 import { ROUTES } from "@/routes/paths";
+import { useNoteActions } from "@/hooks/useNoteActions";
 import type { Note } from "@/types/taskmanager";
+import type { Document } from "@/types/document";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import { sortedNotes, trunc } from "@/components/taskmanager/helpers";
+import { sortedNotes, getNoteTitle } from "@/components/taskmanager/helpers";
 import NoteModal from "@/components/taskmanager/NoteModal";
 
 export default function NotesPage() {
   const [notes, setNotes] = useState<Note[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
 
   const loadData = useCallback(async (uid: string) => {
-    const rows = await fetchNotes(uid);
-    setNotes(rows);
+    const [noteRows, docRows] = await Promise.all([
+      fetchNotes(uid),
+      fetchDocuments(uid),
+    ]);
+    setNotes(noteRows);
+    setDocuments(docRows);
   }, []);
 
   const { userId, isLoading, error, refreshData } =
@@ -25,27 +37,19 @@ export default function NotesPage() {
   const sorted = useMemo(() => sortedNotes(notes), [notes]);
   const [noteModalTarget, setNoteModalTarget] = useState<Note | null>(null);
 
-  const handleEditNote = (note: Note) => {
-    setNoteModalTarget(note);
+  const handleEditNote = (note: Note) => setNoteModalTarget(note);
+  const closeNoteModal = () => {
+    setNoteModalTarget(null);
+    if (userId) refreshData(userId);
   };
 
-  const closeNoteModal = () => setNoteModalTarget(null);
-
-  async function handleNoteSave(content: string, existingNote: Note | null) {
-    if (!userId || !existingNote) return;
-    const payload = {
-      content,
-      updated_at: new Date().toISOString(),
-    };
-    await updateNote(userId, existingNote.id, payload);
-    await refreshData(userId);
-  }
-
-  async function handleNoteDelete(noteId: string) {
-    if (!userId) return;
-    await deleteNote(noteId);
-    await refreshData(userId);
-  }
+  const { handleNoteSave, handleNoteDelete, handleDownloadDocument } =
+    useNoteActions({
+      userId,
+      refresh: async () => {
+        if (userId) await refreshData(userId);
+      },
+    });
 
   return (
     <PageShell
@@ -70,19 +74,22 @@ export default function NotesPage() {
                 onClick={() => handleEditNote(note)}
                 className="w-full cursor-pointer rounded-md border border-zinc-200 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
-                {trunc(note.content, 280)}
+                {getNoteTitle(note)}
               </button>
             ))}
           </div>
         </BoxContainer>
       )}
 
-      {noteModalTarget && (
+      {noteModalTarget && userId && (
         <NoteModal
           note={noteModalTarget}
+          documents={documents}
+          userId={userId}
           onClose={closeNoteModal}
           onSave={handleNoteSave}
           onDelete={handleNoteDelete}
+          onDownloadDocument={handleDownloadDocument}
         />
       )}
     </PageShell>

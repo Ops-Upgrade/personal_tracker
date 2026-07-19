@@ -54,6 +54,9 @@ interface GlobalStoreViewProps {
   extractNewRecordData?: () => Record<string, string> | null;
   /** Optional: called when a new parent record is created inline. Receives the new record data and returns the new parent ID. */
   onCreateParentFromStore?: (data: Record<string, string>) => Promise<string>;
+  /** When true, parent record names are hidden from the document tile display.
+   *  Linking logic (modals, bulk operations) is unaffected. */
+  hideParentRecordsList?: boolean;
 }
 
 export default function GlobalStoreView({
@@ -70,6 +73,7 @@ export default function GlobalStoreView({
   renderNewRecordForm,
   extractNewRecordData,
   onCreateParentFromStore,
+  hideParentRecordsList = false,
 }: GlobalStoreViewProps) {
   const [userId, setUserId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -397,7 +401,9 @@ export default function GlobalStoreView({
 
   // --- Build document tiles ---
   const documentTiles: DocumentTile[] = domainDocuments.map((d) => {
-    const parent = parentRecords.find((r) => r.id === d.linked_id);
+    const parent = hideParentRecordsList
+      ? undefined
+      : parentRecords.find((r) => r.id === d.linked_id);
     return {
       id: d.id,
       fileName: d.label || "Unnamed Document",

@@ -2,22 +2,26 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
+import { FolderIcon } from "@/components/common/Icons";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import {
-  createNote,
   createTask,
-  deleteNote,
   deleteTask,
   fetchNotes,
   fetchTasks,
-  updateNote,
   updateTask,
 } from "@/api/taskmanager";
+import {
+  fetchDocuments,
+} from "@/api/common/documents";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import type { Note, Task, TaskView } from "@/types/taskmanager";
+import type { Document } from "@/types/document";
+import { useNoteActions } from "@/hooks/useNoteActions";
 import ActiveTasksBox from "./ActiveTasksBox";
 import CompletedTasksBox from "./CompletedTasksBox";
 import NoteModal from "./NoteModal";
@@ -35,11 +39,17 @@ export default function TaskManagerView() {
   const modal = searchParams.get("modal");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
 
   const loadAllData = useCallback(async (uid: string) => {
-    const [taskRows, noteRows] = await Promise.all([fetchTasks(uid), fetchNotes(uid)]);
+    const [taskRows, noteRows, docRows] = await Promise.all([
+      fetchTasks(uid),
+      fetchNotes(uid),
+      fetchDocuments(uid),
+    ]);
     setTasks(taskRows);
     setNotes(noteRows);
+    setDocuments(docRows);
   }, []);
 
   const { userId, istDate, nowYear, nowMonth, isLoading, error, refreshData } =
@@ -160,27 +170,13 @@ export default function TaskManagerView() {
     await refreshData(userId);
   }
 
-  async function handleNoteSave(content: string, existingNote: Note | null) {
-    if (!userId) throw new Error("No active session.");
-    const payload = {
-      content,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (existingNote) {
-      await updateNote(userId, existingNote.id, payload);
-    } else {
-      await createNote(userId, payload);
-    }
-
-    await refreshData(userId);
-  }
-
-  async function handleNoteDelete(noteId: string) {
-    if (!userId) throw new Error("No active session.");
-    await deleteNote(noteId);
-    await refreshData(userId);
-  }
+  const { handleNoteSave, handleNoteDelete, handleDownloadDocument } =
+    useNoteActions({
+      userId,
+      refresh: async () => {
+        if (userId) await refreshData(userId);
+      },
+    });
 
   // --- Render ---
 
@@ -211,7 +207,7 @@ export default function TaskManagerView() {
           onMarkComplete={handleQuickComplete}
         />
 
-        <div className="grid gap-4 lg:grid-rows-2">
+        <div className="grid gap-4 lg:grid-rows-[auto_auto_1fr]">
           <CompletedTasksBox
             tasks={completedTasks}
             isLoading={isLoading}
@@ -219,6 +215,14 @@ export default function TaskManagerView() {
             onSelectTask={openEditTask}
             onReopenTask={handleQuickReopen}
           />
+
+          <Link
+            href={ROUTES.TASK_MANAGER_STORE}
+            className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
+          >
+            <FolderIcon className="h-5 w-5 text-amber-500" />
+            Notes Store
+          </Link>
 
           <NotesBox
             notes={notes}
@@ -248,12 +252,15 @@ export default function TaskManagerView() {
         />
       )}
 
-      {noteModalTarget && (
+      {noteModalTarget && userId && (
         <NoteModal
           note={noteModalTarget === "create" ? null : noteModalTarget}
+          documents={documents}
+          userId={userId}
           onClose={closeNoteModal}
           onSave={handleNoteSave}
           onDelete={handleNoteDelete}
+          onDownloadDocument={handleDownloadDocument}
         />
       )}
     </div>

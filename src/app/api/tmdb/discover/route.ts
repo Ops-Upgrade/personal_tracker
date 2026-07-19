@@ -37,7 +37,7 @@ function buildDiscoverParams(
   filters: DiscoverFilters,
   mediaType: "movie" | "tv",
   page: number,
-): URLSearchParams {
+): URLSearchParams | null {
   const params = new URLSearchParams({
     language: "en-US",
     page: String(page),
@@ -86,6 +86,11 @@ function buildDiscoverParams(
     );
     if (ids.length > 0) {
       params.set("with_genres", ids.join("|"));
+    } else {
+      // Genres were requested, but none apply to this media type (e.g. Horror
+      // or Music for TV). Return null to abort fetching this media type
+      // entirely rather than falling back to an unfiltered TMDB call.
+      return null;
     }
   }
 
@@ -249,19 +254,19 @@ export async function POST(request: Request) {
 
     // ── Fetch in parallel ──
     const [movieData, tvData] = await Promise.all([
-      fetchMovie
+      movieParams
         ? fetchFromTmdb(
             `${TMDB_BASE}/discover/movie`,
-            movieParams!,
+            movieParams,
             apiKey,
             "movie",
             request.signal,
           )
         : Promise.resolve({ results: [], total_pages: 0 } as TmdbPageResponse),
-      fetchTv
+      tvParams
         ? fetchFromTmdb(
             `${TMDB_BASE}/discover/tv`,
-            tvParams!,
+            tvParams,
             apiKey,
             "tv",
             request.signal,

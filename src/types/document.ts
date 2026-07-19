@@ -6,7 +6,7 @@
  * feature a document belongs to, and `linked_id` ties it to a parent record.
  */
 
-export type DocumentDomain = "education" | "expense" | "medical";
+export type DocumentDomain = "education" | "expense" | "medical" | "taskmanager";
 
 /** Plaintext shape that lives inside the encrypted blob */
 export interface DocumentPlaintext {
