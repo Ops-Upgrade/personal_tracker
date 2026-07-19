@@ -34,7 +34,7 @@ import LoadingSpinner from "@/components/common/LoadingSpinner";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import ExpenseModal from "./ExpenseModal";
 import MonthRow from "./MonthRow";
-import YearDropdown from "./YearDropdown";
+import YearDropdown from "@/components/common/YearDropdown";
 
 /** SVG icon symbols for the expense view toggle */
 const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [

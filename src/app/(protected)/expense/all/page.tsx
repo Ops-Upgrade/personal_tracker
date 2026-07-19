@@ -31,7 +31,7 @@ import MonthTile from "@/components/common/MonthTile";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import YearDropdown from "@/components/expense/YearDropdown";
+import YearDropdown from "@/components/common/YearDropdown";
 import ExpenseModal from "@/components/expense/ExpenseModal";
 import ExpenseTable from "@/components/expense/ExpenseTable";
 

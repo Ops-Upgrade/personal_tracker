@@ -7,7 +7,7 @@ export type TaskMode = "online" | "offline";
 
 // --- View toggle ---
 
-export type TaskView = "priority" | "months";
+export type TaskView = "completion" | "priority" | "months";
 
 // --- Plaintext shapes (what lives inside the encrypted blob) ---
 

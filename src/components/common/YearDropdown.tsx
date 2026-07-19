@@ -7,8 +7,9 @@ interface YearDropdownProps {
 }
 
 /**
- * Year selector dropdown for the expense tracker.
- * Lists all years present in decrypted data + current year, sorted descending.
+ * Year selector dropdown.
+ * Lists all years present in data + current year, sorted descending.
+ * Used by expense tracker and task manager completed views.
  */
 export default function YearDropdown({
   years,
