@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/app/api/storage/_helpers/auth";
 import { TMDB_HEADERS } from "../_helpers/headers";
+import { fetchTmdb } from "@/lib/tmdb/fetchTmdb";
 import type { DiscoverFilters } from "@/types/media";
 import {
   DISCOVER_GENRE_IDS,
@@ -119,27 +120,28 @@ async function fetchFromTmdb(
   mediaType: "movie" | "tv",
   signal?: AbortSignal,
 ): Promise<TmdbPageResponse> {
-  const res = await fetch(`${endpoint}?${params}`, {
-    headers: {
-      ...TMDB_HEADERS,
-      Authorization: `Bearer ${apiKey}`,
+  const result = await fetchTmdb<{ results?: TmdbRawItem[]; total_pages?: number }>(
+    `${endpoint}?${params}`,
+    {
+      headers: {
+        ...TMDB_HEADERS,
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal,
     },
-    signal,
-  });
+  );
 
-  if (!res.ok) {
-    console.error(
-      `TMDB discover/${mediaType} error: ${res.status}`,
-      await res.text().catch(() => ""),
-    );
-    return { results: [], total_pages: 0 };
+  if (result.kind !== "ok") {
+    // Attach transient flag so the caller can propagate it
+    const err = new Error(result.error) as Error & { transient: boolean };
+    err.transient = result.kind === "transient";
+    throw err;
   }
 
-  const data = await res.json();
-  const raw = (data.results ?? []) as TmdbRawItem[];
+  const raw = (result.data.results ?? []) as TmdbRawItem[];
   return {
     results: raw.map((item) => ({ ...item, media_type: mediaType })),
-    total_pages: Math.min(data.total_pages ?? 1, MAX_PAGE),
+    total_pages: Math.min(result.data.total_pages ?? 1, MAX_PAGE),
   };
 }
 
@@ -192,7 +194,10 @@ export async function POST(request: Request) {
         page: String(page),
       });
 
-      const trendingRes = await fetch(
+      const trendingResult = await fetchTmdb<{
+        results?: TmdbRawItem[];
+        total_pages?: number;
+      }>(
         `${TMDB_BASE}/trending/all/week?${params}`,
         {
           headers: {
@@ -203,11 +208,19 @@ export async function POST(request: Request) {
         },
       );
 
-      if (!trendingRes.ok) {
-        return NextResponse.json({ results: [], total_pages: 1 });
+      if (trendingResult.kind !== "ok") {
+        return NextResponse.json(
+          {
+            results: [],
+            total_pages: 1,
+            error: trendingResult.error,
+            transient: trendingResult.kind === "transient",
+          },
+          { status: trendingResult.kind === "transient" ? 500 : (trendingResult.status ?? 500) },
+        );
       }
 
-      const trendingData = await trendingRes.json();
+      const trendingData = trendingResult.data;
       const results = (
         (trendingData.results ?? []) as TmdbRawItem[]
       ).map(mapItem);
@@ -304,8 +317,12 @@ export async function POST(request: Request) {
     });
   } catch (err) {
     console.error("TMDB discover proxy error:", err);
+    const transient =
+      typeof err === "object" && err !== null && "transient" in err
+        ? !!(err as { transient: boolean }).transient
+        : false;
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Internal server error", transient },
       { status: 500 },
     );
   }

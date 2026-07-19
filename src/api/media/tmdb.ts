@@ -12,7 +12,6 @@ const API_BASE = "/api/tmdb";
 async function tmdbPost<T>(
   path: string,
   body: unknown,
-  retries = 1,
   signal?: AbortSignal,
 ): Promise<T> {
   try {
@@ -24,36 +23,43 @@ async function tmdbPost<T>(
     });
 
     if (!res.ok) {
-      // Silently retry on server errors or connection drops
-      if (res.status >= 500 && retries > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 300));
-        return tmdbPost<T>(path, body, retries - 1, signal);
-      }
       let detail = "";
+      let transient = false;
       try {
         const err = await res.json();
         detail = err.error ?? "";
+        transient = !!err.transient;
       } catch {
         /* ignore parse failures */
       }
-      throw new Error(detail || `TMDB proxy error (${res.status})`);
+      const error = new Error(detail || `TMDB proxy error (${res.status})`) as Error & {
+        transient: boolean;
+      };
+      error.transient = transient;
+      throw error;
     }
 
     return res.json() as Promise<T>;
   } catch (err) {
-    // Don't retry aborted requests — the caller deliberately cancelled
+    // Don't wrap aborted requests — the caller deliberately cancelled
     if (err instanceof DOMException && err.name === "AbortError") throw err;
 
-    // Hard network crash (ECONNRESET, etc.) — retry once silently
-    if (retries > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      return tmdbPost<T>(path, body, retries - 1, signal);
+    // If the error already has a transient flag (from the !res.ok branch above),
+    // re-throw it as-is so the retry hook can act on it.
+    if (
+      err instanceof Error &&
+      "transient" in (err as Error & { transient?: boolean })
+    ) {
+      throw err;
     }
 
-    // Both attempts failed — show a friendly message
-    throw new Error(
-      "Unable to connect to the movie database right now. Please try again in a moment."
-    );
+    // Hard network crash (ECONNRESET, etc.) before the server could respond —
+    // these are inherently transient.
+    const networkError = new Error(
+      "Unable to connect to the movie database right now. Please try again in a moment.",
+    ) as Error & { transient: boolean };
+    networkError.transient = true;
+    throw networkError;
   }
 }
 
@@ -66,9 +72,7 @@ export async function searchMedia(
   page?: number,
   signal?: AbortSignal,
 ): Promise<TmdbSearchResult[]> {
-  // Never retry search — heavy queries (combined_credits) time out under concurrency;
-  // cancellation + caching on the backend prevent the 504s organically.
-  return tmdbPost<TmdbSearchResult[]>("/search", { query, type, page }, 0, signal);
+  return tmdbPost<TmdbSearchResult[]>("/search", { query, type, page }, signal);
 }
 
 /**
@@ -79,7 +83,7 @@ export async function getDiscoverMedia(
   page?: number,
   signal?: AbortSignal,
 ): Promise<DiscoverResponse> {
-  return tmdbPost<DiscoverResponse>("/discover", { filters, page }, 1, signal);
+  return tmdbPost<DiscoverResponse>("/discover", { filters, page }, signal);
 }
 
 /**
@@ -90,7 +94,7 @@ export async function getMediaDetails(
   type: "movie" | "tv",
   signal?: AbortSignal,
 ): Promise<TmdbDetails> {
-  return tmdbPost<TmdbDetails>("/details", { tmdb_id: tmdbId, type }, 1, signal);
+  return tmdbPost<TmdbDetails>("/details", { tmdb_id: tmdbId, type }, signal);
 }
 
 /**
@@ -101,8 +105,9 @@ export async function getSeasonDetails(
   seasonNumber: number,
   signal?: AbortSignal,
 ): Promise<TmdbSeasonDetails> {
-  return tmdbPost<TmdbSeasonDetails>("/season", {
-    tmdb_id: tmdbId,
-    season_number: seasonNumber,
-  }, 1, signal);
+  return tmdbPost<TmdbSeasonDetails>(
+    "/season",
+    { tmdb_id: tmdbId, season_number: seasonNumber },
+    signal,
+  );
 }

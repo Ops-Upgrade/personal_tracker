@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { searchMedia, getDiscoverMedia } from "@/api/media";
+import { useTmdbRetry } from "@/hooks/useTmdbRetry";
 import type {
   TmdbSearchResult,
   DiscoverFilters,
@@ -13,7 +14,7 @@ import type {
   DiscoverEra,
   Media,
 } from "@/types/media";
-import { DEFAULT_DISCOVER_FILTERS } from "@/types/media";
+import { DEFAULT_DISCOVER_FILTERS, GENRE_OPTIONS } from "@/types/media";
 import { Chip } from "@/components/common/Chip";
 import SearchBar from "@/components/common/SearchBar";
 import { FilterLabel } from "@/components/media/shared/FilterLabel";
@@ -65,16 +66,6 @@ const ERA_OPTIONS: { value: DiscoverEra; label: string }[] = [
   { value: "classics", label: "Pre-1990" },
 ];
 
-const GENRE_OPTIONS: { value: DiscoverGenreKey; label: string }[] = [
-  { value: "action", label: "Action" },
-  { value: "comedy", label: "Comedy" },
-  { value: "drama", label: "Drama" },
-  { value: "thriller", label: "Thriller" },
-  { value: "romance", label: "Romance" },
-  { value: "scifi", label: "Sci-Fi" },
-  { value: "fantasy", label: "Fantasy" },
-];
-
 const REGION_OPTIONS: { value: DiscoverRegionKey; label: string }[] = [
   { value: "hollywood", label: "Hollywood" },
   { value: "bollywood", label: "Bollywood" },
@@ -110,14 +101,19 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   const router = useRouter();
   const [query, setQuery] = useState(() => discoverCache.query);
   const [results, setResults] = useState<TmdbSearchResult[]>(() => discoverCache.results);
-  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<DiscoverFilters>(() => discoverCache.filters);
   const [hasMore, setHasMore] = useState(() => discoverCache.results.length > 0);
   const [mobileDropdown, setMobileDropdown] = useState<MobileDropdown>(null);
 
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const {
+    loading,
+    error,
+    execute: retryExecute,
+    clearError,
+    cancel: cancelRetry,
+  } = useTmdbRetry();
+
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialLoadDone = useRef(discoverCache.results.length > 0);
   const pageRef = useRef(discoverCache.page);
@@ -146,23 +142,12 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   // ── Fetch a page of results ──
 
   const fetchPage = useCallback(
-    async (page: number, append: boolean) => {
-      // Cancel any in-flight request so stale queries don't pile up
-      abortControllerRef.current?.abort();
-      loadingRef.current = false; // reset immediately so the new fetch can proceed
-
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      const { signal } = controller;
-
+    async (page: number, append: boolean, signal: AbortSignal) => {
       loadingRef.current = true;
 
       if (append) {
         setLoadingMore(true);
-      } else {
-        setLoading(true);
       }
-      setError(null);
 
       try {
         const trimmed = query.trim();
@@ -207,15 +192,10 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
 
           setHasMore(page < total_pages && page < TMDB_MAX_PAGE);
         }
-      } catch (err) {
-        // Silently ignore aborted requests — a newer fetch has taken over
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setError(err instanceof Error ? err.message : "Failed to load media.");
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
-        // Only clear the ref if *our* signal wasn't aborted — prevents a
-        // just-cancelled fetch's finally from clearing a newer fetch's flag.
+        if (append) {
+          setLoadingMore(false);
+        }
         if (!signal.aborted) {
           loadingRef.current = false;
         }
@@ -242,7 +222,7 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
             return;
           }
           pageRef.current += 1;
-          fetchPage(pageRef.current, true);
+          fetchPage(pageRef.current, true, new AbortController().signal);
         }
       },
       { rootMargin: "300px" },
@@ -271,6 +251,7 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
+    cancelRetry();
 
     pageRef.current = 1;
     totalPagesRef.current = 1;
@@ -280,17 +261,17 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
 
     if (trimmed.length > 0) {
       debounceRef.current = setTimeout(() => {
-        fetchPage(1, false);
+        retryExecute((signal) => fetchPage(1, false, signal));
       }, DEBOUNCE_MS);
     } else {
       if (!initialLoadDone.current) {
         initialLoadDone.current = true;
-        fetchPage(1, false);
+        retryExecute((signal) => fetchPage(1, false, signal));
         return;
       }
 
       debounceRef.current = setTimeout(() => {
-        fetchPage(1, false);
+        retryExecute((signal) => fetchPage(1, false, signal));
       }, DEBOUNCE_MS);
     }
 
@@ -422,20 +403,21 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   );
 
   const genreCheckboxes = (
-    <div className="flex flex-col gap-2">
-      <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer select-none">
+    <div className="grid grid-cols-2 gap-2">
+      <label className="col-span-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-default select-none opacity-70">
         <input
           type="checkbox"
           checked={filters.genre.length === 0}
-          onChange={() => setFilters((prev) => ({ ...prev, genre: [] }))}
-          className="h-3.5 w-3.5 rounded border-zinc-300 text-violet-600 focus:ring-violet-500 dark:border-zinc-600"
+          disabled
+          readOnly
+          className="h-3.5 w-3.5 rounded border-zinc-300 text-violet-600 disabled:opacity-70 dark:border-zinc-600"
         />
         All Genres
       </label>
       {GENRE_OPTIONS.map((o) => (
         <label
           key={o.value}
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer select-none"
+          className="col-span-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer select-none"
         >
           <input
             type="checkbox"
@@ -450,20 +432,21 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   );
 
   const regionCheckboxes = (
-    <div className="flex flex-col gap-2">
-      <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer select-none">
+    <div className="grid grid-cols-2 gap-2">
+      <label className="col-span-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-default select-none opacity-70">
         <input
           type="checkbox"
           checked={filters.region.length === 0}
-          onChange={() => setFilters((prev) => ({ ...prev, region: [] }))}
-          className="h-3.5 w-3.5 rounded border-zinc-300 text-violet-600 focus:ring-violet-500 dark:border-zinc-600"
+          disabled
+          readOnly
+          className="h-3.5 w-3.5 rounded border-zinc-300 text-violet-600 disabled:opacity-70 dark:border-zinc-600"
         />
         All Regions
       </label>
       {REGION_OPTIONS.map((o) => (
         <label
           key={o.value}
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer select-none"
+          className="col-span-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer select-none"
         >
           <input
             type="checkbox"
@@ -513,7 +496,10 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
           <span className="flex-1 min-w-0">{error}</span>
           <button
             type="button"
-            onClick={() => fetchPage(pageRef.current, false)}
+            onClick={() => {
+              clearError();
+              retryExecute((signal) => fetchPage(pageRef.current, false, signal));
+            }}
             className="shrink-0 rounded-md bg-red-100 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-400 dark:hover:bg-red-900/60 transition-colors"
           >
             Retry
@@ -586,7 +572,7 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   // ══════════════════════════════════════════════════════
 
   const sidebar = (
-    <FilterSidebar className="max-h-[calc(100vh-14rem)]">
+    <FilterSidebar>
       <div>
         <FilterLabel label="Type" isActive={filters.type !== "all"} onClear={() => setType("all")} />
         <div className="mt-1.5">{typeChips}</div>
@@ -629,7 +615,7 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   // ══════════════════════════════════════════════════════
 
   return (
-    <div className="flex flex-col md:flex-row items-start gap-6">
+    <div className="flex flex-col md:flex-row gap-6">
       {/* Desktop sidebar */}
       {!isSearching && sidebar}
 

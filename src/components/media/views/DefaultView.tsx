@@ -8,7 +8,7 @@ import type {
   DiscoverGenreKey,
   DiscoverEra,
 } from "@/types/media";
-import { DISCOVER_GENRE_IDS, DISCOVER_ERA_DATES } from "@/types/media";
+import { DISCOVER_GENRE_IDS, DISCOVER_ERA_DATES, GENRE_OPTIONS } from "@/types/media";
 import MediaGrid from "@/components/media/MediaGrid";
 import MediaCard from "@/components/media/MediaCard";
 import { Chip } from "@/components/common/Chip";
@@ -92,16 +92,6 @@ const ERA_OPTIONS: { value: DiscoverEra; label: string }[] = [
   { value: "2000s", label: "2000s" },
   { value: "1990s", label: "1990s" },
   { value: "classics", label: "Pre-1990" },
-];
-
-const GENRE_OPTIONS: { value: DiscoverGenreKey; label: string }[] = [
-  { value: "action", label: "Action" },
-  { value: "comedy", label: "Comedy" },
-  { value: "drama", label: "Drama" },
-  { value: "thriller", label: "Thriller" },
-  { value: "romance", label: "Romance" },
-  { value: "scifi", label: "Sci-Fi" },
-  { value: "fantasy", label: "Fantasy" },
 ];
 
 const RATING_OPTIONS: { value: LocalRatingFilter; label: string }[] = [
@@ -385,20 +375,21 @@ export default function DefaultView({
   );
 
   const genreCheckboxes = (
-    <div className="flex flex-col gap-2">
-      <label className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer select-none">
+    <div className="grid grid-cols-2 gap-2">
+      <label className="col-span-2 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-default select-none opacity-70">
         <input
           type="checkbox"
           checked={filters.genre.length === 0}
-          onChange={() => setFilters((prev) => ({ ...prev, genre: [] }))}
-          className="h-3.5 w-3.5 rounded border-zinc-300 text-violet-600 focus:ring-violet-500 dark:border-zinc-600"
+          disabled
+          readOnly
+          className="h-3.5 w-3.5 rounded border-zinc-300 text-violet-600 disabled:opacity-70 dark:border-zinc-600"
         />
         All Genres
       </label>
       {GENRE_OPTIONS.map((o) => (
         <label
           key={o.value}
-          className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer select-none"
+          className="col-span-1 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-zinc-700 transition-colors hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer select-none"
         >
           <input
             type="checkbox"
@@ -443,7 +434,7 @@ export default function DefaultView({
   // ══════════════════════════════════════════════════════
 
   const sidebar = (
-    <FilterSidebar className="max-h-[calc(100vh-20rem)]">
+    <FilterSidebar>
       <div>
         <FilterLabel label="Type" isActive={filters.type !== "all"} onClear={() => setType("all")} />
         <div className="mt-1.5">{typeChips}</div>
@@ -481,7 +472,7 @@ export default function DefaultView({
   // ══════════════════════════════════════════════════════
 
   return (
-    <div className="flex flex-col md:flex-row items-start gap-6">
+    <div className="flex flex-col md:flex-row gap-6">
       {/* Desktop sidebar */}
       {sidebar}
 

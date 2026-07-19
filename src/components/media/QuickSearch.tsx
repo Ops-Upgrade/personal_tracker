@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Search, Film, Tv } from "lucide-react";
 import { searchMedia } from "@/api/media";
 import type { TmdbSearchResult } from "@/types/media";
+import { useTmdbRetry } from "@/hooks/useTmdbRetry";
 import { tmdbPosterUrl } from "@/components/media/constants";
 import SearchBar from "@/components/common/SearchBar";
 
@@ -20,10 +21,11 @@ export default function QuickSearch({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<TmdbSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { loading: searching, execute: retryExecute, cancel: cancelRetry } = useTmdbRetry();
 
   // Close on outside click
   useEffect(() => {
@@ -39,21 +41,22 @@ export default function QuickSearch({
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const doSearch = useCallback(async (q: string) => {
-    if (q.trim().length < 2) {
-      setResults([]);
-      return;
-    }
-    setSearching(true);
-    try {
-      const res = await searchMedia(q.trim(), "multi");
-      setResults(res.slice(0, 8));
-    } catch {
-      setResults([]);
-    } finally {
-      setSearching(false);
-    }
-  }, []);
+  const doSearch = useCallback(
+    (q: string) => {
+      if (q.trim().length < 2) {
+        setResults([]);
+        cancelRetry();
+        return;
+      }
+      retryExecute(async (signal) => {
+        const res = await searchMedia(q.trim(), "multi", 1, signal);
+        if (!signal.aborted) {
+          setResults(res.slice(0, 8));
+        }
+      });
+    },
+    [retryExecute, cancelRetry],
+  );
 
   function handleInputChange(value: string) {
     setQuery(value);

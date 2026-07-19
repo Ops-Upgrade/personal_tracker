@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/app/api/storage/_helpers/auth";
 import { TMDB_HEADERS } from "../_helpers/headers";
+import { fetchTmdb } from "@/lib/tmdb/fetchTmdb";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
@@ -34,23 +35,25 @@ export async function POST(request: Request) {
     const endpoint = `${TMDB_BASE}/tv/${tmdb_id}/season/${season_number}`;
     const params = new URLSearchParams({ language: "en-US" });
 
-    const tmdbRes = await fetch(`${endpoint}?${params}`, {
+    const tmdbResult = await fetchTmdb<Record<string, unknown>>(`${endpoint}?${params}`, {
       headers: {
         ...TMDB_HEADERS,
         Authorization: `Bearer ${apiKey}`,
       },
     });
 
-    if (!tmdbRes.ok) {
-      const errText = await tmdbRes.text();
-      console.error("TMDB season error:", tmdbRes.status, errText);
+    if (tmdbResult.kind !== "ok") {
+      console.error("TMDB season error:", tmdbResult.error);
       return NextResponse.json(
-        { error: `TMDB API error: ${tmdbRes.status}` },
-        { status: tmdbRes.status }
+        {
+          error: tmdbResult.error,
+          transient: tmdbResult.kind === "transient",
+        },
+        { status: tmdbResult.kind === "transient" ? 500 : (tmdbResult.status ?? 500) },
       );
     }
 
-    const data = await tmdbRes.json();
+    const data = tmdbResult.data;
 
     const seasonDetails = {
       season_number: data.season_number as number,
@@ -75,8 +78,8 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("TMDB season proxy error:", err);
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { error: "Internal server error", transient: false },
+      { status: 500 },
     );
   }
 }

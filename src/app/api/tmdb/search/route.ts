@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/app/api/storage/_helpers/auth";
 import { TMDB_HEADERS } from "../_helpers/headers";
+import { fetchTmdb } from "@/lib/tmdb/fetchTmdb";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
@@ -41,24 +42,29 @@ export async function POST(request: Request) {
       page: String(page),
     });
 
-    const tmdbRes = await fetch(`${endpoint}?${params}`, {
-      headers: {
-        ...TMDB_HEADERS,
-        Authorization: `Bearer ${apiKey}`,
+    const searchResult = await fetchTmdb<{ results?: Array<Record<string, unknown>> }>(
+      `${endpoint}?${params}`,
+      {
+        headers: {
+          ...TMDB_HEADERS,
+          Authorization: `Bearer ${apiKey}`,
+        },
+        signal: request.signal,
       },
-      signal: request.signal,
-    });
+    );
 
-    if (!tmdbRes.ok) {
-      const errText = await tmdbRes.text();
-      console.error("TMDB search error:", tmdbRes.status, errText);
+    if (searchResult.kind !== "ok") {
+      console.error("TMDB search error:", searchResult.error);
       return NextResponse.json(
-        { error: `TMDB API error: ${tmdbRes.status}` },
-        { status: tmdbRes.status }
+        {
+          error: searchResult.error,
+          transient: searchResult.kind === "transient",
+        },
+        { status: searchResult.kind === "transient" ? 500 : (searchResult.status ?? 500) },
       );
     }
 
-    const data = await tmdbRes.json();
+    const data = searchResult.data;
     const rawResults = (data.results ?? []) as Array<Record<string, unknown>>;
 
     // 1. Find the top person match in the search results (page 1 only)
@@ -67,19 +73,21 @@ export async function POST(request: Request) {
 
     // 2. If a person was found on page 1, fetch their full filmography
     if (topPerson) {
-      const creditsRes = await fetch(
+      const creditsResult = await fetchTmdb<{
+        cast?: Array<Record<string, unknown>>;
+        crew?: Array<Record<string, unknown>>;
+      }>(
         `${TMDB_BASE}/person/${topPerson.id}/combined_credits?language=en-US`,
         {
           headers: {
             ...TMDB_HEADERS,
             Authorization: `Bearer ${apiKey}`,
           },
-          signal: request.signal,
-          next: { revalidate: 86400 },
-        }
+        },
       );
-      if (creditsRes.ok) {
-        const creditsData = await creditsRes.json();
+
+      if (creditsResult.kind === "ok") {
+        const creditsData = creditsResult.data;
 
         // 1. Get all acting credits
         const castCredits = (creditsData.cast ?? []) as Array<Record<string, unknown>>;
@@ -135,8 +143,8 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("TMDB search proxy error:", err);
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { error: "Internal server error", transient: false },
+      { status: 500 },
     );
   }
 }

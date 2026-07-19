@@ -16,7 +16,8 @@ Update this file whenever you add or change tables, columns, indexes, or policie
 | `public` | `notes`        | Encrypted note blobs (task manager feature). |
 | `public` | `expenses`     | Encrypted expense blobs (expense tracker feature). |
 | `public` | `educations`   | Encrypted education/course blobs (education feature). |
-| `public` | `certificates` | Encrypted certificate metadata blobs (education feature). |
+| `public` | `documents`    | Encrypted global document metadata blobs (used by multiple features). |
+| `public` | `medical_records` | Encrypted medical records blobs (medical tracker feature). |
 | `public` | `media`        | Encrypted media/movie/TV tracking blobs (media tracker feature). |
 | `public` | `media_collections` | Encrypted collection grouping blobs (media tracker feature). |
 
@@ -173,7 +174,7 @@ CREATE POLICY "Users manage their own notes"
 
 ## `public.expenses`
 
-Encrypted expense data. Each row stores one expense as an opaque AES-GCM ciphertext blob. All fields (title, amount, date, category, notes, invoice attachment metadata) live inside the encrypted `data` JSON — no plaintext columns.
+Encrypted expense data. Each row stores one expense as an opaque AES-GCM ciphertext blob. All fields (title, amount, date, category, notes, linked document IDs) live inside the encrypted `data` JSON — no plaintext columns.
 
 | Column       | Type          | Nullable | Default              | Notes |
 |--------------|---------------|----------|----------------------|-------|
@@ -221,7 +222,7 @@ CREATE POLICY "Users manage their own expenses"
 
 ## `public.educations`
 
-Encrypted education/course data. Each row stores one education record as an opaque AES-GCM ciphertext blob. Fields (course name, provider, status, start/end dates, notes, linked certificate IDs) live inside the encrypted `data` JSON.
+Encrypted education/course data. Each row stores one education record as an opaque AES-GCM ciphertext blob. Fields (course name, provider, status, start/end dates, notes, linked document IDs) live inside the encrypted `data` JSON.
 
 | Column       | Type          | Nullable | Default              | Notes |
 |--------------|---------------|----------|----------------------|-------|
@@ -265,9 +266,9 @@ CREATE POLICY "Users can manage their own educations"
 
 ---
 
-## `public.certificates`
+## `public.documents`
 
-Encrypted certificate metadata. Each row represents one certificate file attached to an education record or uploaded independently to the Certificate Store. File content is stored encrypted in the `certificates` storage bucket; this table stores encrypted metadata (filename, MIME type, IV, linked education ID).
+Encrypted global document metadata. Each row represents one document file attached to a domain record (expense, education, medical) or uploaded independently to the Global Document Store. File content is stored encrypted in R2 storage; this table stores encrypted metadata (filename, MIME type, IV, linked ID, domain).
 
 | Column       | Type          | Nullable | Default              | Notes |
 |--------------|---------------|----------|----------------------|-------|
@@ -280,7 +281,7 @@ Encrypted certificate metadata. Each row represents one certificate file attache
 ### DDL (source of truth)
 
 ```sql
-CREATE TABLE public.certificates (
+CREATE TABLE public.documents (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id    UUID NOT NULL REFERENCES auth.users(id),
     iv         TEXT NOT NULL,
@@ -291,23 +292,65 @@ CREATE TABLE public.certificates (
 
 ### Row Level Security
 
-- **RLS:** `ENABLE ROW LEVEL SECURITY` on `public.certificates`.
+- **RLS:** `ENABLE ROW LEVEL SECURITY` on `public.documents`.
 
 | Policy name | Command | `USING` | `WITH CHECK` |
 |-------------|---------|---------|----------------|
-| `Users can manage their own certificates` | `ALL` | `auth.uid() = user_id` | — |
+| `Users can manage their own documents` | `ALL` | `auth.uid() = user_id` | — |
 
 ```sql
-ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.documents ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users can manage their own certificates"
-    ON public.certificates
+CREATE POLICY "Users can manage their own documents"
+    ON public.documents
     FOR ALL USING (auth.uid() = user_id);
 ```
 
 ### Indexes
 
 - Primary key on `id` (implicit unique index).
+
+---
+
+## `public.medical_records`
+
+Encrypted medical records data. Each row stores one medical record as an opaque AES-GCM ciphertext blob. Fields (name, clinic, date, diagnosis timeline, linked document IDs) live inside the encrypted `data` JSON.
+
+| Column       | Type          | Nullable | Default              | Notes |
+|--------------|---------------|----------|----------------------|-------|
+| `id`         | `UUID`        | NO       | `gen_random_uuid()`  | PK |
+| `user_id`    | `UUID`        | NO       | —                    | FK → `auth.users(id)` |
+| `iv`         | `TEXT`        | NO       | —                    | Per-record AES-GCM IV (Base64) |
+| `data`       | `TEXT`        | NO       | —                    | Base64 ciphertext (encrypted JSON blob) |
+| `created_at` | `TIMESTAMPTZ` | NO       | `now()`              | Row creation timestamp |
+
+### DDL (source of truth)
+
+```sql
+CREATE TABLE public.medical_records (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES auth.users(id),
+    iv         TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+### Row Level Security
+
+- **RLS:** `ENABLE ROW LEVEL SECURITY` on `public.medical_records`.
+
+| Policy name | Command | `USING` | `WITH CHECK` |
+|-------------|---------|---------|----------------|
+| `Users can manage their own medical_records` | `ALL` | `auth.uid() = user_id` | — |
+
+```sql
+ALTER TABLE public.medical_records ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can manage their own medical_records"
+    ON public.medical_records
+    FOR ALL USING (auth.uid() = user_id);
+```
 
 ---
 
@@ -467,15 +510,15 @@ All routes validate:
 
 These are **server-only** (no `NEXT_PUBLIC_` prefix) — the browser never sees R2 credentials. The browser uploads/downloads via presigned URLs, which are temporary and scoped to a single object.
 
-### Encrypted Blob Fields (Invoice + Certificate Storage)
+### Encrypted Blob Fields (Global Document Store)
 
-Both `ExpensePlaintext` and `CertificatePlaintext` encrypted blobs include file metadata fields:
+The `DocumentPlaintext` encrypted blob includes file metadata fields:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `*_file` / `file_name` | `string` | Filename in R2 (e.g. `"<uuid>.enc"`), empty if no file attached |
-| `*_iv` / `file_iv` | `string` | Base64 IV used to encrypt the file, empty if no file |
-| `*_mime` / `file_mime` | `string` | Original MIME type (e.g. `"application/pdf"`), empty if no file |
+| `file_name` | `string` | Filename in R2 (e.g. `"<uuid>.enc"`), empty if no file attached |
+| `file_iv` | `string` | Base64 IV used to encrypt the file, empty if no file |
+| `file_mime` | `string` | Original MIME type (e.g. `"application/pdf"`), empty if no file |
 
 ### CSP Requirement
 
@@ -494,4 +537,5 @@ The `connect-src` CSP directive must allow `https://*.r2.cloudflarestorage.com` 
 | 2026-06-23 | Added `public.expenses` table + RLS + `expenses` storage bucket (Expense Tracker feature). |
 | 2026-07-07 | Added `public.educations` + `public.certificates` tables + RLS + `certificates` storage bucket (Education feature). |
 | 2026-07-08 | Schema doc brought up to date: documented all 3 previously undocumented tables and the certificates bucket. |
+| 2026-07-13 | Renamed `public.certificates` to `public.documents` for Global Document Store. Added `public.medical_records` table + RLS (Medical Records feature). |
 | 2026-07-15 | Added `public.media` + `public.media_collections` tables + RLS (Media Tracker feature). |

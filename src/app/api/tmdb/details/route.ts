@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedUserId } from "@/app/api/storage/_helpers/auth";
 import { TMDB_HEADERS } from "../_helpers/headers";
+import { fetchTmdb } from "@/lib/tmdb/fetchTmdb";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
@@ -37,23 +38,29 @@ export async function POST(request: Request) {
       append_to_response: "watch/providers,release_dates,content_ratings",
     });
 
-    const tmdbRes = await fetch(`${endpoint}?${params}`, {
+    const tmdbResult = await fetchTmdb<Record<string, unknown>>(`${endpoint}?${params}`, {
       headers: {
         ...TMDB_HEADERS,
         Authorization: `Bearer ${apiKey}`,
       },
     });
 
-    if (!tmdbRes.ok) {
-      const errText = await tmdbRes.text();
-      console.error("TMDB details error:", tmdbRes.status, errText);
+    if (tmdbResult.kind !== "ok") {
+      console.error("TMDB details error:", tmdbResult.error);
       return NextResponse.json(
-        { error: `TMDB API error: ${tmdbRes.status}` },
-        { status: tmdbRes.status }
+        {
+          error: tmdbResult.error,
+          transient: tmdbResult.kind === "transient",
+        },
+        { status: tmdbResult.kind === "transient" ? 500 : (tmdbResult.status ?? 500) },
       );
     }
 
-    const data = await tmdbRes.json();
+    const data = tmdbResult.data;
+    // Cast for nested property access — TMDB response shape is validated by runtime
+    // inline type assertions below.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = data as Record<string, any>;
 
     // TMDB API response shapes
     interface TmdbReleaseDateResult {
@@ -72,46 +79,46 @@ export async function POST(request: Request) {
     // Extract US content rating (movies use release_dates, TV uses content_ratings)
     let contentRating = "";
     if (type === "movie") {
-      const usRelease = (data.release_dates?.results as TmdbReleaseDateResult[] | undefined)?.find(
+      const usRelease = (d.release_dates?.results as TmdbReleaseDateResult[] | undefined)?.find(
         (r) => r.iso_3166_1 === "US" || r.iso_3166_1 === "IN",
       );
       contentRating = usRelease?.release_dates?.[0]?.certification || "";
     } else {
-      const usRating = (data.content_ratings?.results as TmdbContentRatingResult[] | undefined)?.find(
+      const usRating = (d.content_ratings?.results as TmdbContentRatingResult[] | undefined)?.find(
         (r) => r.iso_3166_1 === "US" || r.iso_3166_1 === "IN",
       );
       contentRating = usRating?.rating || "";
     }
 
     const details = {
-      title: data.title as string | undefined,
-      name: data.name as string | undefined,
-      poster_path: data.poster_path as string | undefined,
+      title: d.title as string | undefined,
+      name: d.name as string | undefined,
+      poster_path: d.poster_path as string | undefined,
       release_date: (type === "movie"
-        ? data.release_date
-        : data.first_air_date) as string | undefined,
+        ? d.release_date
+        : d.first_air_date) as string | undefined,
       number_of_episodes: type === "tv"
-        ? (data.number_of_episodes as number | undefined)
+        ? (d.number_of_episodes as number | undefined)
         : undefined,
       number_of_seasons: type === "tv"
-        ? (data.number_of_seasons as number | undefined)
+        ? (d.number_of_seasons as number | undefined)
         : undefined,
-      overview: (data.overview as string) ?? "",
-      genres: (data.genres as Array<{ id: number; name: string }>) ?? [],
-      runtime: type === "movie" ? (data.runtime as number | undefined) : undefined,
+      overview: (d.overview as string) ?? "",
+      genres: (d.genres as Array<{ id: number; name: string }>) ?? [],
+      runtime: type === "movie" ? (d.runtime as number | undefined) : undefined,
       episode_run_time: type === "tv"
-        ? (data.episode_run_time as number[] | undefined)
+        ? (d.episode_run_time as number[] | undefined)
         : undefined,
       content_rating: contentRating,
-      watch_providers: (data["watch/providers"]?.results?.IN as TmdbWatchProviderResult | undefined) ?? undefined,
+      watch_providers: (d["watch/providers"]?.results?.IN as TmdbWatchProviderResult | undefined) ?? undefined,
     };
 
     return NextResponse.json(details);
   } catch (err) {
     console.error("TMDB details proxy error:", err);
     return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+      { error: "Internal server error", transient: false },
+      { status: 500 },
     );
   }
 }

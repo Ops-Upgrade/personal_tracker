@@ -106,11 +106,17 @@ export type DiscoverAnimation = "include" | "exclude" | "only";
 export type DiscoverGenreKey =
   | "action"
   | "comedy"
+  | "crime"
+  | "documentary"
   | "drama"
-  | "thriller"
+  | "fantasy"
+  | "horror"
+  | "music"
+  | "mystery"
   | "romance"
   | "scifi"
-  | "fantasy";
+  | "thriller"
+  | "war";
 
 /** Region keys for the multi-select region filter. */
 export type DiscoverRegionKey = "hollywood" | "bollywood" | "korean" | "japanese";
@@ -149,11 +155,17 @@ export const DISCOVER_GENRE_IDS: Record<
 > = {
   action: { movie: [28], tv: [10759] },
   comedy: { movie: [35], tv: [35] },
+  crime: { movie: [80], tv: [80] },
+  documentary: { movie: [99], tv: [99] },
   drama: { movie: [18], tv: [18] },
-  thriller: { movie: [53], tv: [9648, 80] },
-  romance: { movie: [10749], tv: [] },
-  scifi: { movie: [878], tv: [10765] },
   fantasy: { movie: [14], tv: [10765] },
+  horror: { movie: [27], tv: [9648] },
+  music: { movie: [10402], tv: [] },
+  mystery: { movie: [9648], tv: [9648] },
+  romance: { movie: [10749], tv: [18] },
+  scifi: { movie: [878], tv: [10765] },
+  thriller: { movie: [53], tv: [9648, 80] },
+  war: { movie: [10752], tv: [10768] },
 };
 
 // ── Era date range mappings ──
@@ -183,3 +195,23 @@ export const DISCOVER_REGION_LANGUAGES: Record<DiscoverRegionKey, string> = {
 export type MediaSort = "date_added" | "title_asc" | "rating_desc" | "release_date_desc";
 
 export type MediaTypeFilter = "all" | "movie" | "tv";
+
+/**
+ * Shared genre dropdown options used by both Discover and My Media filters.
+ * Kept in the types module so the UI stays in sync across views.
+ */
+export const GENRE_OPTIONS: { value: DiscoverGenreKey; label: string }[] = [
+  { value: "action", label: "Action" },
+  { value: "comedy", label: "Comedy" },
+  { value: "crime", label: "Crime" },
+  { value: "documentary", label: "Documentary" },
+  { value: "drama", label: "Drama" },
+  { value: "fantasy", label: "Fantasy" },
+  { value: "horror", label: "Horror" },
+  { value: "music", label: "Music" },
+  { value: "mystery", label: "Mystery" },
+  { value: "romance", label: "Romance" },
+  { value: "scifi", label: "Sci-Fi" },
+  { value: "thriller", label: "Thriller" },
+  { value: "war", label: "War" },
+];

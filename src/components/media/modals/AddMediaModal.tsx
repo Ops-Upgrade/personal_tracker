@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { searchMedia } from "@/api/media";
 import type { Media, TmdbSearchResult } from "@/types/media";
+import { useTmdbRetry } from "@/hooks/useTmdbRetry";
 import MediaCard from "@/components/media/MediaCard";
 import SearchBar from "@/components/common/SearchBar";
 const DEBOUNCE_MS = 400;
@@ -31,10 +32,10 @@ export default function AddMediaModal({
   const [mode, setMode] = useState<Mode>("select_source");
   const [searchQuery, setSearchQuery] = useState("");
   const [discoverResults, setDiscoverResults] = useState<TmdbSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
+
+  const { loading: searching, execute: retryExecute, cancel: cancelRetry } = useTmdbRetry();
 
   // Reset state when modal opens
   useEffect(() => {
@@ -42,10 +43,10 @@ export default function AddMediaModal({
       setMode("select_source");
       setSearchQuery("");
       setDiscoverResults([]);
-      setSearching(false);
+      cancelRetry();
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [open]);
+  }, [open, cancelRetry]);
 
   // Esc key to close
   useEffect(() => {
@@ -74,31 +75,22 @@ export default function AddMediaModal({
 
   // ── Discover search with debounce ──
 
-  const doDiscoverSearch = useCallback(async (query: string) => {
-    if (query.trim().length < 2) {
-      setDiscoverResults([]);
-      return;
-    }
-    // Cancel previous request
-    if (abortRef.current) abortRef.current.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setSearching(true);
-    try {
-      const results = await searchMedia(query.trim(), "multi", 1, controller.signal);
-      if (!controller.signal.aborted) {
-        setDiscoverResults(results);
+  const doDiscoverSearch = useCallback(
+    (query: string) => {
+      if (query.trim().length < 2) {
+        setDiscoverResults([]);
+        cancelRetry();
+        return;
       }
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      setDiscoverResults([]);
-    } finally {
-      if (!controller.signal.aborted) {
-        setSearching(false);
-      }
-    }
-  }, []);
+      retryExecute(async (signal) => {
+        const results = await searchMedia(query.trim(), "multi", 1, signal);
+        if (!signal.aborted) {
+          setDiscoverResults(results);
+        }
+      });
+    },
+    [retryExecute, cancelRetry],
+  );
 
   function handleSearchChange(value: string) {
     setSearchQuery(value);
