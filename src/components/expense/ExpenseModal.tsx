@@ -10,6 +10,8 @@ import type { ModalFile } from "@/components/common/GlobalActionModal";
 import { InputField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
+import Toast from "@/components/common/Toast";
+import type { ToastType } from "@/components/common/Toast";
 
 // --- Types ---
 
@@ -57,6 +59,16 @@ export default function ExpenseModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toastConfig, setToastConfig] = useState<{
+    isVisible: boolean;
+    message: string;
+    type: ToastType;
+  }>({ isVisible: false, message: "", type: "success" });
+
+  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
+    setToastConfig({ isVisible: true, message, type });
+    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
+  }, []);
 
   // File state
   const [newFiles, setNewFiles] = useState<{ file: File; tempId: string }[]>([]);
@@ -215,7 +227,7 @@ export default function ExpenseModal({
           ? { newFiles: newFiles.map((nf) => nf.file), removeDocIds: [...markedForRemoval], linkDocId: stagedLinkDocId ?? undefined }
           : undefined;
       await onSave({ item: item.trim(), seller: seller.trim(), cost: parsedCost, date, reason: reason.trim(), invoice: invoice.trim() }, expense, fileAction);
-      onClose();
+      triggerToast("✓ Saved", "success");
     } catch (err) { setError(err instanceof Error ? err.message : "Failed to save expense."); }
     finally { setIsSaving(false); }
   }
@@ -231,6 +243,8 @@ export default function ExpenseModal({
 
   return (
     <>
+      <Toast isVisible={toastConfig.isVisible} message={toastConfig.message} type={toastConfig.type} />
+
       <GlobalActionModal
         title={isEditing ? "Edit expense" : "Add expense"} onClose={onClose} isDirty={isDirty}
         files={files} selectedFileId={selectedFileId} onSelectFile={(id) => setSelectedFileId(id)}

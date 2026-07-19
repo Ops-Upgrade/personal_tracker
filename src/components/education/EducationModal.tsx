@@ -13,6 +13,8 @@ import { useModalDocumentState } from "@/lib/useModalDocumentState";
 import { InputField, SelectField, CheckboxField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
+import Toast from "@/components/common/Toast";
+import type { ToastType } from "@/components/common/Toast";
 import { docsForEducation, getUniqueFileName, trunc } from "./helpers";
 
 // --- Types ---
@@ -58,6 +60,18 @@ export default function EducationModal({
   const [isCompleted, setIsCompleted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // --- Toast ---
+  const [toastConfig, setToastConfig] = useState<{
+    isVisible: boolean;
+    message: string;
+    type: ToastType;
+  }>({ isVisible: false, message: "", type: "success" });
+
+  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
+    setToastConfig({ isVisible: true, message, type });
+    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
+  }, []);
 
   // --- Delete confirmation ---
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -398,7 +412,7 @@ export default function EducationModal({
         docsToDelete.length > 0 ? docsToDelete : undefined,
       );
 
-      onClose();
+      triggerToast("✓ Saved", "success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save education.");
     } finally {
@@ -503,6 +517,8 @@ export default function EducationModal({
   const hasFiles = files.length > 0;
   return (
     <>
+      <Toast isVisible={toastConfig.isVisible} message={toastConfig.message} type={toastConfig.type} />
+
       <GlobalActionModal
         title={education ? "Edit education" : "Add education"}
         onClose={onClose}

@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Priority, Task, TaskMode } from "@/types/taskmanager";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import { InputField, SelectField, CheckboxField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
+import Toast from "@/components/common/Toast";
+import type { ToastType } from "@/components/common/Toast";
 
 interface TaskDraft {
   name: string;
@@ -37,6 +39,16 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toastConfig, setToastConfig] = useState<{
+    isVisible: boolean;
+    message: string;
+    type: ToastType;
+  }>({ isVisible: false, message: "", type: "success" });
+
+  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
+    setToastConfig({ isVisible: true, message, type });
+    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
+  }, []);
 
   // ── Baseline: computed once, used by both reset AND dirty check ──
   const baseline = useMemo(() => ({
@@ -90,7 +102,7 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
         },
         task
       );
-      onClose();
+      triggerToast("✓ Saved", "success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save task.");
     } finally {
@@ -119,6 +131,8 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
 
   return (
     <>
+      <Toast isVisible={toastConfig.isVisible} message={toastConfig.message} type={toastConfig.type} />
+
       <GlobalActionModal
         title={task ? "Edit task" : "Add task"}
         onClose={onClose}

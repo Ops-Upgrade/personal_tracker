@@ -54,11 +54,7 @@ export function useNavigationGuard({
   const [pendingNavUrl, setPendingNavUrl] = useState<string | null>(null);
 
   const smartBack = useCallback(() => {
-    if (window.history.length > 2) {
-      router.back();
-    } else {
-      router.push(fallbackRoute);
-    }
+    router.push(fallbackRoute);
   }, [router, fallbackRoute]);
 
   const handleCancel = useCallback(() => {

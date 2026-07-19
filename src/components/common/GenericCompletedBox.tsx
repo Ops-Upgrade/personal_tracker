@@ -20,6 +20,8 @@ interface GenericCompletedBoxProps<T extends CompletedSummaryItem> {
   renderItem: (item: T) => ReactNode;
   /** Optional actions to render next to the title (e.g. + Add button) */
   headerActions?: ReactNode;
+  /** Optional column headers rendered above the item list (only when items exist) */
+  listHeader?: ReactNode;
 }
 
 export default function GenericCompletedBox<T extends CompletedSummaryItem>({
@@ -29,6 +31,7 @@ export default function GenericCompletedBox<T extends CompletedSummaryItem>({
   title = "Completed",
   renderItem,
   headerActions,
+  listHeader,
 }: GenericCompletedBoxProps<T>) {
   return (
     <BoxContainer>
@@ -55,6 +58,7 @@ export default function GenericCompletedBox<T extends CompletedSummaryItem>({
         {!isLoading && items.length === 0 && (
           <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
         )}
+        {!isLoading && items.length > 0 && listHeader}
         {!isLoading &&
           items.map((item) => renderItem(item))}
       </div>

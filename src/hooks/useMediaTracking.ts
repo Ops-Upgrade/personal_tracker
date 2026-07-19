@@ -9,7 +9,7 @@ import {
   deleteMedia,
 } from "@/api/media";
 import type { TmdbDetails, Media, MediaPlaintext } from "@/types/media";
-import type { ToastType } from "@/components/media/shared/Toast";
+import type { ToastType } from "@/components/common/Toast";
 
 export interface ToastConfig {
   isVisible: boolean;
@@ -144,6 +144,7 @@ export function useMediaTracking({
         if (localMedia) {
           const updated = await updateMedia(userId, localMedia.id, patch);
           setLocalMedia(updated);
+          triggerToast("✓ Saved", "success");
           return updated;
         }
 
@@ -151,6 +152,7 @@ export function useMediaTracking({
         if (dup) {
           const updated = await updateMedia(userId, dup.id, patch);
           setLocalMedia(updated);
+          triggerToast("✓ Saved", "success");
           return updated;
         }
 

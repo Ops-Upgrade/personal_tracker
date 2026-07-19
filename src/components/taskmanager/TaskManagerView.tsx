@@ -22,6 +22,7 @@ import ErrorBanner from "@/components/common/ErrorBanner";
 import type { Note, Task, TaskView } from "@/types/taskmanager";
 import type { Document } from "@/types/document";
 import { useNoteActions } from "@/hooks/useNoteActions";
+import { getUnifiedNotes } from "./helpers";
 import ActiveTasksBox from "./ActiveTasksBox";
 import CompletedTasksBox from "./CompletedTasksBox";
 import NoteModal from "./NoteModal";
@@ -96,6 +97,11 @@ export default function TaskManagerView() {
   const closeNoteModal = () => clearModalParam();
 
   // --- Derived ---
+
+  const unifiedNotes = useMemo(
+    () => getUnifiedNotes(notes, documents),
+    [notes, documents],
+  );
 
   const activeTasks = useMemo(
     () => tasks.filter((task) => !task.is_completed),
@@ -225,11 +231,18 @@ export default function TaskManagerView() {
           </Link>
 
           <NotesBox
-            notes={notes}
+            items={unifiedNotes}
             isLoading={isLoading}
             onAdd={openNewNote}
             onOpenExpanded={() => router.push(ROUTES.TASK_MANAGER_NOTES)}
-            onSelectNote={openEditNote}
+            onSelectNote={(item) =>
+              openEditNote(item.data)
+            }
+            onSelectDocument={(doc) =>
+              router.push(
+                `${ROUTES.TASK_MANAGER_STORE}#edit-document-${doc.id}`,
+              )
+            }
           />
         </div>
       </section>

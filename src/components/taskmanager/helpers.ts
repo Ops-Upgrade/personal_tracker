@@ -1,4 +1,5 @@
 import type { Task, Note, Priority } from "@/types/taskmanager";
+import type { Document } from "@/types/document";
 import { PRIORITIES } from "@/types/taskmanager";
 import { trunc } from "@/lib/viewHelpers";
 
@@ -39,4 +40,55 @@ export function getNoteTitle(note: Note): string {
   // Legacy fallback: first 60 chars of plain-text content, stripped of HTML
   const stripped = note.content?.replace(/<[^>]*>/g, "").trim() ?? "";
   return stripped ? trunc(stripped, 60) : "Untitled Note";
+}
+
+// ── Unified note + file records ────────────────────────────────────────────
+
+export type UnifiedNoteRecord =
+  | { type: "note"; id: string; data: Note; attachedDocs: Document[]; dateStr: string }
+  | { type: "file"; id: string; data: Document; dateStr: string };
+
+/**
+ * Merge notes and standalone (unlinked) documents into a single chronologically
+ * sorted array so both appear in the same list on the Task Manager dashboard
+ * and the "View All Notes" page.
+ */
+export function getUnifiedNotes(notes: Note[], documents: Document[]): UnifiedNoteRecord[] {
+  const docsByNoteId = new Map<string, Document[]>();
+  const standaloneDocs: Document[] = [];
+
+  for (const doc of documents) {
+    if (doc.domain !== "taskmanager") continue;
+    if (doc.linked_id) {
+      if (!docsByNoteId.has(doc.linked_id)) docsByNoteId.set(doc.linked_id, []);
+      docsByNoteId.get(doc.linked_id)!.push(doc);
+    } else {
+      standaloneDocs.push(doc);
+    }
+  }
+
+  const unified: UnifiedNoteRecord[] = [];
+
+  for (const note of notes) {
+    unified.push({
+      type: "note",
+      id: `note-${note.id}`,
+      data: note,
+      attachedDocs: docsByNoteId.get(note.id) ?? [],
+      dateStr: note.created_at,
+    });
+  }
+
+  for (const doc of standaloneDocs) {
+    unified.push({
+      type: "file",
+      id: `file-${doc.id}`,
+      data: doc,
+      dateStr: doc.created_at,
+    });
+  }
+
+  return unified.sort(
+    (a, b) => new Date(b.dateStr).getTime() - new Date(a.dateStr).getTime(),
+  );
 }

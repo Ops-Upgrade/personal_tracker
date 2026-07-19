@@ -9,6 +9,8 @@ import { useModalDocumentState } from "@/lib/useModalDocumentState";
 import { InputField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
+import Toast from "@/components/common/Toast";
+import type { ToastType } from "@/components/common/Toast";
 
 // --- Types ---
 
@@ -62,6 +64,16 @@ export default function MedicalModal({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toastConfig, setToastConfig] = useState<{
+    isVisible: boolean;
+    message: string;
+    type: ToastType;
+  }>({ isVisible: false, message: "", type: "success" });
+
+  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
+    setToastConfig({ isVisible: true, message, type });
+    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
+  }, []);
 
   // --- File state (from shared hook) ---
   const [markedForRemoval, setMarkedForRemoval] = useState<Set<string>>(new Set());
@@ -210,7 +222,7 @@ export default function MedicalModal({
         record,
         fileAction,
       );
-      onClose();
+      triggerToast("✓ Saved", "success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save medical record.");
     } finally {
@@ -332,6 +344,8 @@ export default function MedicalModal({
 
   return (
     <>
+      <Toast isVisible={toastConfig.isVisible} message={toastConfig.message} type={toastConfig.type} />
+
       <GlobalActionModal
         title={isEditing ? "Edit medical record" : "Add medical record"}
         onClose={onClose}

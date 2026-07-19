@@ -7,6 +7,8 @@ import GlobalActionModal from "@/components/common/GlobalActionModal";
 import type { ModalFile } from "@/components/common/GlobalActionModal";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import Toast from "@/components/common/Toast";
+import type { ToastType } from "@/components/common/Toast";
 import { getUniqueFileName } from "./helpers";
 
 // --- Types ---
@@ -75,6 +77,16 @@ export default function StoreDocumentModal({
     return null;
   });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [toastConfig, setToastConfig] = useState<{
+    isVisible: boolean;
+    message: string;
+    type: ToastType;
+  }>({ isVisible: false, message: "", type: "success" });
+
+  const triggerToast = (message: string, type: ToastType = "success") => {
+    setToastConfig({ isVisible: true, message, type });
+    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
+  };
 
   // --- Reset on open ---
   useEffect(() => {
@@ -228,7 +240,7 @@ export default function StoreDocumentModal({
         newParentRecord: newParentData || undefined,
         existingDocument: doc,
       });
-      onClose();
+      triggerToast("✓ Saved", "success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save document.");
     } finally {
@@ -250,6 +262,8 @@ export default function StoreDocumentModal({
 
   return (
     <>
+      <Toast isVisible={toastConfig.isVisible} message={toastConfig.message} type={toastConfig.type} />
+
       <GlobalActionModal
         title={isEditing ? "Edit Document" : "Add Document"}
         onClose={onClose}

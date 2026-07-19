@@ -30,7 +30,7 @@ import CollectionPicker from "@/components/media/shared/CollectionPicker";
 import ReviewSection from "@/components/media/shared/ReviewSection";
 import StickyActionBar from "@/components/media/shared/StickyActionBar";
 import UntrackConfirmation from "@/components/media/shared/UntrackConfirmation";
-import Toast from "@/components/media/shared/Toast";
+import Toast from "@/components/common/Toast";
 import { tmdbStillUrl } from "@/components/media/constants";
 import StatusBadge from "@/components/media/shared/StatusBadge";
 
