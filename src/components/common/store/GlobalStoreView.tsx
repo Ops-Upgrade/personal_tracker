@@ -92,6 +92,8 @@ interface GlobalStoreViewProps {
   /** Incremented by the parent page whenever it refreshes its own data
    *  (e.g. after a NoteModal unlink). Triggers GlobalStoreView to re-fetch. */
   refreshTrigger?: number;
+  /** When true, hides the "Add" button so no standalone documents can be created. */
+  disableAdd?: boolean;
 }
 
 export default function GlobalStoreView({
@@ -111,6 +113,7 @@ export default function GlobalStoreView({
   hideParentRecordsList = false,
   onDocumentSaved,
   refreshTrigger,
+  disableAdd = false,
 }: GlobalStoreViewProps) {
   const theme = DOMAIN_THEMES[domain];
 
@@ -486,6 +489,7 @@ export default function GlobalStoreView({
       fileName: d.label || "Unnamed Document",
       fileUrl: "",
       linkedItemName: parent ? parent.name : null,
+      isLinked: !!d.linked_id,
       thumbnailUrl: null,
       mime: d.file_mime || undefined,
     };
@@ -535,7 +539,7 @@ export default function GlobalStoreView({
             }
           }}
           onActionClick={handleActionClick}
-          onAdd={() => setModals((prev) => ({ ...prev, add: true }))}
+          onAdd={disableAdd ? undefined : () => setModals((prev) => ({ ...prev, add: true }))}
           title=""
           onRenameConfirmed={handleRenameConfirmed}
           selectionEnabled

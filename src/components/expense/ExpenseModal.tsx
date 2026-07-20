@@ -7,59 +7,71 @@ import { downloadDocumentFile } from "@/api/common/documentStorage";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import type { ModalFile } from "@/components/common/GlobalActionModal";
+import { useModalDocumentState } from "@/lib/useModalDocumentState";
 import { InputField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
 import type { ToastType } from "@/components/common/Toast";
-import { normalizeDateForInput } from "@/lib/utils";
+import { getUniqueFileName } from "@/lib/viewHelpers";
+import { stripHtml, normalizeDateForInput } from "@/lib/utils";
 
 // --- Types ---
 
-export interface ExpenseFileAction {
-  newFiles: File[];
-  removeDocIds: string[];
-  /** ID of an existing standalone document to link */
-  linkDocId?: string;
+export interface ExpenseDraft {
+  item: string;
+  seller: string;
+  cost: number;
+  date: string;
+  reason: string;
+  invoice: string;
 }
 
 interface ExpenseModalProps {
   expense: Expense | null;
   defaultDate?: string;
-  attachedDocuments: Document[];
-  /** All standalone (unlinked) expense documents — for the "link existing" dropdown */
-  standaloneDocuments: Document[];
+  documents: Document[];
   userId: string;
   onClose: () => void;
   onSave: (
-    draft: { item: string; seller: string; cost: number; date: string; reason: string; invoice: string },
+    draft: ExpenseDraft,
     existingExpense: Expense | null,
-    fileAction?: ExpenseFileAction,
+    pendingDoc?: { file: File; label: string },
+    pendingLinkDocId?: string,
+    pendingUnlinkDocIds?: string[],
+    pendingDeleteDocIds?: string[],
   ) => Promise<void>;
-  onDelete: (expenseId: string) => Promise<void>;
+  onDelete: (expenseId: string, cascadeMode: "unlink" | "cascade") => Promise<void>;
+  onDownloadDocument: (document: Document) => Promise<void>;
   zClassName?: string;
 }
+
+// ============================================================
+// Main Modal
+// ============================================================
 
 export default function ExpenseModal({
   expense,
   defaultDate,
-  attachedDocuments,
-  standaloneDocuments,
+  documents,
   userId,
   onClose,
   onSave,
   onDelete,
+  onDownloadDocument,
   zClassName,
 }: ExpenseModalProps) {
-  const [item, setItem] = useState(expense?.item ?? "");
-  const [seller, setSeller] = useState(expense?.seller ?? "");
-  const [cost, setCost] = useState(expense?.cost != null ? String(expense.cost) : "");
-  const [date, setDate] = useState(expense?.date ?? defaultDate ?? "");
-  const [reason, setReason] = useState(expense?.reason ?? "");
-  const [invoice, setInvoice] = useState(expense?.invoice ?? "");
+  // --- Form state ---
+  const [item, setItem] = useState("");
+  const [seller, setSeller] = useState("");
+  const [cost, setCost] = useState("");
+  const [date, setDate] = useState("");
+  const [reason, setReason] = useState("");
+  const [invoice, setInvoice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // --- Toast ---
   const [toastConfig, setToastConfig] = useState<{
     isVisible: boolean;
     message: string;
@@ -71,209 +83,451 @@ export default function ExpenseModal({
     setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
   }, []);
 
-  // File state
-  const [newFiles, setNewFiles] = useState<{ file: File; tempId: string }[]>([]);
-  const [markedForRemoval, setMarkedForRemoval] = useState<Set<string>>(new Set());
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
-  const [stagedLinkDocId, setStagedLinkDocId] = useState<string | null>(null);
-  const [linkSearchQuery, setLinkSearchQuery] = useState("");
-  const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
+  // --- Delete confirmation ---
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const isEditing = Boolean(expense);
+  // --- Document management ---
+  const [newFiles, setNewFiles] = useState<{ file: File; label: string; tempId: string }[]>([]);
+  const [markedForDeletion, setMarkedForDeletion] = useState<Set<string>>(new Set());
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(() => {
+    if (!expense) return null;
+    const docs = documents.filter(
+      (d) => d.domain === "expense" && d.linked_id === expense.id
+    );
+    return docs.length > 0 ? docs[0].id : null;
+  });
 
-  const baseline = useMemo(() => ({
-    item: expense?.item ?? "",
-    seller: expense?.seller ?? "",
-    cost: expense?.cost != null ? String(expense.cost) : "",
-    date: normalizeDateForInput(expense?.date, defaultDate ?? ""),
-    reason: expense?.reason ?? "",
-    invoice: expense?.invoice ?? "",
-  }), [expense, defaultDate]);
+  // Moved up: needed by the hook below
+  const linkedDocs = useMemo(
+    () =>
+      expense
+        ? documents.filter(
+            (d) => d.domain === "expense" && d.linked_id === expense.id
+          )
+        : [],
+    [expense, documents]
+  );
+  const standaloneDocs = documents.filter(
+    (d) => d.domain === "expense" && !d.linked_id
+  );
 
+  // Shared file state and handlers (download/preview/rename)
+  const {
+    handleFileDownload: hookHandleFileDownload,
+    handleFileRename: hookHandleFileRename,
+    handleLoadPreview: hookHandleLoadPreview,
+    resetFileState: hookResetFileState,
+  } = useModalDocumentState({
+    attachedDocuments: linkedDocs,
+    standaloneDocuments: standaloneDocs,
+    userId,
+    markedForRemoval: markedForDeletion,
+  });
+
+  // --- Reset on open ---
   useEffect(() => {
-    setItem(baseline.item); setSeller(baseline.seller); setCost(baseline.cost);
-    setDate(baseline.date); setReason(baseline.reason); setInvoice(baseline.invoice);
-    setIsSaving(false); setError(null); setShowDeleteConfirm(false);
-    setNewFiles([]); setMarkedForRemoval(new Set()); setSelectedFileId(null);
-    setStagedLinkDocId(null); setLinkSearchQuery(""); setLinkDropdownOpen(false);
-  }, [baseline]);
+    setItem(expense?.item ?? "");
+    setSeller(expense?.seller ?? "");
+    setCost(expense?.cost != null ? String(expense.cost) : "");
+    setDate(normalizeDateForInput(expense?.date, defaultDate ?? ""));
+    setReason(expense?.reason ?? "");
+    setInvoice(expense?.invoice ?? "");
+    setError(null);
+    setShowDeleteConfirm(false);
+    setNewFiles([]);
+    setMarkedForDeletion(new Set());
+    hookResetFileState();
+    const existingDocs = expense
+      ? documents.filter(
+          (d) => d.domain === "expense" && d.linked_id === expense.id
+        )
+      : [];
+    setSelectedDocId(existingDocs.length > 0 ? existingDocs[0].id : null);
+  }, [expense, documents, defaultDate, hookResetFileState]);
+
+  // ── Baseline form values ──
+  const formBaseline = useMemo(
+    () => ({
+      item: expense?.item ?? "",
+      seller: expense?.seller ?? "",
+      cost: expense?.cost != null ? String(expense.cost) : "",
+      date: normalizeDateForInput(expense?.date, defaultDate ?? ""),
+      reason: expense?.reason ?? "",
+      invoice: expense?.invoice ?? "",
+    }),
+    [expense, defaultDate]
+  );
+
+  // --- Dirty check ---
+
+  const hasFormChanges =
+    item !== formBaseline.item ||
+    seller !== formBaseline.seller ||
+    cost !== formBaseline.cost ||
+    date !== formBaseline.date ||
+    stripHtml(reason) !== stripHtml(formBaseline.reason) ||
+    invoice !== formBaseline.invoice;
 
   const isDirty =
-    item !== baseline.item || seller !== baseline.seller || cost !== baseline.cost ||
-    date !== baseline.date || reason !== baseline.reason || invoice !== baseline.invoice ||
-    newFiles.length > 0 || markedForRemoval.size > 0 || stagedLinkDocId !== null;
+    hasFormChanges ||
+    newFiles.length > 0 ||
+    markedForDeletion.size > 0;
 
-  // --- Files array ---
+  // --- Build files array for GlobalActionModal ---
+
   const files: ModalFile[] = useMemo(() => {
-    const result: ModalFile[] = [];
-    for (const doc of attachedDocuments) {
-      if (markedForRemoval.has(doc.id)) continue;
-      result.push({ id: doc.id, name: doc.label || doc.file_name || "Unnamed", mime: doc.file_mime, iv: doc.file_iv });
+    type FileEntry = {
+      id: string;
+      rawName: string;
+      mime?: string;
+      iv?: string;
+      file?: File | null;
+      isNew?: boolean;
+      isMarkedForDeletion?: boolean;
+      orderGroup: number;
+      orderIndex: number;
+    };
+
+    const entries: FileEntry[] = [];
+
+    // Existing linked docs
+    let idx = 0;
+    for (const doc of linkedDocs) {
+      const isDeletion = markedForDeletion.has(doc.id);
+      entries.push({
+        id: doc.id,
+        rawName: doc.label || "Unnamed Document",
+        mime: doc.file_mime,
+        iv: doc.file_iv,
+        isMarkedForDeletion: isDeletion || undefined,
+        orderGroup: 0,
+        orderIndex: idx++,
+      });
     }
+
+    // Newly uploaded files (unsaved)
+    idx = 0;
     for (const nf of newFiles) {
-      result.push({ id: nf.tempId, name: nf.file.name, mime: nf.file.type, file: nf.file, isNew: true });
+      entries.push({
+        id: nf.tempId,
+        rawName: nf.label,
+        mime: nf.file.type,
+        file: nf.file,
+        isNew: true,
+        orderGroup: 1,
+        orderIndex: idx++,
+      });
     }
-    if (stagedLinkDocId) {
-      const sd = standaloneDocuments.find((d) => d.id === stagedLinkDocId);
-      if (sd) result.push({ id: sd.id, name: sd.label || sd.file_name || "Unnamed", mime: sd.file_mime, iv: sd.file_iv, isNew: true });
+
+    // Deduplicate names
+    const buckets = new Map<string, FileEntry[]>();
+    for (const e of entries) {
+      if (!buckets.has(e.rawName)) buckets.set(e.rawName, []);
+      buckets.get(e.rawName)!.push(e);
     }
+
+    const result: ModalFile[] = [];
+    for (const [, bucket] of buckets) {
+      bucket.sort(
+        (a, b) => a.orderGroup - b.orderGroup || a.orderIndex - b.orderIndex
+      );
+      if (bucket.length === 1) {
+        const e = bucket[0];
+        result.push({
+          id: e.id,
+          name: e.rawName,
+          mime: e.mime,
+          iv: e.iv,
+          file: e.file,
+          isNew: e.isNew,
+          isMarkedForDeletion: e.isMarkedForDeletion,
+        });
+      } else {
+        bucket.forEach((e, i) => {
+          result.push({
+            id: e.id,
+            name: `${e.rawName} (${i + 1})`,
+            mime: e.mime,
+            iv: e.iv,
+            file: e.file,
+            isNew: e.isNew,
+            isMarkedForDeletion: e.isMarkedForDeletion,
+          });
+        });
+      }
+    }
+
     return result;
-  }, [attachedDocuments, newFiles, markedForRemoval, stagedLinkDocId, standaloneDocuments]);
+  }, [linkedDocs, newFiles, markedForDeletion]);
 
-  // --- File handlers ---
-  const handleFileUpload = useCallback((file: File) => {
-    const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    setNewFiles((prev) => [...prev, { file, tempId }]);
-    setSelectedFileId(null);
-  }, []);
+  // --- File action handlers ---
 
-  const handleFileDelete = useCallback((fileId: string) => {
-    if (stagedLinkDocId === fileId) { setStagedLinkDocId(null); if (selectedFileId === fileId) setSelectedFileId(null); return; }
-    const nf = newFiles.find((x) => x.tempId === fileId);
-    if (nf) { setNewFiles((prev) => prev.filter((x) => x.tempId !== fileId)); if (selectedFileId === fileId) setSelectedFileId(null); return; }
-    setMarkedForRemoval((prev) => { const next = new Set(prev); if (next.has(fileId)) next.delete(fileId); else next.add(fileId); return next; });
-  }, [newFiles, selectedFileId, stagedLinkDocId]);
+  const handleFileDelete = (fileId: string) => {
+    const newFile = newFiles.find((nf) => nf.tempId === fileId);
+    if (newFile) {
+      setNewFiles((prev) => prev.filter((nf) => nf.tempId !== fileId));
+      if (selectedDocId === fileId) setSelectedDocId(null);
+      return;
+    }
 
-  const handleFileDownload = useCallback(async (fileId: string) => {
-    const nf = newFiles.find((x) => x.tempId === fileId);
-    if (nf) { const url = URL.createObjectURL(nf.file); const a = document.createElement("a"); a.href = url; a.download = nf.file.name; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url); return; }
-    const doc = attachedDocuments.find((d) => d.id === fileId);
-    if (!doc?.file_name || !doc.file_iv || !doc.file_mime) return;
-    try {
-      const blob = await downloadDocumentFile(userId, doc.file_name, doc.file_iv, doc.file_mime);
-      const url = URL.createObjectURL(blob); const a = document.createElement("a");
-      a.href = url; a.download = doc.label || "document"; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-    } catch (err: unknown) { alert(err instanceof Error ? err.message : "Failed to download."); }
-  }, [newFiles, attachedDocuments, userId]);
+    setMarkedForDeletion((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  };
 
-  const handleLoadPreview = useCallback(async (fileId: string): Promise<Blob> => {
-    const nf = newFiles.find((x) => x.tempId === fileId); if (nf) return nf.file;
-    const doc = attachedDocuments.find((d) => d.id === fileId);
-    if (!doc?.file_name || !doc.file_iv || !doc.file_mime) throw new Error("Cannot load preview.");
-    return downloadDocumentFile(userId, doc.file_name, doc.file_iv, doc.file_mime);
-  }, [newFiles, attachedDocuments, userId]);
+  const handleFileDownloadWrapped = async (fileId: string) => {
+    const newFile = newFiles.find((nf) => nf.tempId === fileId);
+    if (newFile) {
+      const url = URL.createObjectURL(newFile.file);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = newFile.label;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
 
-  const handleFileRename = useCallback((fileId: string, newName: string) => {
-    const nf = newFiles.find((x) => x.tempId === fileId);
-    if (nf) { const renamed = new File([nf.file], newName, { type: nf.file.type, lastModified: nf.file.lastModified }); setNewFiles((prev) => prev.map((x) => x.tempId === fileId ? { ...x, file: renamed } : x)); }
-  }, [newFiles]);
+    const doc = [...linkedDocs, ...documents].find((d) => d.id === fileId);
+    if (doc) {
+      try {
+        await onDownloadDocument(doc);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : "Failed to download document.");
+      }
+      return;
+    }
 
-  // --- Link dropdown ---
-  const availableStandalone = useMemo(() => {
-    const linked = new Set(attachedDocuments.map((d) => d.id));
-    return standaloneDocuments.filter((d) => !linked.has(d.id) && d.id !== stagedLinkDocId);
-  }, [standaloneDocuments, attachedDocuments, stagedLinkDocId]);
+    await hookHandleFileDownload(fileId);
+  };
 
-  const filteredLinkDocs = useMemo(() => {
-    if (!linkSearchQuery.trim()) return availableStandalone;
-    const q = linkSearchQuery.toLowerCase();
-    return availableStandalone.filter((d) => (d.label || "").toLowerCase().includes(q) || (d.file_name || "").toLowerCase().includes(q));
-  }, [availableStandalone, linkSearchQuery]);
+  const handleFileRenameWrapped = (fileId: string, newName: string) => {
+    const newFile = newFiles.find((nf) => nf.tempId === fileId);
+    if (newFile) {
+      setNewFiles((prev) =>
+        prev.map((nf) =>
+          nf.tempId === fileId ? { ...nf, label: newName } : nf
+        )
+      );
+      return;
+    }
 
-  const stagedLinkDoc = stagedLinkDocId ? standaloneDocuments.find((d) => d.id === stagedLinkDocId) : null;
-  const stagedLinkLabel = stagedLinkDoc ? (stagedLinkDoc.label || stagedLinkDoc.file_name || "Unnamed") : null;
-  const linkDisplayValue = stagedLinkDocId ? (stagedLinkLabel ?? "") : linkSearchQuery;
+    hookHandleFileRename(fileId, newName);
+  };
 
-  const linkDropdownExtras = useMemo(() => {
-    if (availableStandalone.length === 0 && !stagedLinkDocId) return null;
-    return (
-      <div className="relative w-full">
-        <span className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">Select a file from the store</span>
-        <div className="relative flex items-center">
-          <input
-            type="text"
-            value={linkDisplayValue.length > 55 ? linkDisplayValue.slice(0, 55) + "…" : linkDisplayValue}
-            onChange={(e) => { if (stagedLinkDocId) setStagedLinkDocId(null); setLinkSearchQuery(e.target.value); if (!linkDropdownOpen) setLinkDropdownOpen(true); }}
-            onFocus={() => { if (!linkDropdownOpen) setLinkDropdownOpen(true); }}
-            onBlur={() => setTimeout(() => setLinkDropdownOpen(false), 150)}
-            placeholder="Select file..." disabled={isSaving}
-            className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 pr-7 text-xs outline-none focus:border-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-          />
-          <button type="button" tabIndex={-1} onClick={() => setLinkDropdownOpen((prev) => !prev)} disabled={isSaving}
-            className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-50">
-            <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-            </svg>
-          </button>
-        </div>
-        {linkDropdownOpen && (
-          <div className="absolute z-10 mt-1 w-full rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
-            {filteredLinkDocs.length > 0 ? (
-              <div className="max-h-36 overflow-y-auto">
-                {filteredLinkDocs.map((doc) => (
-                  <button key={doc.id} type="button" onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => { setStagedLinkDocId(doc.id); setLinkSearchQuery(""); setLinkDropdownOpen(false); setSelectedFileId(null); }}
-                    className="w-full px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-zinc-300 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400">
-                    {(doc.label || doc.file_name || "Unnamed").length > 55 ? (doc.label || doc.file_name || "Unnamed").slice(0, 55) + "…" : (doc.label || doc.file_name || "Unnamed")}
-                  </button>
-                ))}
-              </div>
-            ) : <div className="px-3 py-2 text-xs text-zinc-400">{linkSearchQuery ? "No documents found" : "No documents available"}</div>}
-          </div>
-        )}
-      </div>
-    );
-  }, [availableStandalone.length, stagedLinkDocId, linkDisplayValue, linkDropdownOpen, filteredLinkDocs, linkSearchQuery, isSaving]);
+  const handleLoadPreviewWrapped = async (fileId: string): Promise<Blob> => {
+    const newFile = newFiles.find((nf) => nf.tempId === fileId);
+    if (newFile) return newFile.file;
 
-  // --- Save ---
-  async function handleSave() {
-    if (!item.trim()) { setError("Item name is required."); return; }
-    const parsedCost = parseFloat(cost);
-    if (isNaN(parsedCost) || parsedCost < 0) { setError("Please enter a valid cost."); return; }
-    if (!date) { setError("Date is required."); return; }
-    setIsSaving(true); setError(null);
-    try {
-      const fileAction: ExpenseFileAction | undefined =
-        newFiles.length > 0 || markedForRemoval.size > 0 || stagedLinkDocId
-          ? { newFiles: newFiles.map((nf) => nf.file), removeDocIds: [...markedForRemoval], linkDocId: stagedLinkDocId ?? undefined }
-          : undefined;
-      await onSave({ item: item.trim(), seller: seller.trim(), cost: parsedCost, date, reason: reason.trim(), invoice: invoice.trim() }, expense, fileAction);
-      triggerToast("✓ Saved", "success");
-    } catch (err) { setError(err instanceof Error ? err.message : "Failed to save expense."); }
-    finally { setIsSaving(false); }
-  }
+    const doc = [...linkedDocs, ...documents].find((d) => d.id === fileId);
+    if (doc?.file_name && doc?.file_iv) {
+      return downloadDocumentFile(
+        userId,
+        doc.file_name,
+        doc.file_iv,
+        doc.file_mime ?? "application/octet-stream"
+      );
+    }
 
-  async function handleDelete() { if (!expense) return; setShowDeleteConfirm(true); }
-  async function confirmDelete() {
+    return hookHandleLoadPreview(fileId);
+  };
+
+  const handleFileUpload = (file: File) => {
+    const taken = new Set<string>();
+    for (const doc of documents) {
+      if (
+        linkedDocs.some((ld) => ld.id === doc.id) &&
+        !markedForDeletion.has(doc.id)
+      ) {
+        if (doc.label) taken.add(doc.label);
+      }
+    }
+
+    setNewFiles((prev) => {
+      for (const nf of prev) taken.add(nf.label);
+      const label = getUniqueFileName(file.name, taken);
+      const tempId = `new-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      return [...prev, { file, label, tempId }];
+    });
+
+    setSelectedDocId(null);
+  };
+
+  // --- Delete handler ---
+  async function handleDelete() {
     if (!expense) return;
-    try { await onDelete(expense.id); setShowDeleteConfirm(false); onClose(); }
-    catch (err) { setError(err instanceof Error ? err.message : "Failed to delete expense."); }
+    setShowDeleteConfirm(true);
   }
+
+  // --- Save handler ---
+  const handleSaveWithFullProcessing = async () => {
+    if (!item.trim()) {
+      setError("Item name is required.");
+      return;
+    }
+    const parsedCost = parseFloat(cost);
+    if (isNaN(parsedCost) || parsedCost < 0) {
+      setError("Please enter a valid cost.");
+      return;
+    }
+    if (!date) {
+      setError("Date is required.");
+      return;
+    }
+
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const docsToDelete = [...markedForDeletion];
+      const firstNewFile = newFiles[0];
+      const pendingDoc = firstNewFile
+        ? { file: firstNewFile.file, label: firstNewFile.label }
+        : undefined;
+
+      await onSave(
+        {
+          item: item.trim(),
+          seller: seller.trim(),
+          cost: parsedCost,
+          date,
+          reason: reason.trim(),
+          invoice: invoice.trim(),
+        },
+        expense,
+        pendingDoc,
+        undefined,
+        undefined,
+        docsToDelete.length > 0 ? docsToDelete : undefined,
+      );
+
+      triggerToast("✓ Saved", "success");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to save expense."
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // --- Render ---
 
   const hasFiles = files.length > 0;
-
   return (
     <>
       <Toast isVisible={toastConfig.isVisible} message={toastConfig.message} type={toastConfig.type} />
 
       <GlobalActionModal
-        title={isEditing ? "Edit expense" : "Add expense"} onClose={onClose} isDirty={isDirty}
-        files={files} selectedFileId={selectedFileId} onSelectFile={(id) => setSelectedFileId(id)}
-        onFileUpload={handleFileUpload} onFileDelete={hasFiles ? handleFileDelete : undefined}
-        onFileDownload={hasFiles ? handleFileDownload : undefined}
-        onFileRename={hasFiles ? handleFileRename : undefined}
-        onLoadPreview={hasFiles ? handleLoadPreview : undefined}
-        onSave={handleSave} isSaving={isSaving}
-        onDelete={isEditing ? handleDelete : undefined} deleteLabel="Delete"
-        rightPanelExtras={linkDropdownExtras} zClassName={zClassName}
+        title={expense ? "Edit expense" : "Add expense"}
+        onClose={onClose}
+        isDirty={isDirty}
+        files={files}
+        selectedFileId={selectedDocId}
+        onSelectFile={(id) => setSelectedDocId(id)}
+        onFileDelete={hasFiles ? handleFileDelete : undefined}
+        onFileDownload={hasFiles ? handleFileDownloadWrapped : undefined}
+        onFileRename={hasFiles ? handleFileRenameWrapped : undefined}
+        onFileUpload={handleFileUpload}
+        onLoadPreview={handleLoadPreviewWrapped}
+        onSave={handleSaveWithFullProcessing}
+        isSaving={isSaving}
+        onDelete={expense ? handleDelete : undefined}
+        deleteLabel="Delete"
+        zClassName={zClassName}
       >
-        <div className="space-y-3">
-          <InputField label="Item" value={item} onChange={setItem} disabled={isSaving} />
-          <InputField label="Seller" value={seller} onChange={setSeller} disabled={isSaving} />
+        <div className="flex flex-col h-full space-y-3">
+          <InputField
+            label="Item"
+            value={item}
+            onChange={setItem}
+            disabled={isSaving}
+          />
+          <InputField
+            label="Seller"
+            value={seller}
+            onChange={setSeller}
+            disabled={isSaving}
+          />
           <div className="grid gap-3 sm:grid-cols-2">
-            <InputField label="Cost (₹)" type="number" min="0" step="0.01" value={cost} onChange={setCost} disabled={isSaving} />
-            <InputField label="Date" type="date" value={date} onChange={setDate} disabled={isSaving} />
+            <InputField
+              label="Cost (₹)"
+              type="number"
+              min="0"
+              step="0.01"
+              value={cost}
+              onChange={setCost}
+              disabled={isSaving}
+            />
+            <InputField
+              label="Date"
+              type="date"
+              value={date}
+              onChange={setDate}
+              disabled={isSaving}
+            />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">Reason</label>
-            <RichTextEditor value={reason} onChange={setReason} disabled={isSaving} minHeight="6rem" />
+            <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              Reason
+            </label>
+            <RichTextEditor
+              value={reason}
+              onChange={setReason}
+              disabled={isSaving}
+              minHeight="6rem"
+            />
           </div>
+          <InputField
+            label="Invoice (optional)"
+            value={invoice}
+            onChange={setInvoice}
+            disabled={isSaving}
+            placeholder="Invoice number or reference"
+          />
+
           {error && <ErrorBanner message={error} />}
         </div>
       </GlobalActionModal>
+
+      {/* Delete confirmation */}
       {showDeleteConfirm && expense && (
-        <ConfirmDialog title="Delete expense?" description="This action cannot be undone. The expense will be permanently removed."
-          onCancel={() => setShowDeleteConfirm(false)} onConfirm={confirmDelete} />
+        <ConfirmDialog
+          title="Delete expense?"
+          description={
+            linkedDocs.length > 0
+              ? `This expense has ${linkedDocs.length} linked file(s).`
+              : "Are you sure you want to delete this expense? This cannot be undone."
+          }
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          showDeleteFilesCheckbox={linkedDocs.length > 0}
+          deleteFilesLabel="Delete associated files"
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={async (deleteFiles) => {
+            setShowDeleteConfirm(false);
+            setIsSaving(true);
+            try {
+              await onDelete(
+                expense.id,
+                deleteFiles ? "cascade" : "unlink"
+              );
+              onClose();
+            } catch (err) {
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : "Failed to delete expense."
+              );
+            } finally {
+              setIsSaving(false);
+            }
+          }}
+        />
       )}
     </>
   );

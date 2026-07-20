@@ -4,26 +4,17 @@ import { Suspense, useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import {
-  createExpense,
-  deleteExpense,
   fetchExpenses,
-  updateExpense,
 } from "@/api/expense";
 import {
   fetchDocuments,
-  createDocument,
-  updateDocument,
-  deleteDocument,
 } from "@/api/common/documents";
-import {
-  uploadDocumentFile,
-  deleteDocumentFile,
-} from "@/api/common/documentStorage";
 import { ROUTES } from "@/routes/paths";
-import type { Expense, ExpensePlaintext, ExpenseViewMode } from "@/types/expense";
-import type { Document, DocumentPlaintext } from "@/types/document";
+import type { Expense, ExpenseViewMode } from "@/types/expense";
+import type { Document } from "@/types/document";
 import { MONTHS } from "@/types/expense";
 import { useLocalStorage } from "@/lib/useLocalStorage";
+import { useExpenseActions } from "@/hooks/useExpenseActions";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import { RectangleVertical, Columns2 } from "lucide-react";
@@ -64,6 +55,14 @@ function AllExpensesContent() {
   const { userId, isLoading, error, refreshData } =
     useAuthBootstrap({ loadData });
 
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    await refreshData(userId);
+  }, [userId, refreshData]);
+
+  const { handleExpenseSave, handleExpenseDelete, handleDownloadDocument } =
+    useExpenseActions({ userId, refresh });
+
   const [viewMode, setViewMode] = useLocalStorage<ExpenseViewMode>("expenseViewMode", "single");
   const [selectedYear, setSelectedYear] = useState(yearFilter ?? new Date().getFullYear());
   const [expenseModalTarget, setExpenseModalTarget] = useState<Expense | null>(null);
@@ -102,119 +101,6 @@ function AllExpensesContent() {
   };
 
   const closeExpenseModal = () => setExpenseModalTarget(null);
-
-  async function handleExpenseSave(
-    draft: {
-      item: string;
-      seller: string;
-      cost: number;
-      date: string;
-      reason: string;
-      invoice: string;
-    },
-    existingExpense: Expense | null,
-    fileAction?: { newFiles: File[]; removeDocIds: string[]; linkDocId?: string },
-  ) {
-    if (!userId) throw new Error("No active session.");
-
-    const nowIso = new Date().toISOString();
-    let document_ids = [...(existingExpense?.document_ids ?? [])];
-
-    if (fileAction?.removeDocIds) {
-      for (const docId of fileAction.removeDocIds) {
-        const doc = documents.find((d) => d.id === docId);
-        if (doc) {
-          if (doc.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-          }
-          try { await deleteDocument(docId); } catch { /* best-effort */ }
-        }
-        document_ids = document_ids.filter((id) => id !== docId);
-      }
-    }
-
-    if (fileAction?.newFiles) {
-      for (const file of fileAction.newFiles) {
-        const { fileName, iv, mimeType } = await uploadDocumentFile(userId, file);
-        const doc = await createDocument(userId, {
-          label: file.name,
-          file_name: fileName,
-          file_iv: iv,
-          file_mime: mimeType,
-          domain: "expense",
-          linked_id: existingExpense?.id ?? "",
-          updated_at: nowIso,
-        });
-        document_ids.push(doc.id);
-      }
-    }
-
-    if (fileAction?.linkDocId) {
-      const linkDoc = documents.find((d) => d.id === fileAction.linkDocId);
-      if (linkDoc && !document_ids.includes(fileAction.linkDocId)) {
-        document_ids.push(fileAction.linkDocId);
-        await updateDocument(userId, fileAction.linkDocId, {
-          ...linkDoc,
-          linked_id: existingExpense?.id ?? "",
-          updated_at: nowIso,
-        } as DocumentPlaintext);
-      }
-    }
-
-    const payload: ExpensePlaintext = {
-      item: draft.item, seller: draft.seller, cost: draft.cost,
-      date: draft.date, reason: draft.reason, invoice: draft.invoice,
-      document_ids, updated_at: nowIso,
-    };
-
-    let savedExpense: Expense;
-    if (existingExpense) {
-      savedExpense = await updateExpense(userId, existingExpense.id, payload);
-    } else {
-      savedExpense = await createExpense(userId, payload);
-    }
-
-    if (!existingExpense && fileAction?.newFiles && fileAction.newFiles.length > 0) {
-      const freshDocs = await fetchDocuments(userId);
-      for (const doc of freshDocs) {
-        if (doc.domain === "expense" && doc.linked_id === "" && document_ids.includes(doc.id)) {
-          await updateDocument(userId, doc.id, {
-            ...doc, linked_id: savedExpense.id, updated_at: new Date().toISOString(),
-          } as DocumentPlaintext);
-        }
-      }
-    }
-    if (!existingExpense && fileAction?.linkDocId) {
-      const linkDoc = documents.find((d) => d.id === fileAction.linkDocId);
-      if (linkDoc && linkDoc.linked_id === "") {
-        await updateDocument(userId, fileAction.linkDocId, {
-          ...linkDoc, linked_id: savedExpense.id, updated_at: new Date().toISOString(),
-        } as DocumentPlaintext);
-      }
-    }
-
-    await refreshData(userId);
-  }
-
-  async function handleExpenseDelete(expenseId: string) {
-    if (!userId) throw new Error("No active session.");
-
-    const expense = expenses.find((e) => e.id === expenseId);
-    if (expense?.document_ids) {
-      for (const docId of expense.document_ids) {
-        const doc = documents.find((d) => d.id === docId);
-        if (doc) {
-          if (doc.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-          }
-          try { await deleteDocument(docId); } catch { /* best-effort */ }
-        }
-      }
-    }
-
-    await deleteExpense(expenseId);
-    await refreshData(userId);
-  }
 
   return (
     <>
@@ -279,15 +165,15 @@ function AllExpensesContent() {
       )}
     </PageShell>
 
-      {expenseModalTarget && (
+      {expenseModalTarget && userId && (
         <ExpenseModal
           expense={expenseModalTarget}
-          attachedDocuments={documents.filter((d) => expenseModalTarget.document_ids?.includes(d.id))}
-          standaloneDocuments={documents.filter((d) => d.domain === "expense" && !d.linked_id)}
-          userId={userId ?? ""}
+          documents={documents}
+          userId={userId}
           onClose={closeExpenseModal}
           onSave={handleExpenseSave}
           onDelete={handleExpenseDelete}
+          onDownloadDocument={handleDownloadDocument}
         />
       )}
     </>

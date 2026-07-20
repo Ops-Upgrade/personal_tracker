@@ -29,6 +29,14 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, "").trim();
 }
 
+function PaperClipIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-5.7-1.477-1.477" />
+    </svg>
+  );
+}
+
 export default function NotesPage() {
   const router = useRouter();
   const [notes, setNotes] = useState<Note[]>([]);
@@ -126,10 +134,15 @@ export default function NotesPage() {
                     <div className="col-span-2 text-zinc-500 dark:text-zinc-400">
                       {formatShortDate(item.data.created_at)}
                     </div>
-                    <div className="col-span-2 text-zinc-500 dark:text-zinc-400">
-                      {item.attachedDocs.length > 0
-                        ? `${item.attachedDocs.length} file${item.attachedDocs.length !== 1 ? "s" : ""}`
-                        : "—"}
+                    <div className="col-span-2">
+                      {item.attachedDocs.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 text-sky-500" title={`${item.attachedDocs.length} document(s) attached`}>
+                          <PaperClipIcon className="h-4 w-4" />
+                          <span className="font-medium text-zinc-500 dark:text-zinc-400">({item.attachedDocs.length})</span>
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400">—</span>
+                      )}
                     </div>
                   </>
                 ) : (

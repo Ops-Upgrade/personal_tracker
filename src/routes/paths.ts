@@ -13,6 +13,7 @@ export const ROUTES = {
   PROFILE: "/settings/profile",
   EXPENSE: "/expense",
   EXPENSE_ALL: "/expense/all",
+  EXPENSE_STORE: "/expense/store",
   EDUCATION: "/education",
   EDUCATION_COMPLETED: "/education/completed",
   EDUCATION_STORE: "/education/store",

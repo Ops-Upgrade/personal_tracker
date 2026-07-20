@@ -74,7 +74,7 @@ export default function MonthRow({
         ) : undefined
       }
     >
-      <ExpenseTable expenses={preview} onSelectExpense={onSelectExpense} />
+      <ExpenseTable expenses={preview} onSelectExpense={onSelectExpense} disableSorting />
     </MonthTile>
   );
 }

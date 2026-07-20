@@ -27,6 +27,8 @@ export interface DocumentTile {
   fileUrl?: string;
   thumbnailUrl?: string | null;
   linkedItemName?: string | null;
+  /** When true, a linked indicator icon is shown even if linkedItemName is null. */
+  isLinked?: boolean;
   /** MIME type (e.g. "application/pdf"). When provided, used for icon resolution instead of filename extension. */
   mime?: string;
 }
@@ -384,7 +386,7 @@ export default function TileView({
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        {doc.linkedItemName && (
+                        {(doc.linkedItemName || doc.isLinked) && (
                           <LinkIcon className={`h-4 w-4 shrink-0 ${theme.icon}`} />
                         )}
                       </div>
@@ -467,7 +469,7 @@ export default function TileView({
                     )}
 
                     {/* Linked indicator — bottom-right of thumbnail, above footer */}
-                    {doc.linkedItemName && (
+                    {(doc.linkedItemName || doc.isLinked) && (
                       <div className="absolute bottom-2 right-2 flex items-center justify-center rounded-full bg-white/90 p-1.5 shadow-sm backdrop-blur-sm dark:bg-zinc-900/90">
                         <LinkIcon className={`h-4 w-4 ${theme.icon}`} />
                       </div>
@@ -563,10 +565,10 @@ export default function TileView({
       )}
 
       {/* Delete Confirmation Modal */}
-      {docToDelete && docToDelete.linkedItemName ? (
+      {docToDelete && (docToDelete.linkedItemName || docToDelete.isLinked) ? (
         <ConfirmDialog
           title="Delete document?"
-          description={`This document is linked to '${docToDelete.linkedItemName}'.`}
+          description={`This document is linked to ${docToDelete.linkedItemName ? `'${docToDelete.linkedItemName}'` : 'an associated record'}.`}
           confirmLabel="Delete"
           cancelLabel="Cancel"
           showDeleteFilesCheckbox

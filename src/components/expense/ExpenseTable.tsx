@@ -66,6 +66,8 @@ function SortableHeader({
 interface ExpenseTableProps {
   expenses: Expense[];
   onSelectExpense: (expense: Expense) => void;
+  /** When true, column headers are rendered as plain text (no sort controls). */
+  disableSorting?: boolean;
 }
 
 /**
@@ -76,6 +78,7 @@ interface ExpenseTableProps {
 export default function ExpenseTable({
   expenses,
   onSelectExpense,
+  disableSorting = false,
 }: ExpenseTableProps) {
   const [sortState, setSortState] = useLocalStorage<SortState | null>("expenseTableSortState", null);
 
@@ -93,7 +96,7 @@ export default function ExpenseTable({
   }
 
   const sorted = useMemo(() => {
-    if (!sortState) return expenses;
+    if (disableSorting || !sortState) return expenses;
     const { column, direction } = sortState;
     const sorted = [...expenses].sort((a, b) => {
       let aVal: string | number;
@@ -129,7 +132,7 @@ export default function ExpenseTable({
       return 0;
     });
     return sorted;
-  }, [expenses, sortState]);
+  }, [expenses, sortState, disableSorting]);
 
   if (expenses.length === 0) {
     return (
@@ -144,42 +147,55 @@ export default function ExpenseTable({
       <table className="w-full text-left text-xs">
         <thead>
           <tr className="border-b border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            <SortableHeader
-              label="Item"
-              column="item"
-              sortState={sortState}
-              onClick={handleSort}
-              className="pb-2 pr-3 font-medium"
-            />
-            <SortableHeader
-              label="Seller"
-              column="seller"
-              sortState={sortState}
-              onClick={handleSort}
-              className="pb-2 pr-3 font-medium"
-            />
-            <SortableHeader
-              label="Cost"
-              column="cost"
-              sortState={sortState}
-              onClick={handleSort}
-              className="pb-2 pr-3 font-medium text-right"
-            />
-            <SortableHeader
-              label="Date"
-              column="date"
-              sortState={sortState}
-              onClick={handleSort}
-              className="pb-2 pr-3 font-medium"
-            />
-            <SortableHeader
-              label="Reason"
-              column="reason"
-              sortState={sortState}
-              onClick={handleSort}
-              className="pb-2 pr-3 font-medium"
-            />
-            <th className="pb-2 font-medium">Invoice</th>
+            {disableSorting ? (
+              <>
+                <th className="pb-2 pr-3 font-medium">Item</th>
+                <th className="pb-2 pr-3 font-medium">Seller</th>
+                <th className="pb-2 pr-3 font-medium text-right">Cost</th>
+                <th className="pb-2 pr-3 font-medium">Date</th>
+                <th className="pb-2 pr-3 font-medium">Reason</th>
+                <th className="pb-2 font-medium text-center">Invoice</th>
+              </>
+            ) : (
+              <>
+                <SortableHeader
+                  label="Item"
+                  column="item"
+                  sortState={sortState}
+                  onClick={handleSort}
+                  className="pb-2 pr-3 font-medium"
+                />
+                <SortableHeader
+                  label="Seller"
+                  column="seller"
+                  sortState={sortState}
+                  onClick={handleSort}
+                  className="pb-2 pr-3 font-medium"
+                />
+                <SortableHeader
+                  label="Cost"
+                  column="cost"
+                  sortState={sortState}
+                  onClick={handleSort}
+                  className="pb-2 pr-3 font-medium text-right"
+                />
+                <SortableHeader
+                  label="Date"
+                  column="date"
+                  sortState={sortState}
+                  onClick={handleSort}
+                  className="pb-2 pr-3 font-medium"
+                />
+                <SortableHeader
+                  label="Reason"
+                  column="reason"
+                  sortState={sortState}
+                  onClick={handleSort}
+                  className="pb-2 pr-3 font-medium"
+                />
+                <th className="pb-2 font-medium text-center">Invoice</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -190,10 +206,10 @@ export default function ExpenseTable({
               className="cursor-pointer border-b border-zinc-100 transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800/60"
             >
               <td className="py-2 pr-3 font-medium text-zinc-800 dark:text-zinc-100">
-                {trunc(expense.item, 24)}
+                {trunc(expense.item, 24) || "—"}
               </td>
               <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-300">
-                {trunc(expense.seller, 20)}
+                {trunc(expense.seller, 20) || "—"}
               </td>
               <td className="py-2 pr-3 text-right text-zinc-700 dark:text-zinc-200">
                 ₹ {expense.cost.toLocaleString("en-IN")}
@@ -202,12 +218,13 @@ export default function ExpenseTable({
                 {formatDate(expense.date)}
               </td>
               <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400">
-                {trunc(expense.reason, 20)}
+                {trunc(expense.reason, 20) || "—"}
               </td>
               <td className="py-2 text-center">
                 {(expense.document_ids && expense.document_ids.length > 0) ? (
-                  <span className="inline-flex items-center text-emerald-500" title="Document attached">
+                  <span className="inline-flex items-center justify-center gap-1 text-emerald-500" title={`${expense.document_ids.length} document(s) attached`}>
                     <PaperClipIcon className="h-4 w-4" />
+                    <span className="font-medium text-zinc-500 dark:text-zinc-400">({expense.document_ids.length})</span>
                   </span>
                 ) : (
                   <span className="text-zinc-400">—</span>
