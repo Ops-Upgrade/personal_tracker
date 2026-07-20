@@ -36,6 +36,8 @@ export interface MonthTileProps {
   className?: string;
   /** Whether to highlight this tile (e.g., current month) */
   highlight?: boolean;
+  /** Optional DOM id for the root element (e.g., for scroll-into-view) */
+  id?: string;
 }
 
 /**
@@ -58,6 +60,7 @@ export default function MonthTile({
   alwaysExpanded = false,
   className = "",
   highlight = false,
+  id,
 }: MonthTileProps) {
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
   const isControlled = controlledExpanded !== undefined;
@@ -94,6 +97,7 @@ export default function MonthTile({
 
   return (
     <div
+      id={id}
       className={`rounded-xl border shadow-sm ${
         highlight
           ? "border-yellow-300 bg-yellow-100 dark:border-yellow-500/20 dark:bg-yellow-500/10"

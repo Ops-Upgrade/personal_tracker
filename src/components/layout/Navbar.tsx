@@ -9,6 +9,7 @@ import { getServerDateIST, formatISTDisplay } from "@/api/serverDate";
 import { ROUTES } from "@/routes/paths";
 import { useTheme } from "@wrksz/themes/client";
 import ThemeSwitcher from "@/components/common/ThemeSwitcher";
+import { useScrollDirection } from "@/hooks/useScrollDirection";
 import { Menu, X } from "lucide-react";
 import { clearDiscoverCache } from "@/components/media/views/DiscoverView";
 import { clearDefaultViewCache } from "@/components/media/views/DefaultView";
@@ -27,6 +28,7 @@ interface NavbarProps {
 export default function Navbar({ userEmail, userName, userAvatarUrl }: NavbarProps) {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
+  const scrollDirection = useScrollDirection();
   const [dateDisplay, setDateDisplay] = useState<string>("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -65,7 +67,11 @@ export default function Navbar({ userEmail, userName, userAvatarUrl }: NavbarPro
   }
 
   return (
-    <nav className="relative z-50 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+    <nav
+      className={`sticky top-0 z-50 w-full border-b border-zinc-200 bg-white transition-transform duration-300 dark:border-zinc-800 dark:bg-zinc-950 ${
+        scrollDirection === "down" ? "-translate-y-full" : "translate-y-0"
+      }`}
+    >
       <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         {/* Left: App Logo */}
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">

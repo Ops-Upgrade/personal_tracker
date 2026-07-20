@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import ViewToggle from "@/components/common/ViewToggle";
 import MonthTile from "@/components/common/MonthTile";
@@ -52,6 +52,17 @@ export default function GenericActiveBox<T extends ActiveItem>({
 }: GenericActiveBoxProps<T>) {
   const priorityGroups = byPriority(items, [...priorities]);
   const monthGroups = activeByMonths(items, nowYear);
+
+  // Auto-scroll to the current month tile when switching to months view
+  useEffect(() => {
+    if (view !== "months" || isLoading) return;
+    const timeout = setTimeout(() => {
+      document
+        .getElementById("current-month-tile")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100); // small delay to allow DOM paint
+    return () => clearTimeout(timeout);
+  }, [view, isLoading]);
 
   return (
     <BoxContainer className="lg:col-span-2">
@@ -114,6 +125,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
             return (
               <MonthTile
                 key={group.label}
+                id={isCurrentMonth ? "current-month-tile" : undefined}
                 title={group.label}
                 defaultExpanded={isCurrentMonth}
                 accent={group.items.length > 0}

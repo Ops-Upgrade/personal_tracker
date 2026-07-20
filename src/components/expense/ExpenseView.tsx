@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ROUTES } from "@/routes/paths";
@@ -78,6 +78,17 @@ export default function ExpenseView() {
 
   // Default date for create mode — set by MonthRow callbacks
   const [createDefaultDate, setCreateDefaultDate] = useState<string>("");
+
+  // Auto-scroll to the current month tile on load / year change
+  useEffect(() => {
+    if (isLoading) return;
+    const timeout = setTimeout(() => {
+      document
+        .getElementById("current-month-tile")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+    return () => clearTimeout(timeout);
+  }, [isLoading, selectedYear]);
 
   // --- Derived data ---
 

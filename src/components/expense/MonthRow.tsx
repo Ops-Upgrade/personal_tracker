@@ -42,6 +42,7 @@ export default function MonthRow({
 
   return (
     <MonthTile
+      id={isCurrentMonth ? "current-month-tile" : undefined}
       title={monthName}
       subtitle={
         <>
@@ -49,6 +50,7 @@ export default function MonthRow({
         </>
       }
       accent={total > 0}
+      defaultExpanded={isCurrentMonth}
       highlight={isCurrentMonth}
       headerActions={
         <Button
