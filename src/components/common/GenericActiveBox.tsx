@@ -33,6 +33,8 @@ interface GenericActiveBoxProps<T extends ActiveItem> {
   getPriorityColor: (priority: string) => { border: string; bg: string };
   renderItem: (item: T) => ReactNode;
   renderPriorityBadge: (priority: string) => ReactNode;
+  /** Optional column headers rendered above item lists (only when the list has items) */
+  renderHeader?: () => ReactNode;
 }
 
 export default function GenericActiveBox<T extends ActiveItem>({
@@ -49,6 +51,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
   getPriorityColor,
   renderItem,
   renderPriorityBadge,
+  renderHeader,
 }: GenericActiveBoxProps<T>) {
   const priorityGroups = byPriority(items, [...priorities]);
   const monthGroups = activeByMonths(items, nowYear);
@@ -112,6 +115,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
                   <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
                 )}
                 <div className="space-y-2">
+                  {group.length > 0 && renderHeader && renderHeader()}
                   {group.map((item) => renderItem(item))}
                 </div>
               </section>
@@ -136,6 +140,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
                   <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
                 ) : (
                   <div className="space-y-2">
+                    {group.items.length > 0 && renderHeader && renderHeader()}
                     {group.items.map((item) => renderItem(item))}
                   </div>
                 )}

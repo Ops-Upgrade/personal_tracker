@@ -271,6 +271,7 @@ export default function EducationView() {
       <section className="grid gap-4 lg:grid-cols-3">
         <ActiveEducationsBox
           educations={activeEducations}
+          documents={documents}
           isLoading={isLoading}
           view={activeView}
           nowYear={nowYear}
