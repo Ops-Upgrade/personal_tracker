@@ -12,7 +12,6 @@ export const ROUTES = {
   TASK_MANAGER_STORE: "/taskmanager/store",
   PROFILE: "/settings/profile",
   EXPENSE: "/expense",
-  EXPENSE_ALL: "/expense/all",
   EXPENSE_STORE: "/expense/store",
   EDUCATION: "/education",
   EDUCATION_COMPLETED: "/education/completed",

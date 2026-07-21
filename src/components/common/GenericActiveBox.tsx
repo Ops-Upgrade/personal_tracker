@@ -35,6 +35,8 @@ interface GenericActiveBoxProps<T extends ActiveItem> {
   renderPriorityBadge: (priority: string) => ReactNode;
   /** Optional column headers rendered above item lists (only when the list has items) */
   renderHeader?: () => ReactNode;
+  /** Optional className override for the outer BoxContainer (defaults to "lg:col-span-2") */
+  className?: string;
 }
 
 export default function GenericActiveBox<T extends ActiveItem>({
@@ -52,6 +54,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
   renderItem,
   renderPriorityBadge,
   renderHeader,
+  className,
 }: GenericActiveBoxProps<T>) {
   const priorityGroups = byPriority(items, [...priorities]);
   const monthGroups = activeByMonths(items, nowYear);
@@ -68,7 +71,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
   }, [view, isLoading]);
 
   return (
-    <BoxContainer className="lg:col-span-2">
+    <BoxContainer className={className ?? "lg:col-span-2"}>
       <header className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">

@@ -84,7 +84,7 @@ export default function NotesBox({
                 {item.attachedDocs.length > 0 ? (
                   <span className="inline-flex items-center gap-1 text-sky-500" title={`${item.attachedDocs.length} document(s) attached`}>
                     <PaperClipIcon className="h-4 w-4" />
-                    <span className="font-medium text-zinc-500 dark:text-zinc-400">({item.attachedDocs.length})</span>
+                    <span className="text-zinc-500 dark:text-zinc-400">({item.attachedDocs.length})</span>
                   </span>
                 ) : (
                   <span className="text-zinc-400">—</span>

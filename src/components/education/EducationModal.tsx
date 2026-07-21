@@ -52,13 +52,20 @@ export default function EducationModal({
   onDelete,
   onDownloadDocument,
 }: EducationModalProps) {
-  // --- Form state ---
-  const [name, setName] = useState("");
-  const [provider, setProvider] = useState("");
-  const [priority, setPriority] = useState<Priority>("medium");
-  const [dueDate, setDueDate] = useState("");
-  const [description, setDescription] = useState("");
-  const [isCompleted, setIsCompleted] = useState(false);
+  // ── Baseline form values (computed first so state initializers can use them) ──
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+  const initialDueDate = useMemo(
+    () => normalizeDateForInput(education?.due_date, education ? "" : todayStr),
+    [education, todayStr],
+  );
+
+  // --- Form state (initialized from education values, not empty strings) ---
+  const [name, setName] = useState(education?.name ?? "");
+  const [provider, setProvider] = useState(education?.provider ?? "");
+  const [priority, setPriority] = useState<Priority>(education?.priority ?? "medium");
+  const [dueDate, setDueDate] = useState(initialDueDate);
+  const [description, setDescription] = useState(education?.description ?? "");
+  const [isCompleted, setIsCompleted] = useState(education?.is_completed ?? false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,9 +124,9 @@ export default function EducationModal({
     markedForRemoval: markedForDeletion,
   });
 
-  // --- Reset on open ---
+  // --- Reset form fields on open / record change ---
   useEffect(() => {
-    const todayStr = new Date().toISOString().split("T")[0];
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync form state when editing a different record
     setName(education?.name ?? "");
     setProvider(education?.provider ?? "");
     setPriority(education?.priority ?? "medium");
@@ -128,20 +135,30 @@ export default function EducationModal({
     setIsCompleted(education?.is_completed ?? false);
     setError(null);
     setShowDeleteConfirm(false);
+  }, [education, initialDueDate]);
+
+  // --- Reset file state only when the record changes (NOT on documents load) ---
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync file state when editing a different record
     setNewFiles([]);
     setMarkedForDeletion(new Set());
     setMarkedForUnlink(new Set());
     hookResetFileState();
-    const existingDocs = education ? docsForEducation(education.id, documents) : [];
-    setSelectedDocId(existingDocs.length > 0 ? existingDocs[0].id : null);
-  }, [education, documents, hookResetFileState]);
+  }, [education, hookResetFileState]);
+
+  // --- Auto-select the first attached document (safe to run on documents load) ---
+  useEffect(() => {
+    if (education && !selectedDocId) {
+      const existingDocs = docsForEducation(education.id, documents);
+      if (existingDocs.length > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: auto-select first doc on open
+        setSelectedDocId(existingDocs[0].id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [education, documents]);
 
   // ── Baseline form values ──
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
-  const initialDueDate = useMemo(
-    () => normalizeDateForInput(education?.due_date, education ? "" : todayStr),
-    [education, todayStr],
-  );
   const formBaseline = useMemo(() => ({
     name: education?.name ?? "",
     provider: education?.provider ?? "",

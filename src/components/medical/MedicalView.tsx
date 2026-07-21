@@ -1,16 +1,17 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
-import Link from "next/link";
+import Button from "@/components/common/Button";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { useQueryModal } from "@/lib/useQueryModal";
 import {
-  createMedicalRecord,
-  deleteMedicalRecord,
   fetchMedicalRecords,
+  createMedicalRecord,
   updateMedicalRecord,
+  deleteMedicalRecord,
 } from "@/api/medical";
 import {
   fetchDocuments,
@@ -22,35 +23,37 @@ import {
   uploadDocumentFile,
   deleteDocumentFile,
 } from "@/api/common/documentStorage";
-import ErrorBanner from "@/components/common/ErrorBanner";
+import { parseISTDate } from "@/api/serverDate";
 import type { MedicalRecord, MedicalPlaintext } from "@/types/medical";
 import type { Document, DocumentPlaintext } from "@/types/document";
-import GenericActiveBox from "@/components/common/GenericActiveBox";
+import { MONTHS } from "@/types/expense";
+import { useLocalStorage } from "@/lib/useLocalStorage";
+import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
-import { PRIORITIES } from "@/types/taskmanager";
-import PriorityBadge from "@/components/common/PriorityBadge";
-import { getPriorityColor } from "@/lib/priorityColors";
-import MedicalModal from "./MedicalModal";
-import { trunc } from "@/lib/viewHelpers";
+import { List, LayoutGrid, Table } from "lucide-react";
 import { FolderIcon } from "@/components/common/Icons";
+import ErrorBanner from "@/components/common/ErrorBanner";
+import LoadingSpinner from "@/components/common/LoadingSpinner";
+import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
+import MedicalModal from "./MedicalModal";
+import MedicalTable from "./MedicalTable";
+import MedicalMonthRow from "./MedicalMonthRow";
+import MedicalYearRow from "./MedicalYearRow";
 
-const VIEW_OPTIONS: readonly ViewToggleOption<string>[] = [
-  { value: "months", label: "Months" },
+type MedicalViewMode = "all" | "single" | "multi";
+
+/** SVG icon symbols for the medical view toggle */
+const MEDICAL_VIEW_OPTIONS: readonly ViewToggleOption<MedicalViewMode>[] = [
+  { value: "all", label: <Table className="h-4 w-4" /> },
+  { value: "single", label: <List className="h-4 w-4" /> },
+  { value: "multi", label: <LayoutGrid className="h-4 w-4" />, hideOnMobile: true },
 ];
-
-interface MedicalItem {
-  id: string;
-  priority: string;
-  due_date: string | null;
-  name: string;
-  clinic: string;
-  date: string;
-}
 
 /**
  * Medical Records feature shell.
- * Similar to EducationView but without a "completed" section.
- * All records are active — there is no completion concept.
+ * Orchestrates month list, year dropdown, and create/edit medical record modals.
+ * "View All" navigates to the dedicated /medical/all route with month/year params.
+ * Query-param-driven modals (like ExpenseView).
  */
 export default function MedicalView() {
   const [records, setRecords] = useState<MedicalRecord[]>([]);
@@ -65,27 +68,65 @@ export default function MedicalView() {
     setDocuments(docRows);
   }, []);
 
-  const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
+  const { userId, istDate, isLoading, error, refreshData } =
     useAuthBootstrap({ loadData });
 
-  const [view, setView] = useState<string>("months");
+  const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
 
-  // Query-param-driven modal state (replaces old hash-driven logic)
+  const currentYear = istParsed?.year ?? new Date().getFullYear();
+  const [viewMode, setViewMode] = useLocalStorage<MedicalViewMode>("medicalViewMode", "all");
+
+  // Query-param-driven modal state via shared hook
   const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(records, "medical");
 
-  // Convert medical records to active items for GenericActiveBox
-  const activeItems: MedicalItem[] = useMemo(
-    () =>
-      records.map((r) => ({
-        id: r.id,
-        priority: "medium", // default — medical records have no priority concept
-        due_date: r.date,
-        name: r.name,
-        clinic: r.clinic,
-        date: r.date,
-      })),
-    [records],
-  );
+  // Auto-scroll to the current month tile on load / view change
+  useEffect(() => {
+    if (isLoading || viewMode === "all") return;
+    const timeout = setTimeout(() => {
+      document
+        .getElementById("current-month-tile")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+    return () => clearTimeout(timeout);
+  }, [isLoading, viewMode]);
+
+  // --- Derived data ---
+
+  // Records grouped by month for the current year
+  const recordsByMonth = useMemo(() => {
+    return MONTHS.map((monthName, monthIndex) => {
+      const filtered = records.filter((r) => {
+        const d = new Date(r.date);
+        return d.getFullYear() === currentYear && d.getMonth() === monthIndex;
+      });
+      return { monthName, monthIndex, records: filtered };
+    });
+  }, [records, currentYear]);
+
+  // Past years: one group per year < currentYear, sorted descending
+  const pastYearGroups = useMemo(() => {
+    const pastYears = new Set<number>();
+    for (const r of records) {
+      const y = new Date(r.date).getFullYear();
+      if (y < currentYear) pastYears.add(y);
+    }
+    return Array.from(pastYears)
+      .sort((a, b) => b - a)
+      .map((year) => ({
+        year,
+        records: records.filter((r) => new Date(r.date).getFullYear() === year),
+      }));
+  }, [records, currentYear]);
+
+  // Combined groups: current year months + past years
+  const allGroups = useMemo(() => {
+    const months = recordsByMonth.map((m) => ({ ...m, type: "month" as const }));
+    const years = pastYearGroups.map((y) => ({ ...y, type: "year" as const }));
+    return [...months, ...years];
+  }, [recordsByMonth, pastYearGroups]);
+
+  // Total records across all time
+  const totalRecords = records.length;
 
   // --- CRUD handlers ---
 
@@ -234,69 +275,49 @@ export default function MedicalView() {
     await refreshData(userId);
   }
 
+  // --- Render ---
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-col items-start gap-4">
+      <div className="flex flex-col items-start gap-4 w-full">
         <BackButton href={ROUTES.DASHBOARD} />
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-            Medical Records
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Track medical visits, diagnoses, and uploaded reports.
-          </p>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between w-full">
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
+              Medical Records
+            </h1>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Track and manage your medical history.
+            </p>
+          {!isLoading && (
+            <p className="mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
+              Total Records:{" "}
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                {totalRecords} record{totalRecords !== 1 ? "s" : ""}
+              </span>
+            </p>
+          )}
+          </div>
+
+          {/* Document Store link */}
+          {!isLoading && (
+            <div className="w-full md:w-auto md:min-w-[200px] lg:w-1/3">
+              <Link
+                href={ROUTES.MEDICAL_STORE}
+                className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
+              >
+                <FolderIcon className="h-5 w-5 text-red-500" />
+                Document Store
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 
-      <section className="grid gap-4 lg:grid-cols-3">
-        <GenericActiveBox
-          items={activeItems}
-          isLoading={isLoading}
-          view={view}
-          nowYear={nowYear}
-          nowMonth={nowMonth}
-          onViewChange={setView}
-          onAdd={openCreate}
-          title="Active Records"
-          viewOptions={VIEW_OPTIONS}
-          priorities={[...PRIORITIES]}
-          getPriorityColor={(p) => getPriorityColor(p as "low" | "medium" | "high" | "critical")}
-          renderItem={(item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                const record = records.find((r) => r.id === item.id);
-                if (record) openEdit(record);
-              }}
-              className="w-full text-left"
-            >
-              <div className="rounded-md border border-zinc-200 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/50 transition-colors">
-                <div className="font-semibold text-zinc-800 dark:text-zinc-100">
-                  {trunc(item.name, 48)}
-                </div>
-                <div className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  {item.clinic || "—"} &middot; {item.date}
-                </div>
-              </div>
-            </button>
-          )}
-          renderPriorityBadge={(priority) => (
-            <PriorityBadge priority={priority as "low" | "medium" | "high" | "critical"} />
-          )}
-        />
+      {/* Loading state */}
+      {isLoading && <LoadingSpinner />}
 
-        <div className="flex flex-col gap-4">
-          <Link
-            href={ROUTES.MEDICAL_STORE}
-            className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
-          >
-            <FolderIcon className="h-5 w-5 text-red-500" />
-            Document Store
-          </Link>
-        </div>
-      </section>
-
+      {/* Error state */}
       {error && (
         <ErrorBanner
           message={error}
@@ -304,8 +325,108 @@ export default function MedicalView() {
         />
       )}
 
-      {/* CRUD modal (query-param-driven) */}
-      {modalTarget && (
+      {/* Table / Month view */}
+      {!isLoading && (
+        <BoxContainer>
+          <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {viewMode === "all" ? "All Records" : "Records"}
+              </h2>
+              <ViewToggle
+                value={viewMode}
+                onChange={setViewMode}
+                options={MEDICAL_VIEW_OPTIONS}
+                ariaLabel="Medical view toggle"
+                hideContainerOnMobile={false}
+              />
+            </div>
+            <Button variant="secondary" size="md" onClick={() => openCreate()} disabled={isLoading}>
+              + Add
+            </Button>
+          </header>
+          {viewMode === "all" ? (
+            <div className={SCROLLABLE_CLASSES}>
+              <MedicalTable records={records} onSelectRecord={openEdit} />
+            </div>
+          ) : (
+            <div className={`${SCROLLABLE_CLASSES} flex flex-col md:flex-row gap-4 items-start`}>
+              {/* Left Column (or Single Column) */}
+              <div className="flex-1 flex flex-col gap-4 w-full">
+                {allGroups
+                  .filter((_, i) => viewMode === "multi" ? i % 2 === 0 : true)
+                  .map((group) => {
+                    if (group.type === "month") {
+                      const isCurrentMonth =
+                        istParsed !== null &&
+                        group.monthIndex === istParsed.month;
+                      return (
+                        <MedicalMonthRow
+                          key={`month-${group.monthName}`}
+                          monthName={group.monthName}
+                          monthIndex={group.monthIndex}
+                          year={currentYear}
+                          records={group.records}
+                          isCurrentMonth={isCurrentMonth}
+                          onSelectRecord={(record) => openEdit(record)}
+                          onViewAll={() => setViewMode("all")}
+                        />
+                      );
+                    }
+                    return (
+                      <MedicalYearRow
+                        key={`year-${group.year}`}
+                        year={group.year}
+                        records={group.records}
+                        onSelectRecord={(record) => openEdit(record)}
+                        onViewAll={() => setViewMode("all")}
+                      />
+                    );
+                  })}
+              </div>
+
+              {/* Right Column (only visible in multi view) */}
+              {viewMode === "multi" && (
+                <div className="flex-1 flex-col gap-4 w-full hidden md:flex">
+                  {allGroups
+                    .filter((_, i) => i % 2 !== 0)
+                    .map((group) => {
+                      if (group.type === "month") {
+                        const isCurrentMonth =
+                          istParsed !== null &&
+                          group.monthIndex === istParsed.month;
+                        return (
+                          <MedicalMonthRow
+                            key={`month-${group.monthName}`}
+                            monthName={group.monthName}
+                            monthIndex={group.monthIndex}
+                            year={currentYear}
+                            records={group.records}
+                            isCurrentMonth={isCurrentMonth}
+                            onSelectRecord={(record) => openEdit(record)}
+                            onViewAll={() => setViewMode("all")}
+                          />
+                        );
+                      }
+                      return (
+                        <MedicalYearRow
+                          key={`year-${group.year}`}
+                          year={group.year}
+                          records={group.records}
+                          onSelectRecord={(record) => openEdit(record)}
+                          onViewAll={() => setViewMode("all")}
+                        />
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          )}
+        </BoxContainer>
+      )}
+
+      {/* Medical Modal (create / edit) — query-param-driven */}
+      {modalTarget && userId && (
         <MedicalModal
           record={modalTarget === "create" ? null : modalTarget}
           attachedDocuments={
@@ -316,7 +437,7 @@ export default function MedicalView() {
           standaloneDocuments={documents.filter(
             (d) => d.domain === "medical" && !d.linked_id,
           )}
-          userId={userId ?? ""}
+          userId={userId}
           onClose={closeModal}
           onSave={handleSave}
           onDelete={handleDelete}

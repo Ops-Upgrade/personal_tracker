@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
+import Button from "@/components/common/Button";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { useQueryModal } from "@/lib/useQueryModal";
 import {
@@ -44,7 +44,6 @@ const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
  * Query-param-driven modals (like EducationView).
  */
 export default function ExpenseView() {
-  const router = useRouter();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
 
@@ -76,10 +75,7 @@ export default function ExpenseView() {
   // Query-param-driven modal state via shared hook
   const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(expenses, "expense");
 
-  // Default date for create mode — set by MonthRow callbacks
-  const [createDefaultDate, setCreateDefaultDate] = useState<string>("");
-
-  // Auto-scroll to the current month tile on load / year change
+  // Auto-scroll to the current month tile on load / year / view change
   useEffect(() => {
     if (isLoading) return;
     const timeout = setTimeout(() => {
@@ -88,7 +84,7 @@ export default function ExpenseView() {
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 100);
     return () => clearTimeout(timeout);
-  }, [isLoading, selectedYear]);
+  }, [isLoading, selectedYear, viewMode]);
 
   // --- Derived data ---
 
@@ -124,9 +120,9 @@ export default function ExpenseView() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col items-start gap-4">
-          <BackButton href={ROUTES.DASHBOARD} />
+      <div className="flex flex-col items-start gap-4 w-full">
+        <BackButton href={ROUTES.DASHBOARD} />
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between w-full">
           <div>
             <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
               Expenses
@@ -143,6 +139,19 @@ export default function ExpenseView() {
             </p>
           )}
           </div>
+
+          {/* Receipt Store link */}
+          {!isLoading && (
+            <div className="w-full md:w-auto md:min-w-[200px] lg:w-1/3">
+              <Link
+                href={ROUTES.EXPENSE_STORE}
+                className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
+              >
+                <FolderIcon className="h-5 w-5 text-emerald-500" />
+                Receipt Store
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 
@@ -157,22 +166,7 @@ export default function ExpenseView() {
         />
       )}
 
-      {/* Receipt Store link */}
-      {!isLoading && (
-        <div className="flex w-full justify-end">
-          <div className="w-full lg:w-1/3">
-            <Link
-              href={ROUTES.EXPENSE_STORE}
-              className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
-            >
-              <FolderIcon className="h-5 w-5 text-emerald-500" />
-              Receipt Store
-            </Link>
-          </div>
-        </div>
-      )}
-
-      {/* Month rows */}
+      {/* Table / Month view */}
       {!isLoading && (
         <BoxContainer>
           <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -187,43 +181,70 @@ export default function ExpenseView() {
                 ariaLabel="Expense view toggle"
               />
             </div>
-            <YearDropdown
-              years={availableYears}
-              selectedYear={selectedYear}
-              onChange={setSelectedYear}
-            />
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="md" onClick={() => openCreate()} disabled={isLoading}>
+                + Add
+              </Button>
+              <YearDropdown
+                years={availableYears}
+                selectedYear={selectedYear}
+                onChange={setSelectedYear}
+              />
+            </div>
           </header>
-          <div className={`${SCROLLABLE_CLASSES} grid grid-cols-1 items-start gap-4 ${viewMode === "multi" ? "md:grid-cols-2" : ""}`}>
-            {expensesByMonth.map(({ monthName, monthIndex, expenses: monthExpenses }) => {
-              const isCurrentMonth =
-                istParsed !== null &&
-                selectedYear === istParsed.year &&
-                monthIndex === istParsed.month;
-              return (
-                <MonthRow
-                  key={monthName}
-                  monthName={monthName}
-                  monthIndex={monthIndex}
-                  year={selectedYear}
-                  expenses={monthExpenses}
-                  isCurrentMonth={isCurrentMonth}
-                  onAdd={() => {
-                    // Use today's IST date as default if viewing the current month; otherwise month-01
-                    const defaultDate =
-                      isCurrentMonth && istDate
-                        ? istDate
-                        : `${selectedYear}-${String(monthIndex + 1).padStart(2, "0")}-01`;
-                    setCreateDefaultDate(defaultDate);
-                    openCreate();
-                  }}
-                  onSelectExpense={(expense) => {
-                    openEdit(expense);
-                  }}
-                  onViewAll={() => router.push(`${ROUTES.EXPENSE_ALL}?month=${monthIndex}&year=${selectedYear}`)}
-                />
-              );
-            })}
-          </div>
+          <div className={`${SCROLLABLE_CLASSES} flex flex-col md:flex-row gap-4 items-start`}>
+              {/* Left Column (or Single Column) */}
+              <div className="flex-1 flex flex-col gap-4 w-full">
+                {expensesByMonth
+                  .filter((_, i) => viewMode === "multi" ? i % 2 === 0 : true)
+                  .map(({ monthName, monthIndex, expenses: monthExpenses }) => {
+                    const isCurrentMonth =
+                      istParsed !== null &&
+                      selectedYear === istParsed.year &&
+                      monthIndex === istParsed.month;
+                    return (
+                      <MonthRow
+                        key={monthName}
+                        monthName={monthName}
+                        monthIndex={monthIndex}
+                        year={selectedYear}
+                        expenses={monthExpenses}
+                        isCurrentMonth={isCurrentMonth}
+                        onSelectExpense={(expense) => {
+                          openEdit(expense);
+                        }}
+                      />
+                    );
+                  })}
+              </div>
+
+              {/* Right Column (only visible in multi view) */}
+              {viewMode === "multi" && (
+                <div className="flex-1 flex-col gap-4 w-full hidden md:flex">
+                  {expensesByMonth
+                    .filter((_, i) => i % 2 !== 0)
+                    .map(({ monthName, monthIndex, expenses: monthExpenses }) => {
+                      const isCurrentMonth =
+                        istParsed !== null &&
+                        selectedYear === istParsed.year &&
+                        monthIndex === istParsed.month;
+                      return (
+                        <MonthRow
+                          key={monthName}
+                          monthName={monthName}
+                          monthIndex={monthIndex}
+                          year={selectedYear}
+                          expenses={monthExpenses}
+                          isCurrentMonth={isCurrentMonth}
+                          onSelectExpense={(expense) => {
+                            openEdit(expense);
+                          }}
+                        />
+                      );
+                    })}
+                </div>
+              )}
+            </div>
         </BoxContainer>
       )}
 
@@ -231,7 +252,6 @@ export default function ExpenseView() {
       {modalTarget && userId && (
         <ExpenseModal
           expense={modalTarget === "create" ? null : modalTarget}
-          defaultDate={modalTarget === "create" ? createDefaultDate : undefined}
           documents={documents}
           userId={userId}
           onClose={closeModal}

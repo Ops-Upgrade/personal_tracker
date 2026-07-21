@@ -60,7 +60,7 @@ export default function MedicalModal({
 }: MedicalModalProps) {
   const [name, setName] = useState(record?.name ?? "");
   const [clinic, setClinic] = useState(record?.clinic ?? "");
-  const [date, setDate] = useState(record?.date ?? defaultDate ?? new Date().toISOString().split("T")[0]);
+  const [date, setDate] = useState(normalizeDateForInput(record?.date, defaultDate ?? new Date().toISOString().split("T")[0]));
   const [diagnosisTimeline, setDiagnosisTimeline] = useState(record?.diagnosis_timeline ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,8 +118,9 @@ export default function MedicalModal({
     diagnosisTimeline: record?.diagnosis_timeline ?? "",
   }), [record, defaultDate]);
 
-  // Reset form to baseline whenever the record changes
+  // Reset form fields to baseline whenever the record changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync form state when editing a different record
     setName(baseline.name);
     setClinic(baseline.clinic);
     setDate(baseline.date);
@@ -127,10 +128,27 @@ export default function MedicalModal({
     setIsSaving(false);
     setError(null);
     setShowDeleteConfirm(false);
+  }, [baseline]);
+
+  // Reset file-related state only when the record changes (NOT on resetFileState change)
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync file state when editing a different record
     setMarkedForRemoval(new Set());
     setMarkedForUnlink(new Set());
     resetFileState();
-  }, [baseline, resetFileState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseline]);
+
+  // Auto-select the first attached document when opening an existing record
+  useEffect(() => {
+    if (record && !selectedFileId) {
+      const existingDocs = attachedDocuments.filter((d) => d.linked_id === record.id);
+      if (existingDocs.length > 0) {
+        setSelectedFileId(existingDocs[0].id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [record, attachedDocuments]);
 
   // Dirty check
   const isDirty =

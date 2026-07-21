@@ -1,39 +1,38 @@
 "use client";
 
-import type { Expense } from "@/types/expense";
+import type { MedicalRecord } from "@/types/medical";
 import Button from "@/components/common/Button";
-import ExpenseTable from "./ExpenseTable";
+import MedicalTable from "./MedicalTable";
 import MonthTile from "@/components/common/MonthTile";
 
-interface MonthRowProps {
+interface MedicalMonthRowProps {
   monthName: string;
   monthIndex: number; // 0-based
   year: number;
-  expenses: Expense[];
+  records: MedicalRecord[];
   isCurrentMonth?: boolean;
-  onSelectExpense: (expense: Expense) => void;
-  onViewAll?: () => void;
+  onSelectRecord: (record: MedicalRecord) => void;
+  onViewAll: () => void;
 }
 
 /**
- * A single month row in the expense tracker.
- * Uses the reusable MonthTile component for consistent styling
- * with the Task Manager month sections.
+ * A single month row in the medical records tracker.
+ * Uses the reusable MonthTile component for consistent styling.
  *
  * Clicking the tile header expands/collapses the inline preview.
  * When expanded, shows a preview table (up to 5 items).
  */
-export default function MonthRow({
+export default function MedicalMonthRow({
   monthName,
-  expenses,
+  records,
   isCurrentMonth,
-  onSelectExpense,
+  onSelectRecord,
   onViewAll,
-}: MonthRowProps) {
-  const total = expenses.reduce((sum, e) => sum + e.cost, 0);
+}: MedicalMonthRowProps) {
+  const recordCount = records.length;
 
   // Preview: 5 most recent items sorted by date descending
-  const sorted = [...expenses].sort(
+  const sorted = [...records].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
   const preview = sorted.slice(0, 5);
@@ -44,14 +43,14 @@ export default function MonthRow({
       title={monthName}
       subtitle={
         <>
-          Total Expense: ₹ {total.toLocaleString("en-IN")}
+          {recordCount} record{recordCount !== 1 ? "s" : ""}
         </>
       }
-      accent={total > 0}
+      accent={recordCount > 0}
       defaultExpanded={isCurrentMonth}
       highlight={isCurrentMonth}
       footerActions={
-        expenses.length > 0 && onViewAll ? (
+        records.length > 0 ? (
           <Button
             variant="ghost"
             size="sm"
@@ -62,7 +61,7 @@ export default function MonthRow({
         ) : undefined
       }
     >
-      <ExpenseTable expenses={preview} onSelectExpense={onSelectExpense} disableSorting />
+      <MedicalTable records={preview} onSelectRecord={onSelectRecord} disableSorting />
     </MonthTile>
   );
 }

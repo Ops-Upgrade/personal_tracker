@@ -254,7 +254,7 @@ export default function EducationTable({
                   {docCount > 0 ? (
                     <span className="inline-flex items-center justify-center gap-1 text-amber-500" title={`${docCount} document(s) attached`}>
                       <PaperClipIcon className="h-4 w-4" />
-                      <span className="font-medium text-zinc-500 dark:text-zinc-400">({docCount})</span>
+                      <span className="text-zinc-600 dark:text-zinc-300">({docCount})</span>
                     </span>
                   ) : (
                     <span className="text-zinc-400">—</span>

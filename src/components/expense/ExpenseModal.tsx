@@ -124,8 +124,9 @@ export default function ExpenseModal({
     markedForRemoval: markedForDeletion,
   });
 
-  // --- Reset on open ---
+  // --- Reset form fields on open / record change ---
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync form state when editing a different record
     setItem(expense?.item ?? "");
     setSeller(expense?.seller ?? "");
     setCost(expense?.cost != null ? String(expense.cost) : "");
@@ -134,16 +135,29 @@ export default function ExpenseModal({
     setInvoice(expense?.invoice ?? "");
     setError(null);
     setShowDeleteConfirm(false);
+  }, [expense, defaultDate]);
+
+  // --- Reset file state only when the record changes (NOT on documents load) ---
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync file state when editing a different record
     setNewFiles([]);
     setMarkedForDeletion(new Set());
     hookResetFileState();
-    const existingDocs = expense
-      ? documents.filter(
-          (d) => d.domain === "expense" && d.linked_id === expense.id
-        )
-      : [];
-    setSelectedDocId(existingDocs.length > 0 ? existingDocs[0].id : null);
-  }, [expense, documents, defaultDate, hookResetFileState]);
+  }, [expense, hookResetFileState]);
+
+  // --- Auto-select the first attached document (safe to run on documents load) ---
+  useEffect(() => {
+    if (expense && !selectedDocId) {
+      const existingDocs = documents.filter(
+        (d) => d.domain === "expense" && d.linked_id === expense.id
+      );
+      if (existingDocs.length > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: auto-select first doc on open
+        setSelectedDocId(existingDocs[0].id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expense, documents]);
 
   // ── Baseline form values ──
   const formBaseline = useMemo(
