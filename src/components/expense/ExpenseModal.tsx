@@ -24,7 +24,6 @@ export interface ExpenseDraft {
   cost: number;
   date: string;
   reason: string;
-  invoice: string;
 }
 
 interface ExpenseModalProps {
@@ -67,7 +66,6 @@ export default function ExpenseModal({
   const [cost, setCost] = useState("");
   const [date, setDate] = useState("");
   const [reason, setReason] = useState("");
-  const [invoice, setInvoice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,7 +130,6 @@ export default function ExpenseModal({
     setCost(expense?.cost != null ? String(expense.cost) : "");
     setDate(normalizeDateForInput(expense?.date, defaultDate ?? ""));
     setReason(expense?.reason ?? "");
-    setInvoice(expense?.invoice ?? "");
     setError(null);
     setShowDeleteConfirm(false);
   }, [expense, defaultDate]);
@@ -167,7 +164,6 @@ export default function ExpenseModal({
       cost: expense?.cost != null ? String(expense.cost) : "",
       date: normalizeDateForInput(expense?.date, defaultDate ?? ""),
       reason: expense?.reason ?? "",
-      invoice: expense?.invoice ?? "",
     }),
     [expense, defaultDate]
   );
@@ -179,8 +175,7 @@ export default function ExpenseModal({
     seller !== formBaseline.seller ||
     cost !== formBaseline.cost ||
     date !== formBaseline.date ||
-    stripHtml(reason) !== stripHtml(formBaseline.reason) ||
-    invoice !== formBaseline.invoice;
+    stripHtml(reason) !== stripHtml(formBaseline.reason);
 
   const isDirty =
     hasFormChanges ||
@@ -410,7 +405,6 @@ export default function ExpenseModal({
           cost: parsedCost,
           date,
           reason: reason.trim(),
-          invoice: invoice.trim(),
         },
         expense,
         pendingDoc,
@@ -496,14 +490,6 @@ export default function ExpenseModal({
               minHeight="6rem"
             />
           </div>
-          <InputField
-            label="Invoice (optional)"
-            value={invoice}
-            onChange={setInvoice}
-            disabled={isSaving}
-            placeholder="Invoice number or reference"
-          />
-
           {error && <ErrorBanner message={error} />}
         </div>
       </GlobalActionModal>

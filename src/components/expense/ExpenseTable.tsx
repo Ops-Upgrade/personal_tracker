@@ -154,7 +154,7 @@ export default function ExpenseTable({
                 <th className="pb-2 pr-3 font-medium text-right">Cost</th>
                 <th className="pb-2 pr-3 font-medium">Date</th>
                 <th className="pb-2 pr-3 font-medium">Reason</th>
-                <th className="pb-2 font-medium text-center">Invoice</th>
+                <th className="pb-2 font-medium text-center">Files</th>
               </>
             ) : (
               <>
@@ -193,7 +193,7 @@ export default function ExpenseTable({
                   onClick={handleSort}
                   className="pb-2 pr-3 font-medium"
                 />
-                <th className="pb-2 font-medium text-center">Invoice</th>
+                <th className="pb-2 font-medium text-center">Files</th>
               </>
             )}
           </tr>

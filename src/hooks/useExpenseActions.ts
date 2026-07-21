@@ -20,7 +20,7 @@ interface UseExpenseActionsParams {
 export function useExpenseActions({ userId, refresh }: UseExpenseActionsParams) {
   const handleExpenseSave = useCallback(
     async (
-      draft: { item: string; seller: string; cost: number; date: string; reason: string; invoice: string },
+      draft: { item: string; seller: string; cost: number; date: string; reason: string },
       existingExpense: Expense | null,
       pendingDoc?: { file: File; label: string },
       pendingLinkDocId?: string,
