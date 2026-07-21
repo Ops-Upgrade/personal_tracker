@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useTmdbRetry } from "@/hooks/useTmdbRetry";
 import { getMediaDetails, getMediaByTmdbId, listMedia } from "@/api/media";
 import {
   createMedia,
@@ -54,6 +55,8 @@ interface UseMediaTrackingReturn {
   setTmdbData: React.Dispatch<React.SetStateAction<TmdbDetails | null>>;
   setLocalMedia: React.Dispatch<React.SetStateAction<Media | null>>;
   setAllMedia: React.Dispatch<React.SetStateAction<Media[]>>;
+  /** Clear the retry-managed error so the caller can re-trigger `load`. */
+  clearError: () => void;
 }
 
 /**
@@ -77,8 +80,7 @@ export function useMediaTracking({
   const [tmdbData, setTmdbData] = useState<TmdbDetails | null>(null);
   const [localMedia, setLocalMedia] = useState<Media | null>(null);
   const [allMedia, setAllMedia] = useState<Media[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { loading, error, execute, clearError } = useTmdbRetry();
   const [saving, setSaving] = useState(false);
   const [toastConfig, setToastConfig] = useState<ToastConfig>({
     isVisible: false,
@@ -96,39 +98,36 @@ export function useMediaTracking({
   }, []);
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
     try {
-      // Fetch TMDB details + targeted media lookup in parallel.
-      // getMediaByTmdbId warms the in-memory cache on first call;
-      // subsequent navigations between detail pages return instantly.
-      const [details, existingMedia] = await Promise.all([
-        getMediaDetails(tmdbId, type),
-        getMediaByTmdbId(userId, tmdbId, type),
-      ]);
-      setTmdbData(details);
+      return await execute(async (_signal) => {
+        // Fetch TMDB details + targeted media lookup in parallel.
+        // getMediaByTmdbId warms the in-memory cache on first call;
+        // subsequent navigations between detail pages return instantly.
+        const [details, existingMedia] = await Promise.all([
+          getMediaDetails(tmdbId, type),
+          getMediaByTmdbId(userId, tmdbId, type),
+        ]);
+        setTmdbData(details);
 
-      if (existingMedia) {
-        setLocalMedia(existingMedia);
-      } else {
-        setLocalMedia(null);
-      }
+        if (existingMedia) {
+          setLocalMedia(existingMedia);
+        } else {
+          setLocalMedia(null);
+        }
 
-      // Populate allMedia from cache (no network — listMedia was already
-      // called by getMediaByTmdbId, so the cache is warm).
-      const mediaList = await listMedia(userId);
-      setAllMedia(mediaList);
+        // Populate allMedia from cache (no network — listMedia was already
+        // called by getMediaByTmdbId, so the cache is warm).
+        const mediaList = await listMedia(userId);
+        setAllMedia(mediaList);
 
-      return { details, mediaList, existingMedia };
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load details.",
-      );
+        return { details, mediaList, existingMedia };
+      });
+    } catch {
+      // execute already surfaced the generic error via its own state;
+      // return null so callers can bail out gracefully.
       return null;
-    } finally {
-      setLoading(false);
     }
-  }, [tmdbId, userId, type]);
+  }, [execute, tmdbId, userId, type]);
 
   // The caller must call load() manually so it can hydrate local form state
   // from the returned data.
@@ -208,5 +207,6 @@ export function useMediaTracking({
     setTmdbData,
     setLocalMedia,
     setAllMedia,
+    clearError,
   };
 }

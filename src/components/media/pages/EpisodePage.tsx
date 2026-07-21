@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Trash2 } from "lucide-react";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
+import ErrorBanner from "@/components/common/ErrorBanner";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import ReviewSection from "@/components/media/shared/ReviewSection";
 import Toast from "@/components/common/Toast";
@@ -14,6 +15,7 @@ import StatusChipGroup from "@/components/media/shared/StatusChipGroup";
 import StickyActionBar from "@/components/media/shared/StickyActionBar";
 import UntrackConfirmation from "@/components/media/shared/UntrackConfirmation";
 import { useNavigationGuard } from "@/hooks/useNavigationGuard";
+import { useTmdbRetry } from "@/hooks/useTmdbRetry";
 import {
   getMediaDetails,
   getSeasonDetails,
@@ -56,8 +58,7 @@ export default function EpisodePage({
   const [seasonData, setSeasonData] = useState<TmdbSeasonDetails | null>(null);
   const [showData, setShowData] = useState<TmdbDetails | null>(null);
   const [localMedia, setLocalMedia] = useState<Media | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { loading, error, execute, clearError } = useTmdbRetry();
   const [saving, setSaving] = useState(false);
   const [showRemove, setShowRemove] = useState(false);
 
@@ -99,45 +100,41 @@ export default function EpisodePage({
   // ── Load ──
 
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
     try {
-      const [show, season, existing] = await Promise.all([
-        getMediaDetails(tmdbId, "tv"),
-        getSeasonDetails(tmdbId, seasonNumber),
-        getMediaByTmdbId(userId, tmdbId, "tv"),
-      ]);
-      setShowData(show);
-      setSeasonData(season);
+      await execute(async (_signal) => {
+        const [show, season, existing] = await Promise.all([
+          getMediaDetails(tmdbId, "tv"),
+          getSeasonDetails(tmdbId, seasonNumber),
+          getMediaByTmdbId(userId, tmdbId, "tv"),
+        ]);
+        setShowData(show);
+        setSeasonData(season);
 
-      if (existing) {
-        setLocalMedia(existing);
-        const epData = existing.episodes?.[episodeKey];
-        const { status: effectiveStatus } = getEffectiveEpisodeStatus(
-          existing.status,
-          epData?.status,
-        );
-        setStatus(effectiveStatus as EpisodeTracking["status"]);
-        setRating(epData?.rating ?? 0);
-        setWatchedOn(epData?.watched_on ?? "");
-        setReviewNotes(epData?.review_notes ?? "");
-        setOriginalEpisode({
-          status: effectiveStatus,
-          rating: epData?.rating ?? 0,
-          watched_on: epData?.watched_on ?? "",
-          review_notes: epData?.review_notes ?? "",
-        });
-      } else {
-        setOriginalEpisode(null);
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to load episode."
-      );
-    } finally {
-      setLoading(false);
+        if (existing) {
+          setLocalMedia(existing);
+          const epData = existing.episodes?.[episodeKey];
+          const { status: effectiveStatus } = getEffectiveEpisodeStatus(
+            existing.status,
+            epData?.status,
+          );
+          setStatus(effectiveStatus as EpisodeTracking["status"]);
+          setRating(epData?.rating ?? 0);
+          setWatchedOn(epData?.watched_on ?? "");
+          setReviewNotes(epData?.review_notes ?? "");
+          setOriginalEpisode({
+            status: effectiveStatus,
+            rating: epData?.rating ?? 0,
+            watched_on: epData?.watched_on ?? "",
+            review_notes: epData?.review_notes ?? "",
+          });
+        } else {
+          setOriginalEpisode(null);
+        }
+      });
+    } catch {
+      // execute already surfaced the generic error via its own state
     }
-  }, [tmdbId, seasonNumber, episodeKey, userId]);
+  }, [execute, tmdbId, seasonNumber, episodeKey, userId]);
 
   useEffect(() => {
     load();
@@ -415,9 +412,7 @@ export default function EpisodePage({
       <BackButton onClick={handleBackClick} />
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-400">
-          {error}
-        </div>
+        <ErrorBanner message={error} onRetry={() => { clearError(); load(); }} />
       )}
 
       {/* ── Row 1: Image + Text ── */}

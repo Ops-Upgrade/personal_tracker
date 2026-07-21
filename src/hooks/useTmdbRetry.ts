@@ -120,9 +120,9 @@ export function useTmdbRetry() {
             return attempt();
           }
 
-          // Fatal error or retry window expired
-          const message =
-            err instanceof Error ? err.message : "An unexpected error occurred.";
+          // Fatal error or retry window expired — surface a generic
+          // message so internal error details never leak to the UI.
+          const message = "Failed to load data. Please try again.";
           setLoading(false);
           setError(message);
           throw err;

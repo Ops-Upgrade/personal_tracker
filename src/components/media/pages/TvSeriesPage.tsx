@@ -65,6 +65,7 @@ export default function TvSeriesPage({
     load,
     save,
     removeMedia,
+    clearError,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setLocalMedia,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -374,7 +375,7 @@ export default function TvSeriesPage({
     return (
       <div className="space-y-4">
         <BackButton onClick={handleBackClick} />
-        <ErrorBanner message={error} />
+        <ErrorBanner message={error} onRetry={() => { clearError(); load(); }} />
       </div>
     );
   }
