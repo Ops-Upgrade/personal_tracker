@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { MedicalRecord } from "@/types/medical";
 import Button from "@/components/common/Button";
 import MedicalTable from "./MedicalTable";
@@ -12,7 +13,6 @@ interface MedicalMonthRowProps {
   records: MedicalRecord[];
   isCurrentMonth?: boolean;
   onSelectRecord: (record: MedicalRecord) => void;
-  onViewAll: () => void;
 }
 
 /**
@@ -20,22 +20,22 @@ interface MedicalMonthRowProps {
  * Uses the reusable MonthTile component for consistent styling.
  *
  * Clicking the tile header expands/collapses the inline preview.
- * When expanded, shows a preview table (up to 5 items).
+ * When expanded, shows a preview table (up to 5 items) with a
+ * "View All" toggle to expand the full list inline.
  */
 export default function MedicalMonthRow({
   monthName,
   records,
   isCurrentMonth,
   onSelectRecord,
-  onViewAll,
 }: MedicalMonthRowProps) {
   const recordCount = records.length;
+  const [showAll, setShowAll] = useState(false);
 
-  // Preview: 5 most recent items sorted by date descending
   const sorted = [...records].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
-  const preview = sorted.slice(0, 5);
+  const preview = showAll ? sorted : sorted.slice(0, 5);
 
   return (
     <MonthTile
@@ -50,13 +50,13 @@ export default function MedicalMonthRow({
       defaultExpanded={isCurrentMonth}
       highlight={isCurrentMonth}
       footerActions={
-        records.length > 0 ? (
+        sorted.length > 5 ? (
           <Button
             variant="ghost"
             size="sm"
-            onClick={onViewAll}
+            onClick={() => setShowAll((prev) => !prev)}
           >
-            View All
+            {showAll ? "View Less" : `View All (${sorted.length})`}
           </Button>
         ) : undefined
       }

@@ -373,7 +373,6 @@ export default function MedicalView() {
                           records={group.records}
                           isCurrentMonth={isCurrentMonth}
                           onSelectRecord={(record) => openEdit(record)}
-                          onViewAll={() => setViewMode("all")}
                         />
                       );
                     }
@@ -383,7 +382,6 @@ export default function MedicalView() {
                         year={group.year}
                         records={group.records}
                         onSelectRecord={(record) => openEdit(record)}
-                        onViewAll={() => setViewMode("all")}
                       />
                     );
                   })}
@@ -408,8 +406,7 @@ export default function MedicalView() {
                             records={group.records}
                             isCurrentMonth={isCurrentMonth}
                             onSelectRecord={(record) => openEdit(record)}
-                            onViewAll={() => setViewMode("all")}
-                          />
+                            />
                         );
                       }
                       return (
@@ -418,7 +415,6 @@ export default function MedicalView() {
                           year={group.year}
                           records={group.records}
                           onSelectRecord={(record) => openEdit(record)}
-                          onViewAll={() => setViewMode("all")}
                         />
                       );
                     })}

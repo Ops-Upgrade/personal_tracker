@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { Expense } from "@/types/expense";
 import Button from "@/components/common/Button";
 import ExpenseTable from "./ExpenseTable";
@@ -12,7 +13,6 @@ interface MonthRowProps {
   expenses: Expense[];
   isCurrentMonth?: boolean;
   onSelectExpense: (expense: Expense) => void;
-  onViewAll?: () => void;
 }
 
 /**
@@ -21,22 +21,22 @@ interface MonthRowProps {
  * with the Task Manager month sections.
  *
  * Clicking the tile header expands/collapses the inline preview.
- * When expanded, shows a preview table (up to 5 items).
+ * When expanded, shows a preview table (up to 5 items) with a
+ * "View All" toggle to expand the full list inline.
  */
 export default function MonthRow({
   monthName,
   expenses,
   isCurrentMonth,
   onSelectExpense,
-  onViewAll,
 }: MonthRowProps) {
   const total = expenses.reduce((sum, e) => sum + e.cost, 0);
+  const [showAll, setShowAll] = useState(false);
 
-  // Preview: 5 most recent items sorted by date descending
   const sorted = [...expenses].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
-  const preview = sorted.slice(0, 5);
+  const preview = showAll ? sorted : sorted.slice(0, 5);
 
   return (
     <MonthTile
@@ -51,13 +51,13 @@ export default function MonthRow({
       defaultExpanded={isCurrentMonth}
       highlight={isCurrentMonth}
       footerActions={
-        expenses.length > 0 && onViewAll ? (
+        sorted.length > 5 ? (
           <Button
             variant="ghost"
             size="sm"
-            onClick={onViewAll}
+            onClick={() => setShowAll((prev) => !prev)}
           >
-            View All
+            {showAll ? "View Less" : `View All (${sorted.length})`}
           </Button>
         ) : undefined
       }
