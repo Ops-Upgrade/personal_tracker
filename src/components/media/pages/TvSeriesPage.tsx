@@ -413,7 +413,7 @@ export default function TvSeriesPage({
       </div>
 
       {/* ── Tabbed Tracking Card ── */}
-      <div className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 p-6 md:p-8 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 p-6 md:p-8 dark:border-zinc-800 dark:bg-zinc-900/50 mb-48">
         {/* Tab bar */}
         <div className="flex gap-6 border-b border-zinc-200 dark:border-zinc-800 mb-6">
           <button
@@ -543,7 +543,7 @@ export default function TvSeriesPage({
                       className={
                         viewMode === "detail"
                           ? "group cursor-pointer rounded-xl border border-zinc-200 bg-white transition-all hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/50 hover:border-violet-300 dark:hover:border-violet-700 overflow-hidden flex flex-col sm:flex-row gap-4 p-3"
-                          : "relative group cursor-pointer h-full z-0 hover:z-[60]"
+                          : "relative group cursor-pointer h-full z-0 hover:z-20"
                       }
                     >
                       {viewMode === "detail" ? (
