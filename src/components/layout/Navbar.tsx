@@ -97,6 +97,7 @@ export default function Navbar({ userEmail, userName, userAvatarUrl }: NavbarPro
                 alt={userName ?? userEmail}
                 width={32}
                 height={32}
+                unoptimized
                 className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-zinc-200 dark:ring-zinc-700"
               />
             ) : (
