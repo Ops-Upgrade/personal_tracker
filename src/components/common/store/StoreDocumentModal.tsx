@@ -9,7 +9,6 @@ import ErrorBanner from "@/components/common/ErrorBanner";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import Toast from "@/components/common/Toast";
 import type { ToastType } from "@/components/common/Toast";
-import { getUniqueFileName } from "./helpers";
 
 // --- Types ---
 
@@ -35,8 +34,6 @@ interface StoreDocumentModalProps {
   domain: DocumentPlaintext["domain"];
   /** Parent records available for linking */
   parentRecords: StoreParentRecord[];
-  /** Labels of ALL existing documents in the store — used for cross-store file name dedup */
-  existingLabels: string[];
   userId: string;
   onClose: () => void;
   onSave: (params: StoreDocumentSaveParams) => Promise<void>;
@@ -51,7 +48,6 @@ export default function StoreDocumentModal({
   document: doc,
   domain,
   parentRecords,
-  existingLabels,
   userId,
   onClose,
   onSave,
@@ -152,14 +148,7 @@ export default function StoreDocumentModal({
   // --- File handlers ---
 
   const handleFileUpload = (file: File) => {
-    const taken = new Set(existingLabels);
-    if (doc?.label) taken.delete(doc.label);
-    const uniqueName = getUniqueFileName(file.name, taken);
-    const renamedFile =
-      uniqueName !== file.name
-        ? new File([file], uniqueName, { type: file.type, lastModified: file.lastModified })
-        : file;
-    setStoreFile(renamedFile);
+    setStoreFile(file);
     setSelectedFileId("store-file");
   };
 

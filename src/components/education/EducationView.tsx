@@ -53,8 +53,8 @@ export default function EducationView() {
     setDocuments(docRows);
   }, []);
 
-  const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
-    useAuthBootstrap({ loadData: loadAllData, fetchServerDate: false });
+  const { userId, istDate, nowYear, nowMonth, isLoading, error, refreshData } =
+    useAuthBootstrap({ loadData: loadAllData });
 
   const [activeView, setActiveView] = useLocalStorage<EducationViewMode>("educationActiveView", "months");
 
@@ -201,6 +201,10 @@ export default function EducationView() {
     }
 
     await refreshData(userId);
+
+    if (!existingEducation) {
+      openEditEducation(savedEdu);
+    }
   }
 
   async function handleEducationDelete(educationId: string, cascadeMode: 'unlink' | 'cascade') {
@@ -311,6 +315,7 @@ export default function EducationView() {
       {eduModalTarget && (
         <EducationModal
           education={eduModalTarget === "create" ? null : eduModalTarget}
+          defaultDate={eduModalTarget === "create" ? istDate : undefined}
           documents={documents}
           userId={userId || ""}
           onClose={closeEduModal}

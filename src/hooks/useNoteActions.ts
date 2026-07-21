@@ -122,6 +122,7 @@ export function useNoteActions({ userId, refresh }: UseNoteActionsParams) {
       }
 
       await refresh();
+      return savedNote;
     },
     [userId, refresh],
   );

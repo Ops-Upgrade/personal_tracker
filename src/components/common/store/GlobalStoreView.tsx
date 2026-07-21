@@ -671,7 +671,6 @@ export default function GlobalStoreView({
           document={null}
           domain={domain}
           parentRecords={parentRecords}
-          existingLabels={domainDocuments.map((d) => d.label).filter((l): l is string => !!l)}
           userId={userId}
           onClose={closeStoreAddModal}
           onSave={handleStoreSave}
@@ -687,7 +686,6 @@ export default function GlobalStoreView({
           document={editingDocument}
           domain={domain}
           parentRecords={parentRecords}
-          existingLabels={domainDocuments.map((d) => d.label).filter((l): l is string => !!l)}
           userId={userId}
           onClose={closeStoreEditModal}
           onSave={handleStoreSave}

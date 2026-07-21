@@ -239,6 +239,10 @@ export default function MedicalView() {
     }
 
     await refreshData(userId);
+
+    if (!existingRecord) {
+      openEdit(savedRecord);
+    }
   }
 
   async function handleDelete(recordId: string, cascadeMode: 'unlink' | 'cascade' = 'cascade') {
@@ -429,6 +433,7 @@ export default function MedicalView() {
       {modalTarget && userId && (
         <MedicalModal
           record={modalTarget === "create" ? null : modalTarget}
+          defaultDate={modalTarget === "create" ? istDate : undefined}
           attachedDocuments={
             modalTarget !== "create" && modalTarget
               ? documents.filter((d) => modalTarget.document_ids?.includes(d.id))

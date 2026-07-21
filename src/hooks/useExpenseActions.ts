@@ -127,6 +127,7 @@ export function useExpenseActions({ userId, refresh }: UseExpenseActionsParams) 
       }
 
       await refresh();
+      return savedExpense;
     },
     [userId, refresh],
   );

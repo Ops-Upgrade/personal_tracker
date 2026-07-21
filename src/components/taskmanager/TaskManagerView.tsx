@@ -137,13 +137,18 @@ export default function TaskManagerView() {
       updated_at: nowIso,
     };
 
+    let savedTask: Task;
     if (existingTask) {
-      await updateTask(userId, existingTask.id, payload);
+      savedTask = await updateTask(userId, existingTask.id, payload);
     } else {
-      await createTask(userId, payload);
+      savedTask = await createTask(userId, payload);
     }
 
     await refreshData(userId);
+
+    if (!existingTask) {
+      setModalParam(`edit-task-${savedTask.id}`);
+    }
   }
 
   async function handleTaskDelete(taskId: string) {
@@ -176,13 +181,39 @@ export default function TaskManagerView() {
     await refreshData(userId);
   }
 
-  const { handleNoteSave, handleNoteDelete, handleDownloadDocument } =
+  const { handleNoteSave: rawHandleNoteSave, handleNoteDelete, handleDownloadDocument } =
     useNoteActions({
       userId,
       refresh: async () => {
         if (userId) await refreshData(userId);
       },
     });
+
+  // Wrapper that transitions the URL param from "new-note" to "edit-note-<id>"
+  // after creation so the modal switches to edit mode with a real baseline.
+  const handleNoteSave = useCallback(
+    async (
+      draft: { name: string; content: string },
+      existingNote: Note | null,
+      pendingDoc?: { file: File; label: string },
+      pendingLinkDocId?: string,
+      pendingUnlinkDocIds?: string[],
+      pendingDeleteDocIds?: string[],
+    ) => {
+      const savedNote = await rawHandleNoteSave(
+        draft,
+        existingNote,
+        pendingDoc,
+        pendingLinkDocId,
+        pendingUnlinkDocIds,
+        pendingDeleteDocIds,
+      );
+      if (!existingNote && savedNote) {
+        setModalParam(`edit-note-${savedNote.id}`);
+      }
+    },
+    [rawHandleNoteSave, setModalParam],
+  );
 
   // --- Render ---
 

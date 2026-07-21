@@ -5,6 +5,7 @@ import type { MedicalRecord } from "@/types/medical";
 import type { Document } from "@/types/document";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
+import type { ModalFile } from "@/components/common/GlobalActionModal";
 import { useModalDocumentState } from "@/lib/useModalDocumentState";
 import { InputField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
@@ -203,7 +204,112 @@ export default function MedicalModal({
     setMarkedForRemoval((prev) => { const next = new Set(prev); next.delete(fileId); return next; });
   }, [newFiles, stagedLinkDocId, setStagedLinkDocId]);
 
-  const hasFiles = files.length > 0;
+  // Custom files array that keeps marked-for-removal/unlink docs visible with badges.
+  // The shared hook's `files` filters them out, so we build our own matching the
+  // pattern used by ExpenseModal / EducationModal.
+  const displayFiles: ModalFile[] = useMemo(() => {
+    type FileEntry = {
+      id: string;
+      rawName: string;
+      mime?: string;
+      iv?: string;
+      file?: File | null;
+      isNew?: boolean;
+      isMarkedForDeletion?: boolean;
+      isMarkedForUnlink?: boolean;
+      orderGroup: number;
+      orderIndex: number;
+    };
+
+    const entries: FileEntry[] = [];
+
+    // Existing linked docs (keep them all, apply badges)
+    let idx = 0;
+    for (const doc of attachedDocuments) {
+      entries.push({
+        id: doc.id,
+        rawName: doc.label || doc.file_name || "Unnamed Document",
+        mime: doc.file_mime,
+        iv: doc.file_iv,
+        isMarkedForDeletion: markedForRemoval.has(doc.id) || undefined,
+        isMarkedForUnlink: markedForUnlink.has(doc.id) || undefined,
+        orderGroup: 0,
+        orderIndex: idx++,
+      });
+    }
+
+    // Newly uploaded files (unsaved)
+    idx = 0;
+    for (const nf of newFiles) {
+      entries.push({
+        id: nf.tempId,
+        rawName: nf.name,
+        mime: nf.file.type,
+        file: nf.file,
+        isNew: true,
+        orderGroup: 1,
+        orderIndex: idx++,
+      });
+    }
+
+    // Staged link doc
+    if (stagedLinkDocId) {
+      const sd = standaloneDocuments.find((d) => d.id === stagedLinkDocId);
+      if (sd) {
+        entries.push({
+          id: sd.id,
+          rawName: sd.label || sd.file_name || "Unnamed Document",
+          mime: sd.file_mime,
+          iv: sd.file_iv,
+          isNew: true,
+          orderGroup: 2,
+          orderIndex: 0,
+        });
+      }
+    }
+
+    // Deduplicate names
+    const buckets = new Map<string, FileEntry[]>();
+    for (const e of entries) {
+      if (!buckets.has(e.rawName)) buckets.set(e.rawName, []);
+      buckets.get(e.rawName)!.push(e);
+    }
+
+    const result: ModalFile[] = [];
+    for (const [, bucket] of buckets) {
+      bucket.sort(
+        (a, b) => a.orderGroup - b.orderGroup || a.orderIndex - b.orderIndex
+      );
+      if (bucket.length === 1) {
+        const e = bucket[0];
+        result.push({
+          id: e.id,
+          name: e.rawName,
+          mime: e.mime,
+          iv: e.iv,
+          file: e.file,
+          isNew: e.isNew,
+          isMarkedForDeletion: e.isMarkedForDeletion,
+          isMarkedForUnlink: e.isMarkedForUnlink,
+        });
+      } else {
+        bucket.forEach((e, i) => {
+          result.push({
+            id: e.id,
+            name: `${e.rawName} (${i + 1})`,
+            mime: e.mime,
+            iv: e.iv,
+            file: e.file,
+            isNew: e.isNew,
+            isMarkedForDeletion: e.isMarkedForDeletion,
+            isMarkedForUnlink: e.isMarkedForUnlink,
+          });
+        });
+      }
+    }
+
+    return result;
+  }, [attachedDocuments, newFiles, markedForRemoval, markedForUnlink, stagedLinkDocId, standaloneDocuments]);
 
   // --- Save handler ---
 
@@ -241,6 +347,14 @@ export default function MedicalModal({
         record,
         fileAction,
       );
+
+      // Synchronously clear local file state so isDirty resets immediately.
+      // Without this the async useEffect reset can leave a stale dirty flag.
+      setMarkedForRemoval(new Set());
+      setMarkedForUnlink(new Set());
+      setStagedLinkDocId(null);
+      resetFileState();
+
       triggerToast("✓ Saved", "success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save medical record.");
@@ -369,14 +483,14 @@ export default function MedicalModal({
         title={isEditing ? "Edit medical record" : "Add medical record"}
         onClose={onClose}
         isDirty={isDirty}
-        files={files}
+        files={displayFiles}
         selectedFileId={selectedFileId}
         onSelectFile={(id) => setSelectedFileId(id)}
         onFileUpload={handleFileUploadWrapped}
-        onFileDelete={hasFiles ? handleFileDeleteWrapped : undefined}
-        onFileUnlink={hasFiles ? handleFileUnlinkWrapped : undefined}
-        onFileDownload={hasFiles ? handleFileDownload : undefined}
-        onFileRename={hasFiles ? handleFileRename : undefined}
+        onFileDelete={displayFiles.length > 0 ? handleFileDeleteWrapped : undefined}
+        onFileUnlink={displayFiles.length > 0 ? handleFileUnlinkWrapped : undefined}
+        onFileDownload={displayFiles.length > 0 ? handleFileDownload : undefined}
+        onFileRename={displayFiles.length > 0 ? handleFileRename : undefined}
         onLoadPreview={handleLoadPreview}
         onSave={handleSave}
         isSaving={isSaving}

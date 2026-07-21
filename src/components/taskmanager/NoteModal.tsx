@@ -36,7 +36,7 @@ interface NoteModalProps {
     pendingLinkDocId?: string,
     pendingUnlinkDocIds?: string[],
     pendingDeleteDocIds?: string[],
-  ) => Promise<void>;
+  ) => Promise<unknown>;
   onDelete: (noteId: string, cascadeMode: "unlink" | "cascade") => Promise<void>;
   onDownloadDocument: (document: Document) => Promise<void>;
 }
@@ -446,6 +446,13 @@ export default function NoteModal({
         docsToUnlink.length > 0 ? docsToUnlink : undefined,
         docsToDelete.length > 0 ? docsToDelete : undefined,
       );
+
+      // Synchronously clear local file state so isDirty resets immediately
+      setNewFiles([]);
+      setMarkedForDeletion(new Set());
+      setMarkedForUnlink(new Set());
+      setStagedLinkDocId(null);
+      hookResetFileState();
 
       triggerToast("✓ Saved", "success");
     } catch (err) {

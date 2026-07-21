@@ -39,7 +39,7 @@ interface ExpenseModalProps {
     pendingLinkDocId?: string,
     pendingUnlinkDocIds?: string[],
     pendingDeleteDocIds?: string[],
-  ) => Promise<void>;
+  ) => Promise<unknown>;
   onDelete: (expenseId: string, cascadeMode: "unlink" | "cascade") => Promise<void>;
   onDownloadDocument: (document: Document) => Promise<void>;
   zClassName?: string;
@@ -412,6 +412,11 @@ export default function ExpenseModal({
         undefined,
         docsToDelete.length > 0 ? docsToDelete : undefined,
       );
+
+      // Synchronously clear local file state so isDirty resets immediately
+      setNewFiles([]);
+      setMarkedForDeletion(new Set());
+      hookResetFileState();
 
       triggerToast("✓ Saved", "success");
     } catch (err) {

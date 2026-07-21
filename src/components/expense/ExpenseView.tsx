@@ -64,16 +64,42 @@ export default function ExpenseView() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleExpenseSave, handleExpenseDelete, handleDownloadDocument } =
+  const { handleExpenseSave: rawHandleExpenseSave, handleExpenseDelete, handleDownloadDocument } =
     useExpenseActions({ userId, refresh });
+
+  // Query-param-driven modal state via shared hook
+  const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(expenses, "expense");
+
+  // Wrapper that transitions the URL param from "new-expense" to "edit-expense-<id>"
+  // after creation so the modal switches to edit mode with a real baseline.
+  const handleExpenseSave = useCallback(
+    async (
+      draft: { item: string; seller: string; cost: number; date: string; reason: string },
+      existingExpense: Expense | null,
+      pendingDoc?: { file: File; label: string },
+      pendingLinkDocId?: string,
+      pendingUnlinkDocIds?: string[],
+      pendingDeleteDocIds?: string[],
+    ) => {
+      const savedExpense = await rawHandleExpenseSave(
+        draft,
+        existingExpense,
+        pendingDoc,
+        pendingLinkDocId,
+        pendingUnlinkDocIds,
+        pendingDeleteDocIds,
+      );
+      if (!existingExpense && savedExpense) {
+        openEdit(savedExpense);
+      }
+    },
+    [rawHandleExpenseSave, openEdit],
+  );
 
   const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
 
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [viewMode, setViewMode] = useLocalStorage<ExpenseViewMode>("expenseViewMode", "single");
-
-  // Query-param-driven modal state via shared hook
-  const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(expenses, "expense");
 
   // Auto-scroll to the current month tile on load / year / view change
   useEffect(() => {
@@ -252,6 +278,7 @@ export default function ExpenseView() {
       {modalTarget && userId && (
         <ExpenseModal
           expense={modalTarget === "create" ? null : modalTarget}
+          defaultDate={modalTarget === "create" ? istDate : undefined}
           documents={documents}
           userId={userId}
           onClose={closeModal}

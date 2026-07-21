@@ -31,6 +31,7 @@ interface EducationDraft {
 
 interface EducationModalProps {
   education: Education | null;
+  defaultDate?: string;
   documents: Document[];
   userId: string;
   onClose: () => void;
@@ -45,6 +46,7 @@ interface EducationModalProps {
 
 export default function EducationModal({
   education,
+  defaultDate,
   documents,
   userId,
   onClose,
@@ -52,11 +54,9 @@ export default function EducationModal({
   onDelete,
   onDownloadDocument,
 }: EducationModalProps) {
-  // ── Baseline form values (computed first so state initializers can use them) ──
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
   const initialDueDate = useMemo(
-    () => normalizeDateForInput(education?.due_date, education ? "" : todayStr),
-    [education, todayStr],
+    () => normalizeDateForInput(education?.due_date, defaultDate ?? ""),
+    [education, defaultDate],
   );
 
   // --- Form state (initialized from education values, not empty strings) ---
@@ -433,6 +433,13 @@ export default function EducationModal({
         docsToUnlink.length > 0 ? docsToUnlink : undefined,
         docsToDelete.length > 0 ? docsToDelete : undefined,
       );
+
+      // Synchronously clear local file state so isDirty resets immediately
+      setNewFiles([]);
+      setMarkedForDeletion(new Set());
+      setMarkedForUnlink(new Set());
+      setStagedLinkDocId(null);
+      hookResetFileState();
 
       triggerToast("✓ Saved", "success");
     } catch (err) {
