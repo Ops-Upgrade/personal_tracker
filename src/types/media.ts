@@ -159,7 +159,7 @@ export const DISCOVER_GENRE_IDS: Record<
   documentary: { movie: [99], tv: [99] },
   drama: { movie: [18], tv: [18] },
   fantasy: { movie: [14], tv: [10765] },
-  horror: { movie: [27], tv: [9648] },
+  horror: { movie: [27], tv: [] },
   music: { movie: [10402], tv: [] },
   mystery: { movie: [9648], tv: [9648] },
   romance: { movie: [10749], tv: [18] },

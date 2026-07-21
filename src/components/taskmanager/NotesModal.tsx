@@ -2,7 +2,7 @@
 
 import type { Note } from "@/types/taskmanager";
 import ModalFrame from "@/components/common/ModalFrame";
-import { sortedNotes, trunc } from "./helpers";
+import { sortedNotes, getNoteTitle } from "./helpers";
 
 interface NotesModalProps {
   notes: Note[];
@@ -26,7 +26,7 @@ export default function NotesModal({ notes, onClose, onSelectNote }: NotesModalP
             onClick={() => onSelectNote(note)}
             className="w-full cursor-pointer rounded-md border border-zinc-200 px-3 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            {trunc(note.content, 280)}
+            {getNoteTitle(note)}
           </button>
         ))}
       </div>

@@ -25,7 +25,6 @@ export interface ExpensePlaintext {
    cost: number;
    date: string; // ISO 8601 date (YYYY-MM-DD) — determines month/year grouping
    reason: string;
-   invoice: string; // Legacy: free-text reference (may be empty when file is used)
    document_ids: string[]; // linked Document row IDs (global document store)
    updated_at: string;
 }

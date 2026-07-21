@@ -54,6 +54,17 @@ export default function ActiveTasksBox({
       priorities={PRIORITIES}
       getPriorityColor={(p) => getPriorityColor(p as typeof PRIORITIES[number])}
       renderPriorityBadge={(p) => <PriorityBadge priority={p as typeof PRIORITIES[number]} />}
+      renderHeader={() => (
+        <div className="hidden sm:flex items-center justify-between gap-2 px-2 pb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
+          <div className="grid flex-1 gap-2 sm:grid-cols-12 pl-[3px]">
+            <div className="col-span-4">Task Name</div>
+            <div className="col-span-2">{view === "priority" ? "Due Date" : "Priority"}</div>
+            <div className="col-span-2">Mode</div>
+            <div className="col-span-4">Description</div>
+          </div>
+          <div className="w-[85px]" />
+        </div>
+      )}
       renderItem={(task) => {
         const colors = getPriorityColor(task.priority);
         return (

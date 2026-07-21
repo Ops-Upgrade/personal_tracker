@@ -25,6 +25,35 @@ import type { StoreDocumentSaveParams, StoreParentRecord } from "./StoreDocument
 import BulkLinkModal from "./BulkLinkModal";
 import { getUniqueFileName } from "./helpers";
 
+// --- Domain theming ---
+
+const DOMAIN_THEMES = {
+  taskmanager: {
+    primaryBtn: "bg-sky-600 hover:bg-sky-500 focus-visible:outline-sky-600",
+    lightBg:
+      "bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-950/30 dark:text-sky-400 dark:hover:bg-sky-950/50",
+    inputFocus: "focus:border-sky-500 focus:ring-sky-500",
+  },
+  education: {
+    primaryBtn: "bg-amber-600 hover:bg-amber-500 focus-visible:outline-amber-600",
+    lightBg:
+      "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50",
+    inputFocus: "focus:border-amber-500 focus:ring-amber-500",
+  },
+  medical: {
+    primaryBtn: "bg-rose-600 hover:bg-rose-500 focus-visible:outline-rose-600",
+    lightBg:
+      "bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:hover:bg-rose-950/50",
+    inputFocus: "focus:border-rose-500 focus:ring-rose-500",
+  },
+  expense: {
+    primaryBtn: "bg-emerald-600 hover:bg-emerald-500 focus-visible:outline-emerald-600",
+    lightBg:
+      "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50",
+    inputFocus: "focus:border-emerald-500 focus:ring-emerald-500",
+  },
+} as const;
+
 // --- Props ---
 
 interface GlobalStoreViewProps {
@@ -54,6 +83,17 @@ interface GlobalStoreViewProps {
   extractNewRecordData?: () => Record<string, string> | null;
   /** Optional: called when a new parent record is created inline. Receives the new record data and returns the new parent ID. */
   onCreateParentFromStore?: (data: Record<string, string>) => Promise<string>;
+  /** When true, parent record names are hidden from the document tile display.
+   *  Linking logic (modals, bulk operations) is unaffected. */
+  hideParentRecordsList?: boolean;
+  /** Called after a document is saved in the store modal. Lets parent pages sync
+   *  their parent-record `document_ids` arrays with the new link state. */
+  onDocumentSaved?: (documentId: string, newLinkedId: string, oldLinkedId: string) => Promise<void>;
+  /** Incremented by the parent page whenever it refreshes its own data
+   *  (e.g. after a NoteModal unlink). Triggers GlobalStoreView to re-fetch. */
+  refreshTrigger?: number;
+  /** When true, hides the "Add" button so no standalone documents can be created. */
+  disableAdd?: boolean;
 }
 
 export default function GlobalStoreView({
@@ -70,7 +110,13 @@ export default function GlobalStoreView({
   renderNewRecordForm,
   extractNewRecordData,
   onCreateParentFromStore,
+  hideParentRecordsList = false,
+  onDocumentSaved,
+  refreshTrigger,
+  disableAdd = false,
 }: GlobalStoreViewProps) {
+  const theme = DOMAIN_THEMES[domain];
+
   const [userId, setUserId] = useState<string | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -88,7 +134,12 @@ export default function GlobalStoreView({
     return { add: false, edit: null };
   });
 
-  const editingDocument = modals.edit;
+  /** Always resolve against the live documents array so the modal sees fresh data
+   *  after a background refresh (e.g. after unlinking from a Store page). */
+  const editingDocument = useMemo(() => {
+    if (!modals.edit) return null;
+    return documents.find((d) => d.id === modals.edit!.id) || modals.edit;
+  }, [modals.edit, documents]);
   const isAddingDocument = modals.add;
 
   // --- Bulk selection state ---
@@ -180,7 +231,7 @@ export default function GlobalStoreView({
     if (userId) {
       loadData();
     }
-  }, [userId, loadData]);
+  }, [userId, loadData, refreshTrigger]);
 
   // --- Download handler ---
   const handleDownload = async (docId: string) => {
@@ -220,11 +271,14 @@ export default function GlobalStoreView({
     if (!userId) throw new Error("No active session.");
     const nowIso = new Date().toISOString();
     let resolvedLinkedId = params.linkedParentId || "";
+    const oldLinkedId = params.existingDocument?.linked_id || "";
 
     // If creating a new parent record inline, do that first
     if (!resolvedLinkedId && params.newParentRecord && onCreateParentFromStore) {
       resolvedLinkedId = await onCreateParentFromStore(params.newParentRecord);
     }
+
+    let docId: string;
 
     if (params.existingDocument) {
       const existing = params.existingDocument;
@@ -251,10 +305,11 @@ export default function GlobalStoreView({
           updated_at: nowIso,
         } as DocumentPlaintext);
       }
+      docId = existing.id;
     } else {
       if (!params.file) throw new Error("File is required for new documents.");
       const { fileName, iv, mimeType } = await uploadDocumentFile(userId, params.file);
-      await createDocument(userId, {
+      const newDoc = await createDocument(userId, {
         label: params.label,
         file_name: fileName,
         file_iv: iv,
@@ -263,11 +318,40 @@ export default function GlobalStoreView({
         linked_id: resolvedLinkedId,
         updated_at: nowIso,
       });
+      docId = newDoc.id;
     }
 
-    await loadData();
-    setModals((prev) => ({ ...prev, add: false, edit: null }));
-    clearHash();
+    // Reload documents to get the latest state
+    const freshDocs = await fetchDocuments(userId);
+    setDocuments(freshDocs);
+
+    // Notify parent page so it can sync parent-record document_ids arrays
+    // This MUST happen before closing the modal so the parent can set linkedRecord
+    // and open its own record modal seamlessly.
+    if (onDocumentSaved) {
+      await onDocumentSaved(docId, resolvedLinkedId, oldLinkedId);
+    }
+
+    // Keep modal open in edit mode ONLY if the document remains unlinked.
+    // If linked, close it — the parent page opens its own record modal instead.
+    const updatedDoc = freshDocs.find((d) => d.id === docId);
+    if (updatedDoc) {
+      if (resolvedLinkedId) {
+        setModals({ add: false, edit: null });
+        clearHash();
+      } else {
+        setModals({ add: false, edit: updatedDoc });
+        // Update URL hash without firing hashchange (which would use stale state)
+        window.history.replaceState(
+          null,
+          "",
+          window.location.pathname + window.location.search + `#edit-document-${docId}`,
+        );
+      }
+    } else {
+      setModals({ add: false, edit: null });
+      clearHash();
+    }
   };
 
   const handleStoreDelete = async (d: Document, cascadeMode: "unlink" | "cascade") => {
@@ -397,12 +481,15 @@ export default function GlobalStoreView({
 
   // --- Build document tiles ---
   const documentTiles: DocumentTile[] = domainDocuments.map((d) => {
-    const parent = parentRecords.find((r) => r.id === d.linked_id);
+    const parent = hideParentRecordsList
+      ? undefined
+      : parentRecords.find((r) => r.id === d.linked_id);
     return {
       id: d.id,
       fileName: d.label || "Unnamed Document",
       fileUrl: "",
       linkedItemName: parent ? parent.name : null,
+      isLinked: !!d.linked_id,
       thumbnailUrl: null,
       mime: d.file_mime || undefined,
     };
@@ -436,6 +523,7 @@ export default function GlobalStoreView({
 
       <BoxContainer>
         <TileView
+          domain={domain}
           documents={documentTiles}
           isLoading={isLoading}
           onDownload={handleDownload}
@@ -451,7 +539,7 @@ export default function GlobalStoreView({
             }
           }}
           onActionClick={handleActionClick}
-          onAdd={() => setModals((prev) => ({ ...prev, add: true }))}
+          onAdd={disableAdd ? undefined : () => setModals((prev) => ({ ...prev, add: true }))}
           title=""
           onRenameConfirmed={handleRenameConfirmed}
           selectionEnabled
@@ -488,7 +576,7 @@ export default function GlobalStoreView({
               <button
                 onClick={() => setShowBulkLink(true)}
                 disabled={!allBulkUnlinked}
-                className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50 transition-colors"
+                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${theme.lightBg}`}
               >
                 <Link className="h-4 w-4" /> Link
               </button>
@@ -519,7 +607,7 @@ export default function GlobalStoreView({
               placeholder="e.g., AWS Certification"
               autoFocus
               disabled={bulkProcessing}
-              className="mt-3 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50"
+              className={`mt-3 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:ring-1 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50 ${theme.inputFocus}`}
             />
             <div className="mt-4 flex justify-end gap-2">
               <button
@@ -532,7 +620,7 @@ export default function GlobalStoreView({
               <button
                 onClick={() => executeBulkRename(bulkRenameBase)}
                 disabled={!bulkRenameBase.trim() || bulkProcessing}
-                className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className={`inline-flex items-center rounded-md px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed ${theme.primaryBtn}`}
               >
                 {bulkProcessing ? "Renaming..." : "Rename All"}
               </button>
@@ -583,7 +671,6 @@ export default function GlobalStoreView({
           document={null}
           domain={domain}
           parentRecords={parentRecords}
-          existingLabels={domainDocuments.map((d) => d.label).filter((l): l is string => !!l)}
           userId={userId}
           onClose={closeStoreAddModal}
           onSave={handleStoreSave}
@@ -599,7 +686,6 @@ export default function GlobalStoreView({
           document={editingDocument}
           domain={domain}
           parentRecords={parentRecords}
-          existingLabels={domainDocuments.map((d) => d.label).filter((l): l is string => !!l)}
           userId={userId}
           onClose={closeStoreEditModal}
           onSave={handleStoreSave}

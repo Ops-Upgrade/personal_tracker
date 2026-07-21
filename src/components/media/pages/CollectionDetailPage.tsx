@@ -7,8 +7,8 @@ import BackButton from "@/components/common/BackButton";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Button from "@/components/common/Button";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
-import Toast from "@/components/media/shared/Toast";
-import type { ToastType } from "@/components/media/shared/Toast";
+import Toast from "@/components/common/Toast";
+import type { ToastType } from "@/components/common/Toast";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import {
@@ -337,6 +337,8 @@ export default function CollectionDetailPage({
 
       const media = await listMedia(userId);
       setAllMedia([...media]);
+
+      triggerToast("✓ Saved", "success");
     } catch {
       triggerToast("Failed to save collection. Please try again.", "error");
     } finally {

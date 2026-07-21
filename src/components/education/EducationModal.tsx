@@ -13,7 +13,10 @@ import { useModalDocumentState } from "@/lib/useModalDocumentState";
 import { InputField, SelectField, CheckboxField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
+import Toast from "@/components/common/Toast";
+import type { ToastType } from "@/components/common/Toast";
 import { docsForEducation, getUniqueFileName, trunc } from "./helpers";
+import { stripHtml, normalizeDateForInput } from "@/lib/utils";
 
 // --- Types ---
 
@@ -28,6 +31,7 @@ interface EducationDraft {
 
 interface EducationModalProps {
   education: Education | null;
+  defaultDate?: string;
   documents: Document[];
   userId: string;
   onClose: () => void;
@@ -42,6 +46,7 @@ interface EducationModalProps {
 
 export default function EducationModal({
   education,
+  defaultDate,
   documents,
   userId,
   onClose,
@@ -49,15 +54,32 @@ export default function EducationModal({
   onDelete,
   onDownloadDocument,
 }: EducationModalProps) {
-  // --- Form state ---
-  const [name, setName] = useState("");
-  const [provider, setProvider] = useState("");
-  const [priority, setPriority] = useState<Priority>("medium");
-  const [dueDate, setDueDate] = useState("");
-  const [description, setDescription] = useState("");
-  const [isCompleted, setIsCompleted] = useState(false);
+  const initialDueDate = useMemo(
+    () => normalizeDateForInput(education?.due_date, defaultDate ?? ""),
+    [education, defaultDate],
+  );
+
+  // --- Form state (initialized from education values, not empty strings) ---
+  const [name, setName] = useState(education?.name ?? "");
+  const [provider, setProvider] = useState(education?.provider ?? "");
+  const [priority, setPriority] = useState<Priority>(education?.priority ?? "medium");
+  const [dueDate, setDueDate] = useState(initialDueDate);
+  const [description, setDescription] = useState(education?.description ?? "");
+  const [isCompleted, setIsCompleted] = useState(education?.is_completed ?? false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // --- Toast ---
+  const [toastConfig, setToastConfig] = useState<{
+    isVisible: boolean;
+    message: string;
+    type: ToastType;
+  }>({ isVisible: false, message: "", type: "success" });
+
+  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
+    setToastConfig({ isVisible: true, message, type });
+    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
+  }, []);
 
   // --- Delete confirmation ---
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -102,35 +124,49 @@ export default function EducationModal({
     markedForRemoval: markedForDeletion,
   });
 
-  // --- Reset on open ---
+  // --- Reset form fields on open / record change ---
   useEffect(() => {
-    const todayStr = new Date().toISOString().split("T")[0];
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync form state when editing a different record
     setName(education?.name ?? "");
     setProvider(education?.provider ?? "");
     setPriority(education?.priority ?? "medium");
-    setDueDate(education ? (education?.due_date ?? "") : todayStr);
+    setDueDate(initialDueDate);
     setDescription(education?.description ?? "");
     setIsCompleted(education?.is_completed ?? false);
     setError(null);
     setShowDeleteConfirm(false);
+  }, [education, initialDueDate]);
+
+  // --- Reset file state only when the record changes (NOT on documents load) ---
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync file state when editing a different record
     setNewFiles([]);
     setMarkedForDeletion(new Set());
     setMarkedForUnlink(new Set());
     hookResetFileState();
-    const existingDocs = education ? docsForEducation(education.id, documents) : [];
-    setSelectedDocId(existingDocs.length > 0 ? existingDocs[0].id : null);
-  }, [education, documents, hookResetFileState]);
+  }, [education, hookResetFileState]);
+
+  // --- Auto-select the first attached document (safe to run on documents load) ---
+  useEffect(() => {
+    if (education && !selectedDocId) {
+      const existingDocs = docsForEducation(education.id, documents);
+      if (existingDocs.length > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: auto-select first doc on open
+        setSelectedDocId(existingDocs[0].id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [education, documents]);
 
   // ── Baseline form values ──
-  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
   const formBaseline = useMemo(() => ({
     name: education?.name ?? "",
     provider: education?.provider ?? "",
     priority: education?.priority ?? "medium",
-    dueDate: education ? (education.due_date ?? "") : todayStr,
+    dueDate: initialDueDate,
     description: education?.description ?? "",
     isCompleted: education?.is_completed ?? false,
-  }), [education, todayStr]);
+  }), [education, initialDueDate]);
 
   // --- Dirty check ---
 
@@ -139,7 +175,7 @@ export default function EducationModal({
     provider !== formBaseline.provider ||
     priority !== formBaseline.priority ||
     dueDate !== formBaseline.dueDate ||
-    description !== formBaseline.description ||
+    stripHtml(description) !== stripHtml(formBaseline.description) ||
     isCompleted !== formBaseline.isCompleted;
 
   const isDirty = hasFormChanges || newFiles.length > 0 || stagedLinkDocId !== null || markedForDeletion.size > 0 || markedForUnlink.size > 0;
@@ -195,7 +231,7 @@ export default function EducationModal({
 
     // Staged link doc
     if (stagedLinkDocId) {
-      const sd = documents.find(d => d.id === stagedLinkDocId);
+      const sd = standaloneDocs.find(d => d.id === stagedLinkDocId);
       if (sd) {
         entries.push({
           id: sd.id,
@@ -398,7 +434,14 @@ export default function EducationModal({
         docsToDelete.length > 0 ? docsToDelete : undefined,
       );
 
-      onClose();
+      // Synchronously clear local file state so isDirty resets immediately
+      setNewFiles([]);
+      setMarkedForDeletion(new Set());
+      setMarkedForUnlink(new Set());
+      setStagedLinkDocId(null);
+      hookResetFileState();
+
+      triggerToast("✓ Saved", "success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save education.");
     } finally {
@@ -503,6 +546,8 @@ export default function EducationModal({
   const hasFiles = files.length > 0;
   return (
     <>
+      <Toast isVisible={toastConfig.isVisible} message={toastConfig.message} type={toastConfig.type} />
+
       <GlobalActionModal
         title={education ? "Edit education" : "Add education"}
         onClose={onClose}

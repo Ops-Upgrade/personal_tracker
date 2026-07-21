@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import { useLocalStorage } from "@/lib/useLocalStorage";
-import { trunc, stripHtml } from "@/lib/viewHelpers";
-import type { Expense } from "@/types/expense";
+import { trunc } from "@/lib/viewHelpers";
+import type { MedicalRecord } from "@/types/medical";
 
 // --- Inline SVG Icon Component ---
 
@@ -17,7 +17,7 @@ function PaperClipIcon(props: React.SVGProps<SVGSVGElement>) {
 
 // --- Types ---
 
-type SortColumn = "item" | "seller" | "cost" | "date" | "reason";
+type SortColumn = "name" | "clinic" | "date";
 type SortDirection = "asc" | "desc";
 
 interface SortState {
@@ -63,24 +63,24 @@ function SortableHeader({
 
 // --- Main Component ---
 
-interface ExpenseTableProps {
-  expenses: Expense[];
-  onSelectExpense: (expense: Expense) => void;
+interface MedicalTableProps {
+  records: MedicalRecord[];
+  onSelectRecord: (record: MedicalRecord) => void;
   /** When true, column headers are rendered as plain text (no sort controls). */
   disableSorting?: boolean;
 }
 
 /**
- * Reusable expense table — used in both the inline month preview and the full month modal.
- * Columns: Item, Seller, Cost, Date, Reason, Invoice.
+ * Reusable medical records table — used in both the inline month preview and the full "View All" page.
+ * Columns: Name, Clinic, Date, Files.
  * Clicking a column header toggles between ascending, descending, and no-sort.
  */
-export default function ExpenseTable({
-  expenses,
-  onSelectExpense,
+export default function MedicalTable({
+  records,
+  onSelectRecord,
   disableSorting = false,
-}: ExpenseTableProps) {
-  const [sortState, setSortState] = useLocalStorage<SortState | null>("expenseTableSortState", null);
+}: MedicalTableProps) {
+  const [sortState, setSortState] = useLocalStorage<SortState | null>("medicalTableSortState", null);
 
   function handleSort(column: SortColumn) {
     setSortState((prev) => {
@@ -96,32 +96,24 @@ export default function ExpenseTable({
   }
 
   const sorted = useMemo(() => {
-    if (disableSorting || !sortState) return expenses;
+    if (disableSorting || !sortState) return records;
     const { column, direction } = sortState;
-    const sorted = [...expenses].sort((a, b) => {
+    const sorted = [...records].sort((a, b) => {
       let aVal: string | number;
       let bVal: string | number;
 
       switch (column) {
-        case "item":
-          aVal = a.item.toLowerCase();
-          bVal = b.item.toLowerCase();
+        case "name":
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
           break;
-        case "seller":
-          aVal = (a.seller ?? "").toLowerCase();
-          bVal = (b.seller ?? "").toLowerCase();
-          break;
-        case "cost":
-          aVal = a.cost;
-          bVal = b.cost;
+        case "clinic":
+          aVal = (a.clinic ?? "").toLowerCase();
+          bVal = (b.clinic ?? "").toLowerCase();
           break;
         case "date":
           aVal = new Date(a.date + "T00:00:00").getTime();
           bVal = new Date(b.date + "T00:00:00").getTime();
-          break;
-        case "reason":
-          aVal = stripHtml(a.reason).toLowerCase();
-          bVal = stripHtml(b.reason).toLowerCase();
           break;
         default:
           return 0;
@@ -132,12 +124,12 @@ export default function ExpenseTable({
       return 0;
     });
     return sorted;
-  }, [expenses, sortState, disableSorting]);
+  }, [records, sortState, disableSorting]);
 
-  if (expenses.length === 0) {
+  if (records.length === 0) {
     return (
       <div className="py-3 text-sm text-zinc-500 dark:text-zinc-400">
-        No expenses recorded.
+        No medical records found.
       </div>
     );
   }
@@ -149,46 +141,30 @@ export default function ExpenseTable({
           <tr className="border-b border-zinc-200 text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
             {disableSorting ? (
               <>
-                <th className="pb-2 pr-3 font-medium">Item</th>
-                <th className="pb-2 pr-3 font-medium">Seller</th>
-                <th className="pb-2 pr-3 font-medium text-right">Cost</th>
+                <th className="pb-2 pr-3 font-medium">Name</th>
+                <th className="pb-2 pr-3 font-medium">Clinic</th>
                 <th className="pb-2 pr-3 font-medium">Date</th>
-                <th className="pb-2 pr-3 font-medium">Reason</th>
                 <th className="pb-2 font-medium text-center">Files</th>
               </>
             ) : (
               <>
                 <SortableHeader
-                  label="Item"
-                  column="item"
+                  label="Name"
+                  column="name"
                   sortState={sortState}
                   onClick={handleSort}
                   className="pb-2 pr-3 font-medium"
                 />
                 <SortableHeader
-                  label="Seller"
-                  column="seller"
+                  label="Clinic"
+                  column="clinic"
                   sortState={sortState}
                   onClick={handleSort}
                   className="pb-2 pr-3 font-medium"
-                />
-                <SortableHeader
-                  label="Cost"
-                  column="cost"
-                  sortState={sortState}
-                  onClick={handleSort}
-                  className="pb-2 pr-3 font-medium text-right"
                 />
                 <SortableHeader
                   label="Date"
                   column="date"
-                  sortState={sortState}
-                  onClick={handleSort}
-                  className="pb-2 pr-3 font-medium"
-                />
-                <SortableHeader
-                  label="Reason"
-                  column="reason"
                   sortState={sortState}
                   onClick={handleSort}
                   className="pb-2 pr-3 font-medium"
@@ -199,32 +175,26 @@ export default function ExpenseTable({
           </tr>
         </thead>
         <tbody>
-          {sorted.map((expense) => (
+          {sorted.map((record) => (
             <tr
-              key={expense.id}
-              onClick={() => onSelectExpense(expense)}
+              key={record.id}
+              onClick={() => onSelectRecord(record)}
               className="cursor-pointer border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
             >
               <td className="py-2 pr-3 font-medium text-zinc-800 dark:text-zinc-100">
-                {trunc(expense.item, 24) || "—"}
+                {trunc(record.name, 24) || "—"}
               </td>
               <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-300">
-                {trunc(expense.seller, 20) || "—"}
-              </td>
-              <td className="py-2 pr-3 text-right text-zinc-700 dark:text-zinc-200">
-                ₹ {expense.cost.toLocaleString("en-IN")}
+                {trunc(record.clinic, 20) || "—"}
               </td>
               <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-300">
-                {formatDate(expense.date)}
-              </td>
-              <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400">
-                {trunc(expense.reason, 20) || "—"}
+                {formatDate(record.date)}
               </td>
               <td className="py-2 text-center">
-                {(expense.document_ids && expense.document_ids.length > 0) ? (
-                  <span className="inline-flex items-center justify-center gap-1 text-emerald-500" title={`${expense.document_ids.length} document(s) attached`}>
+                {(record.document_ids && record.document_ids.length > 0) ? (
+                  <span className="inline-flex items-center justify-center gap-1 text-rose-500" title={`${record.document_ids.length} document(s) attached`}>
                     <PaperClipIcon className="h-4 w-4" />
-                    <span className="text-zinc-600 dark:text-zinc-300">({expense.document_ids.length})</span>
+                    <span className="text-zinc-600 dark:text-zinc-300">({record.document_ids.length})</span>
                   </span>
                 ) : (
                   <span className="text-zinc-400">—</span>
@@ -243,5 +213,6 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
+    year: "numeric",
   });
 }

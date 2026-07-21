@@ -18,8 +18,8 @@ import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import SortableMediaGrid from "@/components/media/shared/SortableMediaGrid";
 import StickyActionBar from "@/components/media/shared/StickyActionBar";
 import ViewToggle from "@/components/common/ViewToggle";
-import Toast from "@/components/media/shared/Toast";
-import type { ToastType } from "@/components/media/shared/Toast";
+import Toast from "@/components/common/Toast";
+import type { ToastType } from "@/components/common/Toast";
 import TmdbAttribution from "@/components/media/TmdbAttribution";
 
 const DEFAULT_COLOR = "#8B5CF6";

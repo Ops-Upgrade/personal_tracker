@@ -13,6 +13,8 @@ interface ConfirmDialogProps {
   /** If provided, shows a checkbox for cascade-deleting associated files */
   showDeleteFilesCheckbox?: boolean;
   deleteFilesLabel?: string;
+  /** When true, the checkbox is rendered disabled (greyed out). */
+  checkboxDisabled?: boolean;
 }
 
 /**
@@ -28,6 +30,7 @@ export default function ConfirmDialog({
   onCancel,
   showDeleteFilesCheckbox = false,
   deleteFilesLabel = "Also delete associated files",
+  checkboxDisabled = false,
 }: ConfirmDialogProps) {
   const [deleteFiles, setDeleteFiles] = useState(false);
 
@@ -51,12 +54,13 @@ export default function ConfirmDialog({
         </p>
 
         {showDeleteFilesCheckbox && (
-          <label className="mt-3 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300 cursor-pointer">
+          <label className={`mt-3 flex items-center gap-2 text-sm ${checkboxDisabled ? "text-zinc-400 dark:text-zinc-500 opacity-70 cursor-not-allowed" : "text-zinc-700 dark:text-zinc-300 cursor-pointer"}`}>
             <input
               type="checkbox"
-              checked={deleteFiles}
+              checked={deleteFiles && !checkboxDisabled}
+              disabled={checkboxDisabled}
               onChange={(e) => setDeleteFiles(e.target.checked)}
-              className="h-4 w-4 rounded border-zinc-300 text-red-600 focus:ring-red-600 dark:border-zinc-600 dark:bg-zinc-800"
+              className="h-4 w-4 rounded border-zinc-300 text-red-600 focus:ring-red-600 dark:border-zinc-600 dark:bg-zinc-800 disabled:opacity-50 disabled:cursor-not-allowed"
             />
             {deleteFilesLabel}
           </label>

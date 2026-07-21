@@ -15,7 +15,7 @@ import CollectionPicker from "@/components/media/shared/CollectionPicker";
 import ReviewSection from "@/components/media/shared/ReviewSection";
 import StickyActionBar from "@/components/media/shared/StickyActionBar";
 import UntrackConfirmation from "@/components/media/shared/UntrackConfirmation";
-import Toast from "@/components/media/shared/Toast";
+import Toast from "@/components/common/Toast";
 
 interface MoviePageProps {
   tmdbId: number;
@@ -45,6 +45,7 @@ export default function MoviePage({
     load,
     save,
     removeMedia,
+    clearError,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setLocalMedia,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -248,7 +249,7 @@ export default function MoviePage({
     return (
       <div className="space-y-4">
         <BackButton onClick={handleBackClick} />
-        <ErrorBanner message={error} />
+        <ErrorBanner message={error} onRetry={() => { clearError(); load(); }} />
       </div>
     );
   }

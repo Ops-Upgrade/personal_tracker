@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
 import ErrorBanner from "@/components/common/ErrorBanner";
-import Toast from "@/components/media/shared/Toast";
-import type { ToastType } from "@/components/media/shared/Toast";
+import Toast from "@/components/common/Toast";
+import type { ToastType } from "@/components/common/Toast";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import {
   listMedia,

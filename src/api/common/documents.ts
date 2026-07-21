@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { encryptField, decryptField } from "@/lib/crypto";
 import type { Document, DocumentPlaintext } from "@/types/document";
+import { getUniqueFileName } from "@/lib/viewHelpers";
 
 /**
  * Fetch all documents for a user, decrypt each row, and return hydrated Document[].
@@ -47,8 +48,13 @@ export async function createDocument(
   userId: string,
   plaintext: DocumentPlaintext
 ): Promise<Document> {
+  // Deduplicate label against existing documents in the same domain
+  const existingDocs = await fetchDocumentsByDomain(userId, plaintext.domain);
+  const existingLabels = new Set(existingDocs.map((d) => d.label));
+  const deduplicated = { ...plaintext, label: getUniqueFileName(plaintext.label, existingLabels) };
+
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const encrypted = await encryptField(userId, JSON.stringify(deduplicated));
 
   const { data, error } = await supabase
     .from("documents")
@@ -62,7 +68,7 @@ export async function createDocument(
 
   if (error) throw new Error(`Failed to create document: ${error.message}`);
 
-  return { id: data.id, created_at: data.created_at, ...plaintext };
+  return { id: data.id, created_at: data.created_at, ...deduplicated };
 }
 
 /**
@@ -73,8 +79,15 @@ export async function updateDocument(
   documentId: string,
   plaintext: DocumentPlaintext
 ): Promise<Document> {
+  // Deduplicate label against existing documents in the same domain (excluding self)
+  const existingDocs = await fetchDocumentsByDomain(userId, plaintext.domain);
+  const existingLabels = new Set(
+    existingDocs.filter((d) => d.id !== documentId).map((d) => d.label)
+  );
+  const deduplicated = { ...plaintext, label: getUniqueFileName(plaintext.label, existingLabels) };
+
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const encrypted = await encryptField(userId, JSON.stringify(deduplicated));
 
   const { data, error } = await supabase
     .from("documents")
@@ -85,7 +98,7 @@ export async function updateDocument(
 
   if (error) throw new Error(`Failed to update document: ${error.message}`);
 
-  return { id: data.id, created_at: data.created_at, ...plaintext };
+  return { id: data.id, created_at: data.created_at, ...deduplicated };
 }
 
 /**

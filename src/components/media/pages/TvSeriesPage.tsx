@@ -30,7 +30,7 @@ import CollectionPicker from "@/components/media/shared/CollectionPicker";
 import ReviewSection from "@/components/media/shared/ReviewSection";
 import StickyActionBar from "@/components/media/shared/StickyActionBar";
 import UntrackConfirmation from "@/components/media/shared/UntrackConfirmation";
-import Toast from "@/components/media/shared/Toast";
+import Toast from "@/components/common/Toast";
 import { tmdbStillUrl } from "@/components/media/constants";
 import StatusBadge from "@/components/media/shared/StatusBadge";
 
@@ -65,6 +65,7 @@ export default function TvSeriesPage({
     load,
     save,
     removeMedia,
+    clearError,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     setLocalMedia,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -374,7 +375,7 @@ export default function TvSeriesPage({
     return (
       <div className="space-y-4">
         <BackButton onClick={handleBackClick} />
-        <ErrorBanner message={error} />
+        <ErrorBanner message={error} onRetry={() => { clearError(); load(); }} />
       </div>
     );
   }
@@ -413,7 +414,7 @@ export default function TvSeriesPage({
       </div>
 
       {/* ── Tabbed Tracking Card ── */}
-      <div className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 p-6 md:p-8 dark:border-zinc-800 dark:bg-zinc-900/50">
+      <div className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 p-6 md:p-8 dark:border-zinc-800 dark:bg-zinc-900/50 mb-48">
         {/* Tab bar */}
         <div className="flex gap-6 border-b border-zinc-200 dark:border-zinc-800 mb-6">
           <button

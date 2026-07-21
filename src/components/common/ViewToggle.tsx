@@ -8,6 +8,8 @@ import { LayoutGrid, List } from "lucide-react";
 export interface ViewToggleOption<T extends string> {
   value: T;
   label: ReactNode;
+  /** When true, hides this specific option button on mobile screens. */
+  hideOnMobile?: boolean;
 }
 
 interface ViewToggleProps<T extends string> {
@@ -22,6 +24,11 @@ interface ViewToggleProps<T extends string> {
    * - "media"    — background-based, always visible (used by media pages)
    */
   variant?: "default" | "media";
+  /**
+   * When false, the container stays visible on mobile.
+   * Defaults to true (hidden on mobile) for the "default" variant.
+   */
+  hideContainerOnMobile?: boolean;
 }
 
 // ---------- built-in media options ----------
@@ -39,19 +46,22 @@ export default function ViewToggle<T extends string>({
   options,
   ariaLabel = "View toggle",
   variant = "default",
+  hideContainerOnMobile = true,
 }: ViewToggleProps<T>) {
   const opts =
     options ?? (MEDIA_OPTIONS as unknown as readonly ViewToggleOption<T>[]);
 
   const isMedia = variant === "media";
 
+  const containerClass = isMedia
+    ? "inline-flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1"
+    : hideContainerOnMobile
+      ? "hidden md:inline-flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700"
+      : "inline-flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700";
+
   return (
     <div
-      className={
-        isMedia
-          ? "inline-flex bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1"
-          : "hidden md:inline-flex rounded-lg border border-zinc-300 p-0.5 dark:border-zinc-700"
-      }
+      className={containerClass}
       role="tablist"
       aria-label={ariaLabel}
     >
@@ -65,7 +75,7 @@ export default function ViewToggle<T extends string>({
             aria-selected={active}
             onClick={() => onChange(opt.value)}
             className={
-              isMedia
+              (isMedia
                 ? `p-1.5 rounded-md transition-colors ${
                     active
                       ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
@@ -75,7 +85,7 @@ export default function ViewToggle<T extends string>({
                     active
                       ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
                       : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                  }`
+                  }`) + (opt.hideOnMobile ? " hidden md:inline-flex" : "")
             }
           >
             {opt.label}

@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import ViewToggle from "@/components/common/ViewToggle";
 import MonthTile from "@/components/common/MonthTile";
@@ -33,6 +33,10 @@ interface GenericActiveBoxProps<T extends ActiveItem> {
   getPriorityColor: (priority: string) => { border: string; bg: string };
   renderItem: (item: T) => ReactNode;
   renderPriorityBadge: (priority: string) => ReactNode;
+  /** Optional column headers rendered above item lists (only when the list has items) */
+  renderHeader?: () => ReactNode;
+  /** Optional className override for the outer BoxContainer (defaults to "lg:col-span-2") */
+  className?: string;
 }
 
 export default function GenericActiveBox<T extends ActiveItem>({
@@ -49,12 +53,25 @@ export default function GenericActiveBox<T extends ActiveItem>({
   getPriorityColor,
   renderItem,
   renderPriorityBadge,
+  renderHeader,
+  className,
 }: GenericActiveBoxProps<T>) {
   const priorityGroups = byPriority(items, [...priorities]);
   const monthGroups = activeByMonths(items, nowYear);
 
+  // Auto-scroll to the current month tile when switching to months view
+  useEffect(() => {
+    if (view !== "months" || isLoading) return;
+    const timeout = setTimeout(() => {
+      document
+        .getElementById("current-month-tile")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100); // small delay to allow DOM paint
+    return () => clearTimeout(timeout);
+  }, [view, isLoading]);
+
   return (
-    <BoxContainer className="lg:col-span-2">
+    <BoxContainer className={className ?? "lg:col-span-2"}>
       <header className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
@@ -101,6 +118,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
                   <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
                 )}
                 <div className="space-y-2">
+                  {group.length > 0 && renderHeader && renderHeader()}
                   {group.map((item) => renderItem(item))}
                 </div>
               </section>
@@ -114,6 +132,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
             return (
               <MonthTile
                 key={group.label}
+                id={isCurrentMonth ? "current-month-tile" : undefined}
                 title={group.label}
                 defaultExpanded={isCurrentMonth}
                 accent={group.items.length > 0}
@@ -124,6 +143,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
                   <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
                 ) : (
                   <div className="space-y-2">
+                    {group.items.length > 0 && renderHeader && renderHeader()}
                     {group.items.map((item) => renderItem(item))}
                   </div>
                 )}

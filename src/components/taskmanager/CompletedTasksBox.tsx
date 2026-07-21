@@ -3,6 +3,7 @@
 import type { Task } from "@/types/taskmanager";
 import GenericCompletedBox from "@/components/common/GenericCompletedBox";
 import Button from "@/components/common/Button";
+import PriorityBadge from "@/components/common/PriorityBadge";
 import { formatShortDate, getPriorityColor, sortByCompletedDesc, trunc } from "./helpers";
 
 interface CompletedTasksBoxProps {
@@ -22,41 +23,54 @@ export default function CompletedTasksBox({
 }: CompletedTasksBoxProps) {
   const sorted = [...tasks].sort(sortByCompletedDesc);
 
+  const listHeader = (
+    <div className="grid grid-cols-12 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
+      <div className="col-span-4">Name</div>
+      <div className="col-span-2">Priority</div>
+      <div className="col-span-2">Mode</div>
+      <div className="col-span-2">Date</div>
+      <div className="col-span-2 text-right">Actions</div>
+    </div>
+  );
+
   return (
     <GenericCompletedBox
       items={sorted}
       isLoading={isLoading}
       onOpenExpanded={onOpenExpanded}
+      listHeader={listHeader}
       renderItem={(task) => {
         const colors = getPriorityColor(task.priority);
         return (
           <div
             key={task.id}
-            className="grid grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-sm dark:border-zinc-700"
+            className="grid grid-cols-12 items-center gap-2 w-full rounded-md border border-zinc-200 px-2 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            {/* Priority dot */}
-            <span
-              className={`col-span-1 inline-block h-2 w-2 rounded-full ${colors.dot}`}
-              aria-hidden="true"
-            />
             <button
               type="button"
               onClick={() => onSelectTask(task)}
-              className="col-span-6 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
+              className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white truncate"
             >
               {trunc(task.name, 44)}
             </button>
-            <div className="col-span-3 text-right text-zinc-600 dark:text-zinc-300">
-              {formatShortDate(task.completed_at)}
+            <div className="col-span-2 flex items-center">
+              <PriorityBadge priority={task.priority} />
             </div>
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={() => onReopenTask(task)}
-              className="col-span-2 text-right"
-            >
-              Reopen
-            </Button>
+            <span className="col-span-2 text-xs capitalize text-zinc-500 dark:text-zinc-400 flex items-center">
+              {task.mode}
+            </span>
+            <span className="col-span-2 text-zinc-600 dark:text-zinc-300 flex items-center">
+              {formatShortDate(task.completed_at)}
+            </span>
+            <div className="col-span-2 flex justify-end items-center">
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => onReopenTask(task)}
+              >
+                Reopen
+              </Button>
+            </div>
           </div>
         );
       }}
