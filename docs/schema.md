@@ -34,6 +34,9 @@ Stores one row per authenticated user: salt + IV + password-wrapped data encrypt
 | `iv`          | `TEXT`      | NO       | —         | Base64 IV used when wrapping DEK with KEK |
 | `wrapped_dek` | `TEXT`      | NO       | —         | Base64 ciphertext of wrapped DEK |
 | `created_at`  | `TIMESTAMPTZ` | YES    | `now()`   | Row creation time |
+| `recovery_salt`        | `TEXT`      | YES    | —         | Base64 salt for Argon2id → recovery KEK |
+| `recovery_iv`          | `TEXT`      | YES    | —         | Base64 IV used when wrapping DEK with recovery KEK |
+| `recovery_wrapped_dek` | `TEXT`      | YES    | —         | Base64 ciphertext of DEK wrapped by recovery KEK |
 | `updated_at`  | `TIMESTAMPTZ` | YES    | `now()`   | Last update time |
 
 ### DDL (source of truth)
@@ -44,13 +47,27 @@ CREATE TABLE public.user_keys (
     salt        TEXT NOT NULL,
     iv          TEXT NOT NULL,
     wrapped_dek TEXT NOT NULL,
+    recovery_salt        TEXT,
+    recovery_iv          TEXT,
+    recovery_wrapped_dek TEXT,
     created_at  TIMESTAMPTZ DEFAULT now(),
     updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
 COMMENT ON TABLE public.user_keys IS
-  'Stores per-user encrypted Data Encryption Keys. The wrapped_dek can only be decrypted client-side with the users password-derived KEK.';
+  'Stores per-user encrypted Data Encryption Keys. The wrapped_dek can only be decrypted client-side with the users password-derived KEK. Recovery columns hold a second wrapped copy of the DEK protected by a recovery phrase.';
 ```
+
+### Recovery key migration (for existing deployments)
+
+```sql
+ALTER TABLE public.user_keys
+  ADD COLUMN recovery_salt        TEXT,
+  ADD COLUMN recovery_iv          TEXT,
+  ADD COLUMN recovery_wrapped_dek TEXT;
+```
+
+No RLS changes needed — the existing `auth.uid() = user_id` FOR ALL policy already covers new columns.
 
 ### Row Level Security
 
@@ -539,3 +556,4 @@ The `connect-src` CSP directive must allow `https://*.r2.cloudflarestorage.com` 
 | 2026-07-08 | Schema doc brought up to date: documented all 3 previously undocumented tables and the certificates bucket. |
 | 2026-07-13 | Renamed `public.certificates` to `public.documents` for Global Document Store. Added `public.medical_records` table + RLS (Medical Records feature). |
 | 2026-07-15 | Added `public.media` + `public.media_collections` tables + RLS (Media Tracker feature). |
+| 2026-07-23 | Added `recovery_salt`, `recovery_iv`, `recovery_wrapped_dek` nullable columns to `public.user_keys` (Recovery Key feature). |

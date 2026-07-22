@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { isReady } from "./manager";
+import { isReady, hasRecoveryKey } from "./manager";
 import { ROUTES } from "@/routes/paths";
+import RecoveryKeySetupModal from "@/components/auth/RecoveryKeySetupModal";
 
 interface CryptoProviderProps {
   userId: string;
@@ -17,21 +18,29 @@ interface CryptoProviderProps {
  * - If the DEK is present, renders children normally.
  * - If missing (e.g. IndexedDB cleared, new browser), redirects to /login
  *   so the user re-enters their password and bootstrapCrypto runs again.
+ *
+ * Also checks whether the user has a recovery key set up. If not, renders a
+ * full-screen blocking modal that requires the user to generate and save one
+ * before any protected content is accessible.
  */
 export default function CryptoProvider({ userId, children }: CryptoProviderProps) {
   const router = useRouter();
   const [ready, setReady] = useState<boolean | null>(null);
+  const [needsRecoveryKey, setNeedsRecoveryKey] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    isReady(userId).then((ok) => {
+    isReady(userId).then(async (dekOk) => {
       if (cancelled) return;
-      if (ok) {
-        setReady(true);
-      } else {
+      if (!dekOk) {
         router.replace(ROUTES.LOGIN);
+        return;
       }
+      const recoveryOk = await hasRecoveryKey(userId);
+      if (cancelled) return;
+      setNeedsRecoveryKey(!recoveryOk);
+      setReady(true);
     });
 
     return () => {
@@ -47,5 +56,15 @@ export default function CryptoProvider({ userId, children }: CryptoProviderProps
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {needsRecoveryKey && (
+        <RecoveryKeySetupModal
+          userId={userId}
+          onComplete={() => setNeedsRecoveryKey(false)}
+        />
+      )}
+      {children}
+    </>
+  );
 }

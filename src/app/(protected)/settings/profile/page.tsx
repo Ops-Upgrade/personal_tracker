@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ROUTES } from "@/routes/paths";
 import ProfileForm from "@/components/auth/ProfileForm";
 import ChangePasswordForm from "@/components/auth/ChangePasswordForm";
+import RegenerateRecoveryKeyForm from "@/components/auth/RegenerateRecoveryKeyForm";
 
 interface ProfileState {
   userId: string | null;
@@ -162,6 +163,24 @@ export default function ProfilePage() {
             </p>
           </div>
           <ChangePasswordForm />
+        </section>
+
+        {/* Divider */}
+        <hr className="border-zinc-200 dark:border-zinc-800" />
+
+        {/* Recovery Key section */}
+        <section className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+              Recovery Key
+            </h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Generate a new recovery key. If you ever lose your password, this key
+              is the only way to recover your encrypted data. Your old key will be
+              immediately invalidated.
+            </p>
+          </div>
+          {state.userId && <RegenerateRecoveryKeyForm userId={state.userId} />}
         </section>
       </div>
     </div>

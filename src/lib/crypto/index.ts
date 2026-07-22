@@ -7,4 +7,7 @@ export {
   rewrapDEK,
   isReady,
   clearDEK,
+  generateRecoveryPhrase,
+  hasRecoveryKey,
+  setupRecoveryKey,
 } from "./manager";
