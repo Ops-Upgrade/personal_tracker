@@ -288,6 +288,7 @@ export default function TaskManagerView() {
       {/* Query-param-driven modals */}
       {taskModalTarget && (
         <TaskModal
+          key={taskModalTarget === "create" ? "create" : taskModalTarget.id}
           task={taskModalTarget === "create" ? null : taskModalTarget}
           defaultDate={taskModalTarget === "create" ? istDate : undefined}
           onClose={closeTaskModal}

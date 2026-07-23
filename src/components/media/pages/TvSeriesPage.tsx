@@ -66,10 +66,6 @@ export default function TvSeriesPage({
     save,
     removeMedia,
     clearError,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    setLocalMedia,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    setAllMedia,
   } = useMediaTracking({ tmdbId, userId, type: "tv", onRefresh });
 
   // ── Local form state ──

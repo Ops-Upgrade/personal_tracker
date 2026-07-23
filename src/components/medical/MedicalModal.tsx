@@ -96,8 +96,6 @@ export default function MedicalModal({
     handleFileDownload,
     handleFileRename,
     handleLoadPreview,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    handleLinkDropdownSelect,
     resetFileState,
   } = useModalDocumentState({
     attachedDocuments,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Task, TaskMode } from "@/types/taskmanager";
 import type { Priority } from "@/types/common";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
@@ -58,18 +58,6 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
     description: task?.description ?? "",
     isCompleted: task?.is_completed ?? false,
   }), [task, defaultDate]);
-
-  // Reset form to baseline whenever the record changes
-  useEffect(() => {
-    setName(baseline.name);
-    setPriority(baseline.priority);
-    setDueDate(baseline.dueDate);
-    setMode(baseline.mode);
-    setDescription(baseline.description);
-    setIsCompleted(baseline.isCompleted);
-    setError(null);
-    setShowDeleteConfirm(false);
-  }, [baseline]);
 
   // Dirty check: compare current state against the same baseline object
   const isDirty =
