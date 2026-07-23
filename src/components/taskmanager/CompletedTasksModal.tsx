@@ -1,7 +1,7 @@
 "use client";
 
 import type { Task, TaskView } from "@/types/taskmanager";
-import { PRIORITIES } from "@/types/taskmanager";
+import { PRIORITIES } from "@/types/common";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import GenericCompletedModal from "@/components/common/GenericCompletedModal";
 import PriorityBadge from "@/components/common/PriorityBadge";

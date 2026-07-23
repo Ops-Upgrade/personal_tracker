@@ -1,6 +1,7 @@
-import type { Task, Note, Priority } from "@/types/taskmanager";
+import type { Task, Note } from "@/types/taskmanager";
+import type { Priority } from "@/types/common";
 import type { Document } from "@/types/document";
-import { PRIORITIES } from "@/types/taskmanager";
+import { PRIORITIES } from "@/types/common";
 import { trunc } from "@/lib/viewHelpers";
 
 // Re-export shared utilities (except byPriority which we wrap)

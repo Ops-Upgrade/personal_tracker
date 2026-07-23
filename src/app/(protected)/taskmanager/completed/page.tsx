@@ -6,7 +6,7 @@ import { deleteTask, fetchTasks, updateTask } from "@/api/taskmanager";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { ROUTES } from "@/routes/paths";
 import type { Task, TaskView } from "@/types/taskmanager";
-import { PRIORITIES } from "@/types/taskmanager";
+import { PRIORITIES } from "@/types/common";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import ViewToggle from "@/components/common/ViewToggle";
 import YearDropdown from "@/components/common/YearDropdown";

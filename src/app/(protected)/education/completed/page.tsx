@@ -22,7 +22,7 @@ import {
 import { ROUTES } from "@/routes/paths";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import type { Education, EducationPlaintext } from "@/types/education";
-import type { Priority } from "@/types/taskmanager";
+import type { Priority } from "@/types/common";
 import BoxContainer from "@/components/common/BoxContainer";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";

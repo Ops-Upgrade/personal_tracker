@@ -23,7 +23,7 @@ import {
 import { InputField, TextareaField, SelectField } from "@/components/common/FormField";
 import type { Education, EducationPlaintext } from "@/types/education";
 import type { Document, DocumentPlaintext } from "@/types/document";
-import { PRIORITIES, type Priority } from "@/types/taskmanager";
+import { PRIORITIES, type Priority } from "@/types/common";
 import GlobalStoreView from "@/components/common/store/GlobalStoreView";
 import EducationModal from "@/components/education/EducationModal";
 

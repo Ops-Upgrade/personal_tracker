@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Education } from "@/types/education";
 import type { Document } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
-import type { Priority } from "@/types/taskmanager";
-import { PRIORITIES } from "@/types/taskmanager";
+import type { Priority } from "@/types/common";
+import { PRIORITIES } from "@/types/common";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import type { ModalFile } from "@/components/common/GlobalActionModal";
@@ -14,7 +14,7 @@ import { InputField, SelectField, CheckboxField } from "@/components/common/Form
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
-import type { ToastType } from "@/components/common/Toast";
+import { useModalBaseState } from "@/hooks/useModalBaseState";
 import { docsForEducation, getUniqueFileName, trunc } from "./helpers";
 import { stripHtml, normalizeDateForInput } from "@/lib/utils";
 
@@ -66,23 +66,16 @@ export default function EducationModal({
   const [dueDate, setDueDate] = useState(initialDueDate);
   const [description, setDescription] = useState(education?.description ?? "");
   const [isCompleted, setIsCompleted] = useState(education?.is_completed ?? false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // --- Toast ---
-  const [toastConfig, setToastConfig] = useState<{
-    isVisible: boolean;
-    message: string;
-    type: ToastType;
-  }>({ isVisible: false, message: "", type: "success" });
-
-  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
-    setToastConfig({ isVisible: true, message, type });
-    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
-  }, []);
-
-  // --- Delete confirmation ---
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const {
+    isSaving,
+    setIsSaving,
+    error,
+    setError,
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    toastConfig,
+    triggerToast,
+  } = useModalBaseState();
 
   // --- Document management ---
   const [newFiles, setNewFiles] = useState<{ file: File; label: string; tempId: string }[]>([]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Expense } from "@/types/expense";
 import type { Document } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
@@ -12,7 +12,7 @@ import { InputField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
-import type { ToastType } from "@/components/common/Toast";
+import { useModalBaseState } from "@/hooks/useModalBaseState";
 import { getUniqueFileName } from "@/lib/viewHelpers";
 import { stripHtml, normalizeDateForInput } from "@/lib/utils";
 
@@ -66,23 +66,16 @@ export default function ExpenseModal({
   const [cost, setCost] = useState("");
   const [date, setDate] = useState("");
   const [reason, setReason] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // --- Toast ---
-  const [toastConfig, setToastConfig] = useState<{
-    isVisible: boolean;
-    message: string;
-    type: ToastType;
-  }>({ isVisible: false, message: "", type: "success" });
-
-  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
-    setToastConfig({ isVisible: true, message, type });
-    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
-  }, []);
-
-  // --- Delete confirmation ---
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const {
+    isSaving,
+    setIsSaving,
+    error,
+    setError,
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    toastConfig,
+    triggerToast,
+  } = useModalBaseState();
 
   // --- Document management ---
   const [newFiles, setNewFiles] = useState<{ file: File; label: string; tempId: string }[]>([]);

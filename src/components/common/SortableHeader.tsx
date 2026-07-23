@@ -14,10 +14,10 @@ export interface SortState<Column extends string = string> {
 interface SortableHeaderProps<Column extends string = string> {
   column: Column;
   label: string;
-  sortState: SortState<Column>;
+  sortState: SortState<Column> | null;
   onSort: (next: SortState<Column>) => void;
-  /** Element to render as — default "button" for standalone use, "div" for grid rows */
-  as?: "button" | "div";
+  /** Element to render as — default "button" for standalone use, "div" for grid rows, "th" for tables */
+  as?: "button" | "div" | "th";
   /** Optional additional class names (e.g. grid column spans) */
   className?: string;
 }
@@ -32,9 +32,9 @@ export default function SortableHeader<Column extends string = string>({
   as: Component = "button",
   className: extraClassName,
 }: SortableHeaderProps<Column>) {
-  const isActive = sortState.column === column;
+  const isActive = sortState?.column === column;
   const nextDirection: SortDirection =
-    isActive && sortState.direction === "asc" ? "desc" : "asc";
+    isActive && sortState?.direction === "asc" ? "desc" : "asc";
 
   const handleClick = () => {
     onSort({ column, direction: nextDirection });
@@ -42,7 +42,7 @@ export default function SortableHeader<Column extends string = string>({
 
   const icon =
     isActive ? (
-      sortState.direction === "asc" ? (
+      sortState!.direction === "asc" ? (
         <ArrowUp className="inline-block h-3 w-3 ml-0.5" />
       ) : (
         <ArrowDown className="inline-block h-3 w-3 ml-0.5" />

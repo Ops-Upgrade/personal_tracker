@@ -16,7 +16,7 @@ import {
 import { parseISTDate } from "@/api/serverDate";
 import type { Expense, ExpenseViewMode } from "@/types/expense";
 import type { Document } from "@/types/document";
-import { MONTHS } from "@/types/expense";
+import { MONTHS } from "@/types/common";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useExpenseActions } from "@/hooks/useExpenseActions";
 import ViewToggle from "@/components/common/ViewToggle";

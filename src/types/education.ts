@@ -1,4 +1,4 @@
-import type { Priority } from "@/types/taskmanager";
+import type { Priority } from "@/types/common";
 
 // --- View toggle ---
 

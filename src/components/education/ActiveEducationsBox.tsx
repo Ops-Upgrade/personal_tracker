@@ -3,23 +3,14 @@
 import { useMemo } from "react";
 import type { Education, EducationViewMode } from "@/types/education";
 import type { Document } from "@/types/document";
-import { PRIORITIES } from "@/types/taskmanager";
+import { PRIORITIES } from "@/types/common";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import GenericActiveBox from "@/components/common/GenericActiveBox";
 import Button from "@/components/common/Button";
 import PriorityBadge from "@/components/common/PriorityBadge";
 import { getPriorityColor } from "@/lib/priorityColors";
+import { PaperClipIcon } from "@/components/common/Icons";
 import { trunc } from "./helpers";
-
-// --- Inline SVG Icon ---
-
-function PaperClipIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-5.7-1.477-1.477" />
-    </svg>
-  );
-}
 
 const EDUCATION_VIEW_OPTIONS: readonly ViewToggleOption<EducationViewMode>[] = [
   { value: "months", label: "Months" },
