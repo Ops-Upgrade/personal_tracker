@@ -128,7 +128,7 @@ export default function EducationModal({
     setIsCompleted(education?.is_completed ?? false);
     setError(null);
     setShowDeleteConfirm(false);
-  }, [education, initialDueDate]);
+  }, [education, initialDueDate, setError, setShowDeleteConfirm]);
 
   // --- Reset file state only when the record changes (NOT on documents load) ---
   useEffect(() => {
@@ -259,7 +259,7 @@ export default function EducationModal({
     }
 
     return result;
-  }, [linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, documents]);
+  }, [linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, standaloneDocs]);
 
   // --- File action handlers ---
 

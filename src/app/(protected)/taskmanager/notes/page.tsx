@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import {
@@ -19,7 +19,6 @@ import LoadingSpinner from "@/components/common/LoadingSpinner";
 import {
   getNoteTitle,
   getUnifiedNotes,
-  type UnifiedNoteRecord,
 } from "@/components/taskmanager/helpers";
 import { trunc } from "@/lib/viewHelpers";
 import { formatShortDate } from "@/lib/format";
@@ -61,8 +60,6 @@ export default function NotesPage() {
 
   const [noteModalTarget, setNoteModalTarget] = useState<Note | null>(null);
 
-  const handleEditNote = (item: UnifiedNoteRecord & { type: "note" }) =>
-    setNoteModalTarget(item.data);
   const closeNoteModal = () => {
     setNoteModalTarget(null);
     if (userId) refreshData(userId);

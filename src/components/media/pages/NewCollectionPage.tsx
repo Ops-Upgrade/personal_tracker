@@ -388,6 +388,7 @@ export default function NewCollectionPage() {
       />
 
       <AddMediaModal
+        key={isAddModalOpen ? "open" : "closed"}
         open={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddTitle}

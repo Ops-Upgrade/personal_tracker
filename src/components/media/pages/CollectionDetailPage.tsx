@@ -144,15 +144,6 @@ export default function CollectionDetailPage({
     }
   }, [sortedItems, isLoading]);
 
-  // Reset staging if collectionId changes
-  useEffect(() => {
-    dataLoadedRef.current = false;
-    setPendingAdds([]);
-    setPendingRemoves(new Set());
-    setDisplayOrder([]);
-    setOriginalOrder([]);
-  }, [collectionId]);
-
   // ── Derived data ──
 
   const effectiveItems = useMemo(() => {
@@ -612,6 +603,7 @@ export default function CollectionDetailPage({
       </div>
 
       <AddMediaModal
+        key={isAddModalOpen ? "open" : "closed"}
         open={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddTitle}

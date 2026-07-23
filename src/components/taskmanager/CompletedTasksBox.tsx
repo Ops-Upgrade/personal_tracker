@@ -4,7 +4,7 @@ import type { Task } from "@/types/taskmanager";
 import GenericCompletedBox from "@/components/common/GenericCompletedBox";
 import Button from "@/components/common/Button";
 import PriorityBadge from "@/components/common/PriorityBadge";
-import { formatShortDate, getPriorityColor, sortByCompletedDesc, trunc } from "./helpers";
+import { formatShortDate, sortByCompletedDesc, trunc } from "./helpers";
 
 interface CompletedTasksBoxProps {
   tasks: Task[];
@@ -40,7 +40,6 @@ export default function CompletedTasksBox({
       onOpenExpanded={onOpenExpanded}
       listHeader={listHeader}
       renderItem={(task) => {
-        const colors = getPriorityColor(task.priority);
         return (
           <div
             key={task.id}

@@ -392,6 +392,7 @@ export default function CompletedTasksPage() {
 
       {taskModalTarget && (
         <TaskModal
+          key={taskModalTarget.id}
           task={taskModalTarget}
           onClose={closeTaskModal}
           onSave={handleTaskSave}

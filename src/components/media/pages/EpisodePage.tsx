@@ -99,9 +99,10 @@ export default function EpisodePage({
 
   // ── Load ──
 
-  const load = useCallback(async () => {
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- React Compiler auto-memoizes
+  const load = async () => {
     try {
-      await execute(async (_signal) => {
+      await execute(async () => {
         const [show, season, existing] = await Promise.all([
           getMediaDetails(tmdbId, "tv"),
           getSeasonDetails(tmdbId, seasonNumber),
@@ -134,7 +135,7 @@ export default function EpisodePage({
     } catch {
       // execute already surfaced the generic error via its own state
     }
-  }, [execute, tmdbId, seasonNumber, episodeKey, userId]);
+  };
 
   useEffect(() => {
     load();

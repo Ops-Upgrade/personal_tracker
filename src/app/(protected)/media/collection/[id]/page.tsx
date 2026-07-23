@@ -10,5 +10,5 @@ export default async function CollectionPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <CollectionDetailPage collectionId={id} />;
+  return <CollectionDetailPage key={id} collectionId={id} />;
 }

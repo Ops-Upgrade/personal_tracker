@@ -299,6 +299,7 @@ export default function TaskManagerView() {
 
       {noteModalTarget && userId && (
         <NoteModal
+          key={noteModalTarget === "create" ? "create" : noteModalTarget.id}
           note={noteModalTarget === "create" ? null : noteModalTarget}
           documents={documents}
           userId={userId}

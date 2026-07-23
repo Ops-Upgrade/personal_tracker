@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import type { Note } from "@/types/taskmanager";
 import type { Document } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
@@ -114,24 +114,6 @@ export default function NoteModal({
     userId,
     markedForRemoval: markedForDeletion,
   });
-
-  // --- Reset on open ---
-  useEffect(() => {
-    setName(note?.name ?? "");
-    setContent(note?.content ?? "");
-    setError(null);
-    setShowDeleteConfirm(false);
-    setNewFiles([]);
-    setMarkedForDeletion(new Set());
-    setMarkedForUnlink(new Set());
-    hookResetFileState();
-    const existingDocs = note
-      ? documents.filter(
-          (d) => d.domain === "taskmanager" && d.linked_id === note.id
-        )
-      : [];
-    setSelectedDocId(existingDocs.length > 0 ? existingDocs[0].id : null);
-  }, [note, documents, hookResetFileState]);
 
   // ── Baseline form values ──
   const formBaseline = useMemo(
@@ -260,7 +242,7 @@ export default function NoteModal({
     }
 
     return result;
-  }, [linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, documents]);
+  }, [linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, standaloneDocs]);
 
   // --- File action handlers ---
 

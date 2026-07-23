@@ -37,17 +37,6 @@ export default function AddMediaModal({
 
   const { loading: searching, execute: retryExecute, cancel: cancelRetry } = useTmdbRetry();
 
-  // Reset state when modal opens
-  useEffect(() => {
-    if (open) {
-      setMode("select_source");
-      setSearchQuery("");
-      setDiscoverResults([]);
-      cancelRetry();
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [open, cancelRetry]);
-
   // Esc key to close
   useEffect(() => {
     if (!open) return;
@@ -98,12 +87,6 @@ export default function AddMediaModal({
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doDiscoverSearch(value), DEBOUNCE_MS);
-  }
-
-  function handleClearSearch() {
-    setSearchQuery("");
-    setDiscoverResults([]);
-    inputRef.current?.focus();
   }
 
   // ── Filter trackable media ──

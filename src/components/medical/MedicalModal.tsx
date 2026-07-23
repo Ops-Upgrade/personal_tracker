@@ -88,7 +88,6 @@ export default function MedicalModal({
     setLinkSearchQuery,
     linkDropdownOpen,
     setLinkDropdownOpen,
-    files,
     availableStandalone,
     filteredLinkDocs,
     addNewFile,
@@ -124,7 +123,7 @@ export default function MedicalModal({
     setIsSaving(false);
     setError(null);
     setShowDeleteConfirm(false);
-  }, [baseline]);
+  }, [baseline, setIsSaving, setError, setShowDeleteConfirm]);
 
   // Reset file-related state only when the record changes (NOT on resetFileState change)
   useEffect(() => {

@@ -43,6 +43,7 @@ export default function DocPreviewPanel({
   useEffect(() => {
     if (file) {
       const url = URL.createObjectURL(file);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBlobUrl(url);
       setLoadError(null);
       setIsLoading(false);
@@ -53,6 +54,7 @@ export default function DocPreviewPanel({
   // Reset when remote metadata changes
   useEffect(() => {
     if (existingFileName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setBlobUrl(null);
       setLoadError(null);
       setIsLoading(false);
@@ -78,6 +80,7 @@ export default function DocPreviewPanel({
   // Auto-trigger preview load when parent signals (e.g. preview button clicked)
   useEffect(() => {
     if (loadPreviewTrigger > 0 && onLoadPreview && !file && !blobUrl && !isLoading) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       handleLoadPreview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

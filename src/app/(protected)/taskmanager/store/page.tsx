@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ROUTES } from "@/routes/paths";
 import { getSession } from "@/api/auth";
 import {
@@ -11,11 +11,10 @@ import {
 } from "@/api/taskmanager";
 import {
   fetchDocuments,
-  updateDocument,
 } from "@/api/common/documents";
 import { InputField } from "@/components/common/FormField";
 import type { Note, NotePlaintext } from "@/types/taskmanager";
-import type { Document, DocumentPlaintext } from "@/types/document";
+import type { Document } from "@/types/document";
 import { useNoteActions } from "@/hooks/useNoteActions";
 import GlobalStoreView from "@/components/common/store/GlobalStoreView";
 import NoteModal from "@/components/taskmanager/NoteModal";

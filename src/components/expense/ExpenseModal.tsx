@@ -125,7 +125,7 @@ export default function ExpenseModal({
     setReason(expense?.reason ?? "");
     setError(null);
     setShowDeleteConfirm(false);
-  }, [expense, defaultDate]);
+  }, [expense, defaultDate, setError, setShowDeleteConfirm]);
 
   // --- Reset file state only when the record changes (NOT on documents load) ---
   useEffect(() => {
