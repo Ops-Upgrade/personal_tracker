@@ -26,9 +26,12 @@ export async function fetchUserKeys(
 
 /**
  * Insert or update the encryption key material for a user.
+ * The email is lowercased and stored to enable indexed lookups
+ * from the reset-password / recovery-data API routes.
  */
 export async function upsertUserKeys(
   userId: string,
+  email: string,
   salt: string,
   iv: string,
   wrappedDek: string
@@ -37,6 +40,7 @@ export async function upsertUserKeys(
   const { error } = await supabase.from("user_keys").upsert(
     {
       user_id: userId,
+      email: email.toLowerCase(),
       salt,
       iv,
       wrapped_dek: wrappedDek,

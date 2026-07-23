@@ -34,7 +34,7 @@ export async function login(
   }
 
   try {
-    await bootstrapCrypto(userId, password);
+    await bootstrapCrypto(userId, password, email);
   } catch (err) {
     return {
       success: false,
@@ -95,9 +95,14 @@ export async function changePassword(
     return { success: false, error: "No active session. Please log in again." };
   }
 
+  const userEmail = session?.user.email;
+  if (!userEmail) {
+    return { success: false, error: "Session missing email. Please log in again." };
+  }
+
   // Step 1: Re-wrap DEK to new password material.
   try {
-    await rewrapDEK(userId, oldPassword, newPassword);
+    await rewrapDEK(userId, oldPassword, newPassword, userEmail);
   } catch (err) {
     return {
       success: false,
@@ -114,7 +119,7 @@ export async function changePassword(
   if (error) {
     // Best-effort rollback so wrapped DEK remains aligned with auth password.
     try {
-      await rewrapDEK(userId, newPassword, oldPassword);
+      await rewrapDEK(userId, newPassword, oldPassword, userEmail);
       return {
         success: false,
         error: `Password update failed: ${error.message}. Crypto key changes were rolled back.`,

@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyResetToken } from "../_helpers/resetToken";
+import { ipLimiter, emailLimiter } from "@/lib/rate-limit";
+
+const GENERIC_ERROR = "Invalid request.";
+
+const resetPasswordLimiter = emailLimiter("reset-password");
 
 export async function POST(request: Request) {
+  // --- Parse body ---
   let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }
 
   const email = typeof body.email === "string" ? body.email.trim() : "";
@@ -28,48 +34,53 @@ export async function POST(request: Request) {
     !new_iv ||
     !new_wrapped_dek
   ) {
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
+  }
+
+  const normalizedEmail = email.toLowerCase();
+
+  // --- Rate limiting ---
+  const [ipResult, emailResult] = await Promise.all([
+    ipLimiter.limit(request.headers.get("x-forwarded-for") ?? "anonymous"),
+    resetPasswordLimiter.limit(normalizedEmail),
+  ]);
+
+  if (!ipResult.success || !emailResult.success) {
     return NextResponse.json(
-      { error: "All fields are required." },
-      { status: 400 }
+      { error: "Too many requests. Please try again later." },
+      { status: 429 }
     );
   }
 
-  // Verify proof token
+  // --- Verify proof token (extracts userId; may be a dummy UUID from
+  //     recovery-data so we MUST check user_keys below before acting) ---
   const tokenPayload = verifyResetToken(reset_token);
   if (!tokenPayload) {
-    return NextResponse.json(
-      { error: "Invalid or expired reset token." },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }
 
   const admin = createAdminClient();
 
-  // Re-fetch user by email (do NOT trust userId from the client)
-  const { data: listData, error: listError } =
-    await admin.auth.admin.listUsers();
+  // --- Indexed lookup on user_keys by email ---
+  const { data: keyRow, error: lookupError } = await admin
+    .from("user_keys")
+    .select("user_id")
+    .eq("email", normalizedEmail)
+    .maybeSingle();
 
-  if (listError || !listData) {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  // If the user doesn't exist in user_keys, reject — even if the token
+  // signature was valid (it could be a dummy token from a non-existent
+  // email's recovery-data response).
+  if (lookupError || !keyRow) {
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }
 
-  const user = listData.users.find(
-    (u) => u.email?.toLowerCase() === email.toLowerCase()
-  );
-
-  if (!user) {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+  // Verify the token's userId matches the actual user_id from user_keys.
+  if (tokenPayload.userId !== keyRow.user_id) {
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }
 
-  // Verify the token's userId matches the freshly-looked-up user
-  if (tokenPayload.userId !== user.id) {
-    return NextResponse.json(
-      { error: "Invalid or expired reset token." },
-      { status: 400 }
-    );
-  }
-
-  // Update user_keys with new password-wrapped DEK
+  // --- Update user_keys with new password-wrapped DEK ---
   const { error: keyError } = await admin
     .from("user_keys")
     .update({
@@ -78,28 +89,20 @@ export async function POST(request: Request) {
       wrapped_dek: new_wrapped_dek,
       updated_at: new Date().toISOString(),
     })
-    .eq("user_id", user.id);
+    .eq("user_id", keyRow.user_id);
 
   if (keyError) {
-    return NextResponse.json(
-      { error: "Failed to update encryption keys." },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }
 
-  // Update Supabase auth password
-  const { error: authError } = await admin.auth.admin.updateUserById(user.id, {
-    password: new_password,
-  });
+  // --- Update Supabase auth password ---
+  const { error: authError } = await admin.auth.admin.updateUserById(
+    keyRow.user_id,
+    { password: new_password }
+  );
 
   if (authError) {
-    return NextResponse.json(
-      {
-        error:
-          "Password auth update failed. Your encryption keys were updated. Please contact support.",
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }
 
   return NextResponse.json({ success: true });

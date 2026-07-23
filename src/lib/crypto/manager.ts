@@ -24,7 +24,8 @@ import { saveDEK, loadDEK, clearDEK as clearStore, hasDEK } from "./store";
  */
 export async function bootstrapCrypto(
   userId: string,
-  password: string
+  password: string,
+  email: string
 ): Promise<void> {
   const existing = await fetchUserKeys(userId);
 
@@ -37,7 +38,7 @@ export async function bootstrapCrypto(
     const dek = await generateDEK();
     const kek = await deriveKEK(password, salt);
     const bundle = await wrapDEK(dek, kek);
-    await upsertUserKeys(userId, salt, bundle.iv, bundle.wrappedKey);
+    await upsertUserKeys(userId, email, salt, bundle.iv, bundle.wrappedKey);
     await saveDEK(userId, dek);
   }
 }
@@ -103,7 +104,8 @@ export async function decryptBlob(
 export async function rewrapDEK(
   userId: string,
   oldPassword: string,
-  newPassword: string
+  newPassword: string,
+  email: string
 ): Promise<void> {
   const existing = await fetchUserKeys(userId);
   if (!existing) {
@@ -123,7 +125,7 @@ export async function rewrapDEK(
   const newKek = await deriveKEK(newPassword, newSalt);
   const bundle = await wrapDEK(extractableDek, newKek);
 
-  await upsertUserKeys(userId, newSalt, bundle.iv, bundle.wrappedKey);
+  await upsertUserKeys(userId, email, newSalt, bundle.iv, bundle.wrappedKey);
 
   // Store non-extractable copy for ongoing encrypt/decrypt.
   const rawDek = await crypto.subtle.exportKey("raw", extractableDek);
