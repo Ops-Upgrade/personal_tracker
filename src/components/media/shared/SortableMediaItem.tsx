@@ -9,13 +9,12 @@ import {
   GripVertical,
   Star,
   MessageSquare,
-  Film,
-  Tv,
   Trash2,
 } from "lucide-react";
 import type { Media } from "@/types/media";
 import { tmdbPosterUrl } from "@/components/media/constants";
 import StatusBadge from "@/components/media/shared/StatusBadge";
+import BaseMediaCard from "@/components/media/shared/BaseMediaCard";
 
 // ── Shared props ──
 
@@ -191,17 +190,13 @@ export function SortableTileItem({
     zIndex: isDragging ? 20 : 0,
   };
 
-  const posterUrl = media.poster_path
-    ? tmdbPosterUrl(media.poster_path, "w342")
-    : null;
-
   const year = media.release_date
     ? new Date(media.release_date).getFullYear()
     : undefined;
 
   const mediaUrl = ROUTES.MEDIA_DETAIL(media.tmdb_id!, media.type);
 
-  function handleClick(e: React.MouseEvent) {
+  function handleClick(e: React.MouseEvent<HTMLDivElement>) {
     if ((e.target as HTMLElement).closest("[data-no-nav]")) return;
     if (onNavigate) {
       onNavigate(mediaUrl);
@@ -211,36 +206,43 @@ export function SortableTileItem({
   }
 
   return (
-    <div
+    <BaseMediaCard
       ref={setNodeRef}
       style={style}
+      posterPath={media.poster_path ?? null}
+      title={media.title}
+      type={media.type}
+      year={year}
+      rating={media.rating}
+      hasReviewNotes={!!media.review_notes}
       onClick={handleClick}
-      className="group rounded-xl border border-zinc-200 bg-white shadow-sm transition hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 overflow-hidden cursor-pointer"
-    >
-      {/* ── Poster ── */}
-      <div className="relative aspect-[2/3] bg-zinc-100 dark:bg-zinc-800">
-        {posterUrl ? (
-          <Image
-            src={posterUrl}
-            alt={media.title}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className="object-cover"
-          />
+      topLeftSlot={
+        isUnsaved ? (
+          <span className="absolute top-2 left-2 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shadow-sm bg-violet-500/90 text-white">
+            Unsaved
+          </span>
         ) : (
-          <div className="flex h-full items-center justify-center text-zinc-400 dark:text-zinc-600">
-            {media.type === "movie" ? <Film size={40} /> : <Tv size={40} />}
-          </div>
-        )}
-
-        {/* Type badge (top-right) — matches MediaCard */}
-        {!onRemove && (
+          <StatusBadge status={media.status} className="absolute top-2 left-2" />
+        )
+      }
+      topRightSlot={
+        onRemove ? (
+          <button
+            type="button"
+            data-no-nav
+            onClick={() => onRemove(media.id)}
+            className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white/80 hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+            aria-label="Remove from collection"
+          >
+            <Trash2 size={12} />
+          </button>
+        ) : (
           <span className="absolute top-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white uppercase">
             {media.type === "movie" ? "Movie" : "TV"}
           </span>
-        )}
-
-        {/* Grip handle */}
+        )
+      }
+      bottomRightSlot={
         <button
           type="button"
           {...attributes}
@@ -251,55 +253,7 @@ export function SortableTileItem({
         >
           <GripVertical size={12} />
         </button>
-
-        {/* Status badge (top-left) — matches MediaCard */}
-        {isUnsaved ? (
-          <span className="absolute top-2 left-2 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shadow-sm bg-violet-500/90 text-white">
-            Unsaved
-          </span>
-        ) : (
-          <StatusBadge status={media.status} className="absolute top-2 left-2" />
-        )}
-
-        {/* Remove button */}
-        {onRemove && (
-          <button
-            type="button"
-            data-no-nav
-            onClick={() => onRemove(media.id)}
-            className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white/80 hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
-            aria-label="Remove from collection"
-          >
-            <Trash2 size={12} />
-          </button>
-        )}
-      </div>
-
-      {/* ── Info — matches MediaCard ── */}
-      <div className="p-3">
-        <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 truncate">
-          {media.title}
-        </h4>
-        <div className="flex items-center gap-2 mt-0.5">
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 m-0">
-            {[year].filter(Boolean).join(" • ") || "—"}
-          </p>
-        </div>
-        {(media.rating || media.review_notes) && (
-          <div className="flex items-center gap-2 mt-2">
-            {media.rating && (
-              <span className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-500 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                <Star size={10} className="fill-current" /> {media.rating}
-              </span>
-            )}
-            {media.review_notes && (
-              <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                <MessageSquare size={10} />
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
+      }
+    />
   );
 }

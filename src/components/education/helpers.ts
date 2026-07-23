@@ -1,7 +1,7 @@
 import type { Education } from "@/types/education";
 import type { Document } from "@/types/document";
-import type { Priority } from "@/types/taskmanager";
-import { PRIORITIES } from "@/types/taskmanager";
+import type { Priority } from "@/types/common";
+import { PRIORITIES } from "@/types/common";
 
 export {
   sortByCompletedDesc,

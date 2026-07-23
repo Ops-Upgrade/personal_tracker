@@ -1,68 +1,18 @@
 "use client";
 
 import { useMemo } from "react";
-import { useLocalStorage } from "@/lib/useLocalStorage";
 import { trunc } from "@/lib/viewHelpers";
 import PriorityBadge from "@/components/common/PriorityBadge";
+import SortableHeader from "@/components/common/SortableHeader";
+import { PaperClipIcon } from "@/components/common/Icons";
+import { useTableSort, type SortConfig } from "@/hooks/useTableSort";
 import type { Education } from "@/types/education";
 import type { Document } from "@/types/document";
-import type { Priority } from "@/types/taskmanager";
+import type { Priority } from "@/types/common";
 
-// --- Inline SVG Icon ---
-
-function PaperClipIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-5.7-1.477-1.477" />
-    </svg>
-  );
-}
-
-// --- Types ---
+// --- Column type ---
 
 type SortColumn = "name" | "provider" | "priority" | "due_date" | "completed_at";
-type SortDirection = "asc" | "desc";
-
-interface SortState {
-  column: SortColumn;
-  direction: SortDirection;
-}
-
-interface SortableHeaderProps {
-  label: string;
-  column: SortColumn;
-  sortState: SortState | null;
-  onClick: (column: SortColumn) => void;
-  className?: string;
-}
-
-function SortableHeader({
-  label,
-  column,
-  sortState,
-  onClick,
-  className,
-}: SortableHeaderProps) {
-  const isActive = sortState?.column === column;
-
-  return (
-    <th
-      className={`cursor-pointer select-none hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors ${className ?? ""}`}
-      onClick={() => onClick(column)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        <span className="text-[9px] leading-none w-2 inline-block">
-          {isActive
-            ? sortState.direction === "asc"
-              ? "▲"
-              : "▼"
-            : "↕"}
-        </span>
-      </span>
-    </th>
-  );
-}
 
 // --- Priority order for sorting ---
 
@@ -72,6 +22,35 @@ const PRIORITY_SORT_ORDER: Record<string, number> = {
   medium: 2,
   low: 3,
 };
+
+// --- Sort configs ---
+
+const SORT_CONFIGS: SortConfig<SortColumn, Education>[] = [
+  {
+    column: "name",
+    extractor: (edu) => edu.name.toLowerCase(),
+  },
+  {
+    column: "provider",
+    extractor: (edu) => (edu.provider ?? "").toLowerCase(),
+  },
+  {
+    column: "priority",
+    extractor: (edu) => PRIORITY_SORT_ORDER[edu.priority] ?? 99,
+  },
+  {
+    column: "due_date",
+    extractor: (edu) =>
+      edu.due_date
+        ? new Date(edu.due_date + "T00:00:00").getTime()
+        : Number.MAX_SAFE_INTEGER,
+  },
+  {
+    column: "completed_at",
+    extractor: (edu) =>
+      edu.completed_at ? new Date(edu.completed_at).getTime() : 0,
+  },
+];
 
 // --- Main Component ---
 
@@ -94,7 +73,12 @@ export default function EducationTable({
   onSelectEducation,
   disableSorting = false,
 }: EducationTableProps) {
-  const [sortState, setSortState] = useLocalStorage<SortState | null>("educationTableSortState", null);
+  const { sortState, handleSort, sorted } = useTableSort(
+    "educationTableSortState",
+    educations,
+    SORT_CONFIGS,
+    disableSorting,
+  );
 
   const docCountsByEdu = useMemo(() => {
     const map = new Map<string, number>();
@@ -105,58 +89,6 @@ export default function EducationTable({
     }
     return map;
   }, [documents]);
-
-  function handleSort(column: SortColumn) {
-    setSortState((prev) => {
-      if (prev?.column !== column) {
-        return { column, direction: "asc" };
-      }
-      if (prev.direction === "asc") {
-        return { column, direction: "desc" };
-      }
-      // Second click on same column with desc → clear sort
-      return null;
-    });
-  }
-
-  const sorted = useMemo(() => {
-    if (disableSorting || !sortState) return educations;
-    const { column, direction } = sortState;
-    const sorted = [...educations].sort((a, b) => {
-      let aVal: string | number;
-      let bVal: string | number;
-
-      switch (column) {
-        case "name":
-          aVal = a.name.toLowerCase();
-          bVal = b.name.toLowerCase();
-          break;
-        case "provider":
-          aVal = (a.provider ?? "").toLowerCase();
-          bVal = (b.provider ?? "").toLowerCase();
-          break;
-        case "priority":
-          aVal = PRIORITY_SORT_ORDER[a.priority] ?? 99;
-          bVal = PRIORITY_SORT_ORDER[b.priority] ?? 99;
-          break;
-        case "due_date":
-          aVal = a.due_date ? new Date(a.due_date + "T00:00:00").getTime() : Number.MAX_SAFE_INTEGER;
-          bVal = b.due_date ? new Date(b.due_date + "T00:00:00").getTime() : Number.MAX_SAFE_INTEGER;
-          break;
-        case "completed_at":
-          aVal = a.completed_at ? new Date(a.completed_at).getTime() : 0;
-          bVal = b.completed_at ? new Date(b.completed_at).getTime() : 0;
-          break;
-        default:
-          return 0;
-      }
-
-      if (aVal < bVal) return direction === "asc" ? -1 : 1;
-      if (aVal > bVal) return direction === "asc" ? 1 : -1;
-      return 0;
-    });
-    return sorted;
-  }, [educations, sortState, disableSorting]);
 
   if (educations.length === 0) {
     return (
@@ -183,38 +115,43 @@ export default function EducationTable({
             ) : (
               <>
                 <SortableHeader
-                  label="Program Name"
+                  as="th"
                   column="name"
+                  label="Program Name"
                   sortState={sortState}
-                  onClick={handleSort}
+                  onSort={handleSort}
                   className="pb-2 pr-3 font-medium"
                 />
                 <SortableHeader
-                  label="Provider"
+                  as="th"
                   column="provider"
+                  label="Provider"
                   sortState={sortState}
-                  onClick={handleSort}
+                  onSort={handleSort}
                   className="pb-2 pr-3 font-medium"
                 />
                 <SortableHeader
-                  label="Priority"
+                  as="th"
                   column="priority"
+                  label="Priority"
                   sortState={sortState}
-                  onClick={handleSort}
+                  onSort={handleSort}
                   className="pb-2 pr-3 font-medium"
                 />
                 <SortableHeader
-                  label="Due Date"
+                  as="th"
                   column="due_date"
+                  label="Due Date"
                   sortState={sortState}
-                  onClick={handleSort}
+                  onSort={handleSort}
                   className="pb-2 pr-3 font-medium"
                 />
                 <SortableHeader
-                  label="Completed"
+                  as="th"
                   column="completed_at"
+                  label="Completed"
                   sortState={sortState}
-                  onClick={handleSort}
+                  onSort={handleSort}
                   className="pb-2 pr-3 font-medium"
                 />
                 <th className="pb-2 font-medium text-center">Files</th>

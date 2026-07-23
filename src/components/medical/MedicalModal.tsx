@@ -11,7 +11,7 @@ import { InputField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
-import type { ToastType } from "@/components/common/Toast";
+import { useModalBaseState } from "@/hooks/useModalBaseState";
 import { stripHtml, normalizeDateForInput } from "@/lib/utils";
 
 // --- Types ---
@@ -63,19 +63,16 @@ export default function MedicalModal({
   const [clinic, setClinic] = useState(record?.clinic ?? "");
   const [date, setDate] = useState(normalizeDateForInput(record?.date, defaultDate ?? new Date().toISOString().split("T")[0]));
   const [diagnosisTimeline, setDiagnosisTimeline] = useState(record?.diagnosis_timeline ?? "");
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [toastConfig, setToastConfig] = useState<{
-    isVisible: boolean;
-    message: string;
-    type: ToastType;
-  }>({ isVisible: false, message: "", type: "success" });
-
-  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
-    setToastConfig({ isVisible: true, message, type });
-    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
-  }, []);
+  const {
+    isSaving,
+    setIsSaving,
+    error,
+    setError,
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    toastConfig,
+    triggerToast,
+  } = useModalBaseState();
 
   // --- File state (from shared hook) ---
   const [markedForRemoval, setMarkedForRemoval] = useState<Set<string>>(new Set());
@@ -91,7 +88,6 @@ export default function MedicalModal({
     setLinkSearchQuery,
     linkDropdownOpen,
     setLinkDropdownOpen,
-    files,
     availableStandalone,
     filteredLinkDocs,
     addNewFile,
@@ -99,8 +95,6 @@ export default function MedicalModal({
     handleFileDownload,
     handleFileRename,
     handleLoadPreview,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    handleLinkDropdownSelect,
     resetFileState,
   } = useModalDocumentState({
     attachedDocuments,
@@ -129,7 +123,7 @@ export default function MedicalModal({
     setIsSaving(false);
     setError(null);
     setShowDeleteConfirm(false);
-  }, [baseline]);
+  }, [baseline, setIsSaving, setError, setShowDeleteConfirm]);
 
   // Reset file-related state only when the record changes (NOT on resetFileState change)
   useEffect(() => {

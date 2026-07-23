@@ -99,7 +99,7 @@ export function useMediaTracking({
 
   const load = useCallback(async () => {
     try {
-      return await execute(async (_signal) => {
+      return await execute(async () => {
         // Fetch TMDB details + targeted media lookup in parallel.
         // getMediaByTmdbId warms the in-memory cache on first call;
         // subsequent navigations between detail pages return instantly.

@@ -57,10 +57,6 @@ export async function POST(request: Request) {
     }
 
     const data = tmdbResult.data;
-    // Cast for nested property access — TMDB response shape is validated by runtime
-    // inline type assertions below.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const d = data as Record<string, any>;
 
     // TMDB API response shapes
     interface TmdbReleaseDateResult {
@@ -75,42 +71,64 @@ export async function POST(request: Request) {
       link?: string;
       flatrate?: Array<{ provider_name: string; logo_path: string }>;
     }
+    interface TmdbDetailsResponse {
+      title?: string;
+      name?: string;
+      poster_path?: string;
+      release_date?: string;
+      first_air_date?: string;
+      number_of_episodes?: number;
+      number_of_seasons?: number;
+      overview?: string;
+      genres?: Array<{ id: number; name: string }>;
+      runtime?: number;
+      episode_run_time?: number[];
+      release_dates?: { results?: TmdbReleaseDateResult[] };
+      content_ratings?: { results?: TmdbContentRatingResult[] };
+      "watch/providers"?: {
+        results?: {
+          IN?: TmdbWatchProviderResult;
+        };
+      };
+    }
+
+    const d = data as TmdbDetailsResponse;
 
     // Extract US content rating (movies use release_dates, TV uses content_ratings)
     let contentRating = "";
     if (type === "movie") {
-      const usRelease = (d.release_dates?.results as TmdbReleaseDateResult[] | undefined)?.find(
+      const usRelease = d.release_dates?.results?.find(
         (r) => r.iso_3166_1 === "US" || r.iso_3166_1 === "IN",
       );
       contentRating = usRelease?.release_dates?.[0]?.certification || "";
     } else {
-      const usRating = (d.content_ratings?.results as TmdbContentRatingResult[] | undefined)?.find(
+      const usRating = d.content_ratings?.results?.find(
         (r) => r.iso_3166_1 === "US" || r.iso_3166_1 === "IN",
       );
       contentRating = usRating?.rating || "";
     }
 
     const details = {
-      title: d.title as string | undefined,
-      name: d.name as string | undefined,
-      poster_path: d.poster_path as string | undefined,
-      release_date: (type === "movie"
+      title: d.title,
+      name: d.name,
+      poster_path: d.poster_path,
+      release_date: type === "movie"
         ? d.release_date
-        : d.first_air_date) as string | undefined,
+        : d.first_air_date,
       number_of_episodes: type === "tv"
-        ? (d.number_of_episodes as number | undefined)
+        ? d.number_of_episodes
         : undefined,
       number_of_seasons: type === "tv"
-        ? (d.number_of_seasons as number | undefined)
+        ? d.number_of_seasons
         : undefined,
-      overview: (d.overview as string) ?? "",
-      genres: (d.genres as Array<{ id: number; name: string }>) ?? [],
-      runtime: type === "movie" ? (d.runtime as number | undefined) : undefined,
+      overview: d.overview ?? "",
+      genres: d.genres ?? [],
+      runtime: type === "movie" ? d.runtime : undefined,
       episode_run_time: type === "tv"
-        ? (d.episode_run_time as number[] | undefined)
+        ? d.episode_run_time
         : undefined,
       content_rating: contentRating,
-      watch_providers: (d["watch/providers"]?.results?.IN as TmdbWatchProviderResult | undefined) ?? undefined,
+      watch_providers: d["watch/providers"]?.results?.IN,
     };
 
     return NextResponse.json(details);

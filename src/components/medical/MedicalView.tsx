@@ -26,7 +26,7 @@ import {
 import { parseISTDate } from "@/api/serverDate";
 import type { MedicalRecord, MedicalPlaintext } from "@/types/medical";
 import type { Document, DocumentPlaintext } from "@/types/document";
-import { MONTHS } from "@/types/expense";
+import { MONTHS } from "@/types/common";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";

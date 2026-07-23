@@ -1,4 +1,4 @@
-import { fetchUserKeys, upsertUserKeys } from "@/api/auth";
+import { fetchUserKeys, upsertUserKeys, hasRecoveryKey as apiHasRecoveryKey, upsertRecoveryKey } from "@/api/auth";
 import {
   deriveKEK,
   generateDEK,
@@ -24,7 +24,8 @@ import { saveDEK, loadDEK, clearDEK as clearStore, hasDEK } from "./store";
  */
 export async function bootstrapCrypto(
   userId: string,
-  password: string
+  password: string,
+  email: string
 ): Promise<void> {
   const existing = await fetchUserKeys(userId);
 
@@ -37,7 +38,7 @@ export async function bootstrapCrypto(
     const dek = await generateDEK();
     const kek = await deriveKEK(password, salt);
     const bundle = await wrapDEK(dek, kek);
-    await upsertUserKeys(userId, salt, bundle.iv, bundle.wrappedKey);
+    await upsertUserKeys(userId, email, salt, bundle.iv, bundle.wrappedKey);
     await saveDEK(userId, dek);
   }
 }
@@ -103,7 +104,8 @@ export async function decryptBlob(
 export async function rewrapDEK(
   userId: string,
   oldPassword: string,
-  newPassword: string
+  newPassword: string,
+  email: string
 ): Promise<void> {
   const existing = await fetchUserKeys(userId);
   if (!existing) {
@@ -123,7 +125,7 @@ export async function rewrapDEK(
   const newKek = await deriveKEK(newPassword, newSalt);
   const bundle = await wrapDEK(extractableDek, newKek);
 
-  await upsertUserKeys(userId, newSalt, bundle.iv, bundle.wrappedKey);
+  await upsertUserKeys(userId, email, newSalt, bundle.iv, bundle.wrappedKey);
 
   // Store non-extractable copy for ongoing encrypt/decrypt.
   const rawDek = await crypto.subtle.exportKey("raw", extractableDek);
@@ -148,6 +150,75 @@ export async function isReady(userId: string): Promise<boolean> {
  * Clear the DEK from IndexedDB (called on logout).
  */
 export { clearStore as clearDEK };
+
+/**
+ * Generate a random recovery phrase for the user to write down.
+ * 32 random bytes → Base64 → split into 6-char groups joined by "-".
+ */
+export function generateRecoveryPhrase(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const b64 = btoa(binary);
+  // Split into 6-char groups for readability
+  const groups = b64.match(/.{1,6}/g) ?? [b64];
+  return `opsugrade_${groups.join("-")}`;
+}
+
+/**
+ * Check whether the logged-in user has a recovery key set up.
+ */
+export async function hasRecoveryKey(userId: string): Promise<boolean> {
+  return apiHasRecoveryKey(userId);
+}
+
+/**
+ * Set up (or regenerate) a recovery key for the current user.
+ *
+ * 1. Fetches the existing user_keys row.
+ * 2. Derives the KEK from currentPassword + existing salt.
+ * 3. Unwraps the DEK as extractable (proves the password is correct).
+ * 4. Generates a new recovery salt → derives recovery KEK from recoveryPhrase.
+ * 5. Wraps the DEK with the recovery KEK.
+ * 6. Upserts the recovery columns to Supabase.
+ *
+ * The DEK never leaves the client in plaintext; only the encrypted recovery
+ * columns are sent to the server.
+ */
+export async function setupRecoveryKey(
+  userId: string,
+  currentPassword: string,
+  recoveryPhrase: string
+): Promise<void> {
+  const existing = await fetchUserKeys(userId);
+  if (!existing) {
+    throw new Error("No key row found for user.");
+  }
+
+  // Derive KEK from current password and unwrap DEK as extractable.
+  // If password is wrong, unwrapKey throws DOMException — let it propagate.
+  const kek = await deriveKEK(currentPassword, existing.salt);
+  const extractableDek = await unwrapDEK(
+    existing.wrapped_dek,
+    existing.iv,
+    kek,
+    true // extractable for re-wrapping
+  );
+
+  // Generate recovery KEK from the recovery phrase.
+  // Use generateSalt() from primitives for the new salt.
+  const recoverySalt = generateSalt();
+  const recoveryKEK = await deriveKEK(recoveryPhrase, recoverySalt);
+
+  // Wrap DEK with recovery KEK.
+  const { iv: recoveryIv, wrappedKey: recoveryWrappedDek } =
+    await wrapDEK(extractableDek, recoveryKEK);
+
+  // Persist to Supabase.
+  await upsertRecoveryKey(userId, recoverySalt, recoveryIv, recoveryWrappedDek);
+}
 
 // --- Internal ---
 

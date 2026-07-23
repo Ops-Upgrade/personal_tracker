@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
@@ -83,17 +83,6 @@ export default function StoreDocumentModal({
     setToastConfig({ isVisible: true, message, type });
     setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
   };
-
-  // --- Reset on open ---
-  useEffect(() => {
-    setLinkedParentId(doc?.linked_id ?? "");
-    setStoreFile(null);
-    setSelectedFileId(doc?.file_name ? doc.id : null);
-    setParentSearchQuery("");
-    setParentDropdownOpen(false);
-    setError(null);
-    setShowDeleteConfirm(false);
-  }, [doc]);
 
   // --- Filtered parent records for searchable dropdown ---
   const filteredParents = useMemo(() => {

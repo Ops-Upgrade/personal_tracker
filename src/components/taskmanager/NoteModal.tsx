@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import type { Note } from "@/types/taskmanager";
 import type { Document } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
@@ -12,7 +12,7 @@ import { InputField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
-import type { ToastType } from "@/components/common/Toast";
+import { useModalBaseState } from "@/hooks/useModalBaseState";
 import { trunc } from "./helpers";
 import { getUniqueFileName } from "@/lib/viewHelpers";
 import { stripHtml } from "@/lib/utils";
@@ -57,23 +57,16 @@ export default function NoteModal({
   // --- Form state ---
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // --- Toast ---
-  const [toastConfig, setToastConfig] = useState<{
-    isVisible: boolean;
-    message: string;
-    type: ToastType;
-  }>({ isVisible: false, message: "", type: "success" });
-
-  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
-    setToastConfig({ isVisible: true, message, type });
-    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
-  }, []);
-
-  // --- Delete confirmation ---
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const {
+    isSaving,
+    setIsSaving,
+    error,
+    setError,
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    toastConfig,
+    triggerToast,
+  } = useModalBaseState();
 
   // --- Document management ---
   const [newFiles, setNewFiles] = useState<{ file: File; label: string; tempId: string }[]>([]);
@@ -121,24 +114,6 @@ export default function NoteModal({
     userId,
     markedForRemoval: markedForDeletion,
   });
-
-  // --- Reset on open ---
-  useEffect(() => {
-    setName(note?.name ?? "");
-    setContent(note?.content ?? "");
-    setError(null);
-    setShowDeleteConfirm(false);
-    setNewFiles([]);
-    setMarkedForDeletion(new Set());
-    setMarkedForUnlink(new Set());
-    hookResetFileState();
-    const existingDocs = note
-      ? documents.filter(
-          (d) => d.domain === "taskmanager" && d.linked_id === note.id
-        )
-      : [];
-    setSelectedDocId(existingDocs.length > 0 ? existingDocs[0].id : null);
-  }, [note, documents, hookResetFileState]);
 
   // ── Baseline form values ──
   const formBaseline = useMemo(
@@ -267,7 +242,7 @@ export default function NoteModal({
     }
 
     return result;
-  }, [linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, documents]);
+  }, [linkedDocs, newFiles, stagedLinkDocId, markedForDeletion, markedForUnlink, standaloneDocs]);
 
   // --- File action handlers ---
 

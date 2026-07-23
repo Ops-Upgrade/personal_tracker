@@ -1,7 +1,4 @@
-// --- Priority & Mode ---
-
-export const PRIORITIES = ["critical", "high", "medium", "low"] as const;
-export type Priority = (typeof PRIORITIES)[number];
+import type { Priority } from "@/types/common";
 
 export type TaskMode = "online" | "offline";
 

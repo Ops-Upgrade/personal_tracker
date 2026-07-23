@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { login } from "@/api/auth";
 import { ROUTES } from "@/routes/paths";
 import Button from "@/components/common/Button";
@@ -98,6 +99,16 @@ export default function LoginForm() {
       >
         {loading ? "Signing in..." : "Sign in"}
       </Button>
+
+      {/* Forgot password link */}
+      <div className="text-center">
+        <Link
+          href={ROUTES.FORGOT_PASSWORD}
+          className="text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+        >
+          Forgot password?
+        </Link>
+      </div>
     </form>
   );
 }

@@ -40,17 +40,13 @@ export default function ThemePicker({ value, onChange }: ThemePickerProps) {
   // Collapsible premium textures section
   const [texturesOpen, setTexturesOpen] = useState(false);
 
-  // Auto-expand textures when picker opens with a premium theme selected
-  useEffect(() => {
-    if (open) {
-      setTexturesOpen((value || "").startsWith("theme:"));
-    }
-  }, [open, value]);
-
-  // Keep local position in sync when value changes externally
-  useEffect(() => {
+  // Auto-expand textures when picker opens with a premium theme selected.
+  // Sync local hue position when value changes externally (derived state pattern).
+  const [prevHue, setPrevHue] = useState(currentHue);
+  if (currentHue !== prevHue) {
+    setPrevHue(currentHue);
     setHuePercent((currentHue / 360) * 100);
-  }, [currentHue]);
+  }
 
   // Close on outside click
   useEffect(() => {
@@ -153,7 +149,10 @@ export default function ThemePicker({ value, onChange }: ThemePickerProps) {
       {/* Trigger */}
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => {
+          if (!open) setTexturesOpen((value || "").startsWith("theme:"));
+          setOpen(!open);
+        }}
         className={`relative h-10 w-10 !rounded-full transition-transform hover:scale-110 ${currentTheme.swatchClass}`}
         style={currentTheme.swatchStyle}
         aria-label="Pick theme color"

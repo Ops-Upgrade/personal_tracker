@@ -17,6 +17,7 @@ import {
 } from "@dnd-kit/sortable";
 import type { Media } from "@/types/media";
 import { SortableDetailItem, SortableTileItem } from "./SortableMediaItem";
+import BaseMediaGrid from "./BaseMediaGrid";
 
 // ── Types ──
 
@@ -115,7 +116,7 @@ export default function SortableMediaGrid({
             {appendElement}
           </div>
         ) : (
-          <div className="relative z-[3] grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-3">
+          <BaseMediaGrid className="relative z-[3] grid-cols-4 sm:grid-cols-6 lg:grid-cols-8">
             {items.map((m) => (
               <SortableTileItem
                 key={m.id}
@@ -126,7 +127,7 @@ export default function SortableMediaGrid({
               />
             ))}
             {appendElement}
-          </div>
+          </BaseMediaGrid>
         )}
       </SortableContext>
     </DndContext>

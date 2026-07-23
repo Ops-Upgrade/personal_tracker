@@ -5,6 +5,7 @@
 export const ROUTES = {
   HOME: "/",
   LOGIN: "/login",
+  FORGOT_PASSWORD: "/forgot-password",
   DASHBOARD: "/dashboard",
   TASK_MANAGER: "/taskmanager",
   TASK_MANAGER_COMPLETED: "/taskmanager/completed",

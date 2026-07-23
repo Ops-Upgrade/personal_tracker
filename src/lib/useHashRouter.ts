@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * Generic hash-driven state router for modals across all domains.
@@ -26,18 +26,19 @@ export function useHashRouter<T>(opts: {
 }): { state: T | null; close: () => void } {
   const { parse, data } = opts;
 
-  // Keep a ref to the latest parse function so the event listener never goes stale
+  // Keep refs to the latest parse function and data so event listeners never go stale
   const parseRef = useRef(parse);
-  parseRef.current = parse;
-
   const dataRef = useRef(data);
-  dataRef.current = data;
+  useLayoutEffect(() => {
+    parseRef.current = parse;
+    dataRef.current = data;
+  });
 
   // Lazy initializer — reads current hash once on mount
   const [state, setState] = useState<T | null>(() => {
     if (typeof window === "undefined") return null;
     const raw = window.location.hash.replace("#", "");
-    return parseRef.current(raw, dataRef.current);
+    return parse(raw, data);
   });
 
   // Clear hash from URL without navigation
@@ -67,14 +68,13 @@ export function useHashRouter<T>(opts: {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const raw = window.location.hash.replace("#", "");
-    const next = parse(raw, data);
+    const next = parseRef.current(raw, data);
     // Only update if the parse result actually changed (avoids infinite loops)
     setState((prev) => {
       const prevStr = JSON.stringify(prev);
       const nextStr = JSON.stringify(next);
       return prevStr !== nextStr ? next : prev;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   return { state, close };

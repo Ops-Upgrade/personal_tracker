@@ -4,7 +4,12 @@ import { ROUTES } from "./paths";
  * Routes that do NOT require authentication.
  * Everything else is treated as protected by the middleware.
  */
-export const PUBLIC_ROUTES: string[] = [ROUTES.LOGIN];
+export const PUBLIC_ROUTES: string[] = [
+  ROUTES.LOGIN,
+  ROUTES.FORGOT_PASSWORD,
+  "/api/auth/recovery-data",
+  "/api/auth/reset-password",
+];
 
 /**
  * The default route to redirect to after successful login.

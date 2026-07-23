@@ -27,8 +27,8 @@ import {
 } from "@/api/common/documentStorage";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import type { Document, DocumentPlaintext } from "@/types/document";
-import type { Education, EducationPlaintext, EducationViewMode } from "@/types/education";
-import type { Priority } from "@/types/taskmanager";
+import type { Education, EducationViewMode } from "@/types/education";
+import type { Priority } from "@/types/common";
 import ActiveEducationsBox from "./ActiveEducationsBox";
 import CompletedEducationsBox from "./CompletedEducationsBox";
 import EducationModal from "./EducationModal";

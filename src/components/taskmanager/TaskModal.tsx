@@ -1,14 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Priority, Task, TaskMode } from "@/types/taskmanager";
+import { useMemo, useState } from "react";
+import type { Task, TaskMode } from "@/types/taskmanager";
+import type { Priority } from "@/types/common";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
 import { InputField, SelectField, CheckboxField } from "@/components/common/FormField";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
-import type { ToastType } from "@/components/common/Toast";
+import { useModalBaseState } from "@/hooks/useModalBaseState";
 import { stripHtml, normalizeDateForInput } from "@/lib/utils";
 
 interface TaskDraft {
@@ -37,19 +38,16 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
   const [mode, setMode] = useState<TaskMode>(task?.mode ?? "online");
   const [description, setDescription] = useState(task?.description ?? "");
   const [isCompleted, setIsCompleted] = useState(task?.is_completed ?? false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [toastConfig, setToastConfig] = useState<{
-    isVisible: boolean;
-    message: string;
-    type: ToastType;
-  }>({ isVisible: false, message: "", type: "success" });
-
-  const triggerToast = useCallback((message: string, type: ToastType = "success") => {
-    setToastConfig({ isVisible: true, message, type });
-    setTimeout(() => setToastConfig((prev) => ({ ...prev, isVisible: false })), 2000);
-  }, []);
+  const {
+    isSaving,
+    setIsSaving,
+    error,
+    setError,
+    showDeleteConfirm,
+    setShowDeleteConfirm,
+    toastConfig,
+    triggerToast,
+  } = useModalBaseState();
 
   // ── Baseline: computed once, used by both reset AND dirty check ──
   const baseline = useMemo(() => ({
@@ -60,18 +58,6 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
     description: task?.description ?? "",
     isCompleted: task?.is_completed ?? false,
   }), [task, defaultDate]);
-
-  // Reset form to baseline whenever the record changes
-  useEffect(() => {
-    setName(baseline.name);
-    setPriority(baseline.priority);
-    setDueDate(baseline.dueDate);
-    setMode(baseline.mode);
-    setDescription(baseline.description);
-    setIsCompleted(baseline.isCompleted);
-    setError(null);
-    setShowDeleteConfirm(false);
-  }, [baseline]);
 
   // Dirty check: compare current state against the same baseline object
   const isDirty =

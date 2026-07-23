@@ -229,6 +229,7 @@ export default function GlobalStoreView({
 
   useEffect(() => {
     if (userId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadData();
     }
   }, [userId, loadData, refreshTrigger]);
@@ -668,6 +669,7 @@ export default function GlobalStoreView({
       {/* Store Document Modal — Add mode */}
       {isAddingDocument && userId && (
         <StoreDocumentModal
+          key="new"
           document={null}
           domain={domain}
           parentRecords={parentRecords}
@@ -683,6 +685,7 @@ export default function GlobalStoreView({
       {/* Store Document Modal — Edit mode */}
       {editingDocument && userId && (
         <StoreDocumentModal
+          key={editingDocument.id}
           document={editingDocument}
           domain={domain}
           parentRecords={parentRecords}
