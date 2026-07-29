@@ -7,19 +7,12 @@ import {
   File,
   FileText,
   Image as ImageIcon,
-  Plus,
   Pencil,
 } from "lucide-react";
 import { LinkSlashIcon, LinkIcon } from "@/components/common/Icons";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
-import ViewToggle from "@/components/common/ViewToggle";
-import SearchBar from "@/components/common/SearchBar";
-import type { ViewToggleOption } from "@/components/common/ViewToggle";
-
-const STORE_VIEW_OPTIONS: readonly ViewToggleOption<"tiles" | "list">[] = [
-  { value: "tiles", label: "Tiles" },
-  { value: "list", label: "List" },
-];
+import DataListView from "@/components/common/DataListView";
+import OverlayActionButton from "@/components/common/OverlayActionButton";
 
 export interface DocumentTile {
   id: string;
@@ -102,6 +95,23 @@ const DOMAIN_THEMES = {
     hoverBorder:
       "hover:border-emerald-200 dark:hover:border-emerald-800",
     checkbox: "text-emerald-600 focus:ring-emerald-600",
+  },
+  vault: {
+    primaryBtn:
+      "bg-zinc-900 text-white hover:bg-black focus-visible:outline-zinc-900 dark:bg-zinc-100 dark:text-black dark:hover:bg-white dark:focus-visible:outline-zinc-100",
+    primaryText:
+      "text-zinc-900 hover:text-black dark:text-zinc-100 dark:hover:text-white",
+    lightBg:
+      "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800",
+    icon: "text-zinc-900 dark:text-zinc-100",
+    iconLarge: "text-zinc-900/50 dark:text-zinc-100/50",
+    iconHover: "hover:text-zinc-900 dark:hover:text-zinc-100",
+    downloadHover: "hover:text-zinc-900 dark:hover:text-zinc-100",
+    borderFocus:
+      "border-zinc-900 focus:ring-zinc-900 dark:border-zinc-100 dark:focus:ring-zinc-100",
+    hoverBorder:
+      "hover:border-zinc-900 dark:hover:border-zinc-100",
+    checkbox: "text-zinc-900 focus:ring-zinc-900 dark:text-zinc-100 dark:focus:ring-zinc-100",
   },
 } as const;
 
@@ -231,322 +241,261 @@ export default function TileView({
     return `This will permanently delete '${doc.fileName}'. This action cannot be undone.`;
   };
 
+  const selectedCount = selectedIds?.size ?? 0;
+
   return (
     <div className="flex flex-col h-full w-full space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex flex-row items-center gap-3">
-          {title && (
-            <div className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-              {title}
-            </div>
-          )}
-          <ViewToggle
-            value={viewMode}
-            onChange={setViewMode}
-            options={STORE_VIEW_OPTIONS}
-            ariaLabel="Store view toggle"
-          />
-          {selectionEnabled && selectedIds && selectedIds.size > 0 && (
-            <button
-              onClick={() => onSelectAll?.(selectedIds.size < filteredDocs.length)}
-              className={`text-xs font-medium transition-colors ${theme.primaryText}`}
-            >
-              {selectedIds.size < filteredDocs.length ? `Select all (${filteredDocs.length})` : "Deselect all"}
-            </button>
-          )}
+      {/* Title row */}
+      {title && (
+        <div className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
+          {title}
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0">
-          {selectionEnabled && selectedIds && selectedIds.size > 0 && bulkActions ? (
-            bulkActions
-          ) : (
-            <>
-              <SearchBar
-                value={searchQuery}
-                onChange={setSearchQuery}
-                placeholder="Search files..."
-                className="flex-1 sm:w-64"
-              />
-              {onAdd && (
-                <button
-                  onClick={onAdd}
-                  className={`inline-flex items-center justify-center gap-x-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${theme.primaryBtn}`}
-                >
-                  <Plus className="-ml-0.5 h-4 w-4" />
-                  Add
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+      )}
 
-      {/* Grid Area */}
-      <div className="flex-1">
-        {isLoading ? (
-          <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/50">
-            <span className="text-zinc-500 dark:text-zinc-400">Loading documents...</span>
-          </div>
-        ) : documents.length === 0 ? (
-          <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/50">
-            <span className="text-zinc-500 dark:text-zinc-400">No documents in the vault.</span>
-          </div>
-        ) : filteredDocs.length === 0 ? (
-          <div className="flex h-48 items-center justify-center rounded-xl border border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/50">
-            <span className="text-zinc-500 dark:text-zinc-400">No matching documents found.</span>
-          </div>
-        ) : viewMode === "list" ? (
-          <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            {selectionEnabled && selectedIds && selectedIds.size > 0 && (
-              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/50">
-                <input
-                  type="checkbox"
-                  checked={filteredDocs.length > 0 && selectedIds.size === filteredDocs.length}
-                  onChange={(e) => onSelectAll?.(e.target.checked)}
-                  className={`h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 ${theme.checkbox}`}
-                />
-                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  {selectedIds.size === filteredDocs.length
-                    ? "All selected"
-                    : `${selectedIds.size} of ${filteredDocs.length} selected`}
-                </span>
+      <DataListView
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        searchPlaceholder="Search files..."
+        isLoading={isLoading}
+        isEmpty={documents.length === 0}
+        isFilteredEmpty={filteredDocs.length === 0 && documents.length > 0}
+        emptyMessage="No documents in the vault."
+        onAdd={onAdd}
+        addLabel="Add"
+        selectionEnabled={selectionEnabled}
+        selectedCount={selectedCount}
+        totalCount={filteredDocs.length}
+        onSelectAll={onSelectAll}
+        onClearSelection={() => onSelectAll?.(false)}
+        bulkActionBar={bulkActions}
+        itemCount={filteredDocs.length}
+        toggleActiveClassName={theme.primaryText}
+        renderListRow={(i) => {
+          const doc = filteredDocs[i];
+          const isRemoving = removingIds.has(doc.id);
+          const isImage = doc.mime ? doc.mime.startsWith("image/") : doc.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+          const isPdf = doc.mime ? doc.mime === "application/pdf" : doc.fileName.match(/\.pdf$/i);
+
+          return (
+            <div
+              key={doc.id}
+              onClick={() => onActionClick?.(doc.id)}
+              className={`group flex items-center justify-between gap-4 p-4 transition-all duration-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${onActionClick ? "cursor-pointer" : ""} ${isRemoving ? "opacity-0 scale-y-95" : "opacity-100 scale-y-100"
+              }`}
+            >
+              <div className="flex flex-1 items-center gap-4 min-w-0">
+                {selectionEnabled && (
+                  <input
+                    type="checkbox"
+                    checked={selectedIds?.has(doc.id) ?? false}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      onSelectionChange?.(doc.id, e.target.checked);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${
+                      selectedIds?.has(doc.id)
+                        ? "opacity-100"
+                        : "opacity-0 group-hover:opacity-100"
+                    } ${theme.checkbox}`}
+                  />
+                )}
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
+                  {isImage ? (
+                    <ImageIcon className={`h-5 w-5 ${theme.icon}`} />
+                  ) : isPdf ? (
+                    <FileText className="h-5 w-5 text-red-500" />
+                  ) : (
+                    <File className="h-5 w-5 text-zinc-400" />
+                  )}
+                </div>
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  {renamingId === doc.id ? (
+                    <input
+                      type="text"
+                      value={renameText}
+                      onChange={(e) => setRenameText(e.target.value)}
+                      onBlur={commitRename}
+                      onKeyDown={handleRenameKeyDown}
+                      className={`min-w-0 flex-1 rounded border px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 dark:bg-zinc-800 dark:text-zinc-100 ${theme.borderFocus}`}
+                      autoFocus
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={doc.fileName}>
+                      {doc.fileName}
+                    </span>
+                  )}
+                  {onRenameConfirmed && renamingId !== doc.id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startRename(doc);
+                      }}
+                      className={`shrink-0 p-0.5 rounded text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.iconHover}`}
+                      title="Rename"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {(doc.linkedItemName || doc.isLinked) && (
+                    <LinkIcon className={`h-4 w-4 shrink-0 ${theme.icon}`} />
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                {doc.linkedItemName && onUnlinkConfirmed && (
+                  <button
+                    onClick={() => setDocToUnlink(doc)}
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30 transition-colors"
+                    title="Unlink"
+                  >
+                    <LinkSlashIcon className="h-4 w-4" />
+                  </button>
+                )}
                 <button
-                  onClick={() => onSelectAll?.(false)}
-                  className="ml-auto text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
+                  onClick={() => onDownload?.(doc.id)}
+                  className={`flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${theme.downloadHover}`}
+                  title="Download"
                 >
-                  Clear
+                  <Download className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => handleDeleteClick(doc)}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 transition-colors"
+                  title="Delete"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-            )}
-            <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {filteredDocs.map((doc) => {
-                const isRemoving = removingIds.has(doc.id);
-                const isImage = doc.mime ? doc.mime.startsWith("image/") : doc.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-                const isPdf = doc.mime ? doc.mime === "application/pdf" : doc.fileName.match(/\.pdf$/i);
-
-                return (
-                  <div
-                    key={doc.id}
-                    onClick={() => onActionClick?.(doc.id)}
-                    className={`group flex items-center justify-between gap-4 p-4 transition-all duration-300 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 ${onActionClick ? "cursor-pointer" : ""} ${isRemoving ? "opacity-0 scale-y-95" : "opacity-100 scale-y-100"
-                      }`}
-                  >
-                    <div className="flex flex-1 items-center gap-4 min-w-0">
-                      {selectionEnabled && (
-                        <input
-                          type="checkbox"
-                          checked={selectedIds?.has(doc.id) ?? false}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            onSelectionChange?.(doc.id, e.target.checked);
-                          }}
-                          onClick={(e) => e.stopPropagation()}
-                          className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${
-                            selectedIds?.has(doc.id)
-                              ? "opacity-100"
-                              : "opacity-0 group-hover:opacity-100"
-                          } ${theme.checkbox}`}
-                        />
-                      )}
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-                        {isImage ? (
-                          <ImageIcon className={`h-5 w-5 ${theme.icon}`} />
-                        ) : isPdf ? (
-                          <FileText className="h-5 w-5 text-red-500" />
-                        ) : (
-                          <File className="h-5 w-5 text-zinc-400" />
-                        )}
-                      </div>
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        {renamingId === doc.id ? (
-                          <input
-                            type="text"
-                            value={renameText}
-                            onChange={(e) => setRenameText(e.target.value)}
-                            onBlur={commitRename}
-                            onKeyDown={handleRenameKeyDown}
-                            className={`min-w-0 flex-1 rounded border px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 dark:bg-zinc-800 dark:text-zinc-100 ${theme.borderFocus}`}
-                            autoFocus
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        ) : (
-                          <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={doc.fileName}>
-                            {doc.fileName}
-                          </span>
-                        )}
-                        {onRenameConfirmed && renamingId !== doc.id && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startRename(doc);
-                            }}
-                            className={`shrink-0 p-0.5 rounded text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.iconHover}`}
-                            title="Rename"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        {(doc.linkedItemName || doc.isLinked) && (
-                          <LinkIcon className={`h-4 w-4 shrink-0 ${theme.icon}`} />
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                      {doc.linkedItemName && onUnlinkConfirmed && (
-                        <button
-                          onClick={() => setDocToUnlink(doc)}
-                          className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30 transition-colors"
-                          title="Unlink"
-                        >
-                          <LinkSlashIcon className="h-4 w-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => onDownload?.(doc.id)}
-                        className={`flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors ${theme.downloadHover}`}
-                        title="Download"
-                      >
-                        <Download className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(doc)}
-                        className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
             </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {filteredDocs.map((doc) => {
-              const isRemoving = removingIds.has(doc.id);
+          );
+        }}
+        renderGridTile={(i) => {
+          const doc = filteredDocs[i];
+          const isRemoving = removingIds.has(doc.id);
 
-              // Prefer MIME type for icon resolution, fall back to filename extension
-              const isImage = doc.mime ? doc.mime.startsWith("image/") : doc.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
-              const isPdf = doc.mime ? doc.mime === "application/pdf" : doc.fileName.match(/\.pdf$/i);
+          // Prefer MIME type for icon resolution, fall back to filename extension
+          const isImage = doc.mime ? doc.mime.startsWith("image/") : doc.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+          const isPdf = doc.mime ? doc.mime === "application/pdf" : doc.fileName.match(/\.pdf$/i);
 
-              return (
+          return (
+            <div
+              key={doc.id}
+              onClick={() => onActionClick?.(doc.id)}
+              className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 ${onActionClick ? "cursor-pointer" : ""} ${isRemoving ? "opacity-0 scale-95" : "opacity-100 scale-100"} ${theme.hoverBorder}`}
+            >
+              {/* Selection checkbox — top-left */}
+              {selectionEnabled && (
                 <div
-                  key={doc.id}
-                  onClick={() => onActionClick?.(doc.id)}
-                  className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 ${onActionClick ? "cursor-pointer" : ""} ${isRemoving ? "opacity-0 scale-95" : "opacity-100 scale-100"} ${theme.hoverBorder}`}
+                  className={`absolute top-2 left-2 z-10 transition-opacity ${
+                    selectedIds?.has(doc.id)
+                      ? "opacity-100"
+                      : "opacity-0 group-hover:opacity-100"
+                  }`}
+                  onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Selection checkbox — top-left */}
-                  {selectionEnabled && (
-                    <div
-                      className={`absolute top-2 left-2 z-10 transition-opacity ${
-                        selectedIds?.has(doc.id)
-                          ? "opacity-100"
-                          : "opacity-0 group-hover:opacity-100"
-                      }`}
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedIds?.has(doc.id) ?? false}
-                        onChange={(e) => onSelectionChange?.(doc.id, e.target.checked)}
-                        className={`h-4 w-4 rounded border-zinc-300 bg-white/80 dark:border-zinc-600 dark:bg-zinc-800/80 ${theme.checkbox}`}
-                      />
-                    </div>
-                  )}
-                  {/* Thumbnail Area */}
-                  <div className="relative flex h-32 w-full items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800 overflow-hidden">
-                    {doc.thumbnailUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={doc.thumbnailUrl} alt={doc.fileName} className="h-full w-full object-cover" />
-                    ) : isImage ? (
-                      <ImageIcon className={`h-10 w-10 ${theme.iconLarge}`} />
-                    ) : isPdf ? (
-                      <FileText className="h-10 w-10 text-red-500/50" />
-                    ) : (
-                      <File className="h-10 w-10 text-zinc-400/50" />
-                    )}
+                  <input
+                    type="checkbox"
+                    checked={selectedIds?.has(doc.id) ?? false}
+                    onChange={(e) => onSelectionChange?.(doc.id, e.target.checked)}
+                    className={`h-4 w-4 rounded border-zinc-300 bg-white/80 dark:border-zinc-600 dark:bg-zinc-800/80 ${theme.checkbox}`}
+                  />
+                </div>
+              )}
+              {/* Thumbnail Area */}
+              <div className="relative flex h-32 w-full items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800 overflow-hidden">
+                {doc.thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={doc.thumbnailUrl} alt={doc.fileName} className="h-full w-full object-cover" />
+                ) : isImage ? (
+                  <ImageIcon className={`h-10 w-10 ${theme.iconLarge}`} />
+                ) : isPdf ? (
+                  <FileText className="h-10 w-10 text-red-500/50" />
+                ) : (
+                  <File className="h-10 w-10 text-zinc-400/50" />
+                )}
 
-                    {/* Linked indicator — bottom-right of thumbnail, above footer */}
-                    {(doc.linkedItemName || doc.isLinked) && (
-                      <div className="absolute bottom-2 right-2 flex items-center justify-center rounded-full bg-white/90 p-1.5 shadow-sm backdrop-blur-sm dark:bg-zinc-900/90">
-                        <LinkIcon className={`h-4 w-4 ${theme.icon}`} />
-                      </div>
-                    )}
-
-                    {/* Overlay Actions — top-right */}
-                    <div className="absolute inset-x-0 top-0 flex items-start justify-end p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 bg-gradient-to-b from-black/40 to-transparent">
-                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                        {doc.linkedItemName && onUnlinkConfirmed && (
-                          <button
-                            onClick={() => setDocToUnlink(doc)}
-                            className="flex h-7 w-7 items-center justify-center rounded-md bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-amber-500/80"
-                            title="Unlink"
-                          >
-                            <LinkSlashIcon className="h-4 w-4" />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => onDownload?.(doc.id)}
-                          className="flex h-7 w-7 items-center justify-center rounded-md bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-white/40"
-                          title="Download"
-                        >
-                          <Download className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteClick(doc)}
-                          className="flex h-7 w-7 items-center justify-center rounded-md bg-white/20 text-white backdrop-blur-sm transition-colors hover:bg-red-500/80"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
+                {/* Linked indicator — bottom-right of thumbnail, above footer */}
+                {(doc.linkedItemName || doc.isLinked) && (
+                  <div className="absolute bottom-2 right-2 flex items-center justify-center rounded-full bg-white/90 p-1.5 shadow-sm backdrop-blur-sm dark:bg-zinc-900/90">
+                    <LinkIcon className={`h-4 w-4 ${theme.icon}`} />
                   </div>
+                )}
 
-                  {/* Footer Area */}
-                  <div className="flex flex-col p-3">
-                    {renamingId === doc.id ? (
-                      <input
-                        type="text"
-                        value={renameText}
-                        onChange={(e) => setRenameText(e.target.value)}
-                        onBlur={commitRename}
-                        onKeyDown={handleRenameKeyDown}
-                        className={`w-full rounded border px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 dark:bg-zinc-800 dark:text-zinc-100 ${theme.borderFocus}`}
-                        autoFocus
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span
-                          className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
-                          title={doc.fileName}
-                        >
-                          {doc.fileName}
-                        </span>
-                        {onRenameConfirmed && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startRename(doc);
-                            }}
-                            className={`shrink-0 p-0.5 rounded text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.iconHover}`}
-                            title="Rename"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
+                {/* Overlay Actions — top-right */}
+                <div className="absolute inset-x-0 top-0 flex items-start justify-end p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 bg-gradient-to-b from-black/40 to-transparent">
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    {doc.linkedItemName && onUnlinkConfirmed && (
+                      <OverlayActionButton
+                        onClick={() => setDocToUnlink(doc)}
+                        title="Unlink"
+                        className="hover:bg-amber-500/80"
+                      >
+                        <LinkSlashIcon className="h-4 w-4" />
+                      </OverlayActionButton>
                     )}
+                    <OverlayActionButton
+                      onClick={() => onDownload?.(doc.id)}
+                      title="Download"
+                      className="hover:bg-white/40"
+                    >
+                      <Download className="h-4 w-4" />
+                    </OverlayActionButton>
+                    <OverlayActionButton
+                      onClick={() => handleDeleteClick(doc)}
+                      title="Delete"
+                      className="hover:bg-red-500/80"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </OverlayActionButton>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </div>
+
+              {/* Footer Area */}
+              <div className="flex flex-col p-3">
+                {renamingId === doc.id ? (
+                  <input
+                    type="text"
+                    value={renameText}
+                    onChange={(e) => setRenameText(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={handleRenameKeyDown}
+                    className={`w-full rounded border px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 dark:bg-zinc-800 dark:text-zinc-100 ${theme.borderFocus}`}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <div className="flex items-center gap-1 min-w-0">
+                    <span
+                      className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100"
+                      title={doc.fileName}
+                    >
+                      {doc.fileName}
+                    </span>
+                    {onRenameConfirmed && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startRename(doc);
+                        }}
+                        className={`shrink-0 p-0.5 rounded text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.iconHover}`}
+                        title="Rename"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }}
+      />
 
       {/* Unlink Confirmation Modal */}
       {docToUnlink && (

@@ -28,6 +28,12 @@ export const ROUTES = {
     type === "movie"
       ? (`/media/movie/${tmdbId}` as const)
       : (`/media/tv/${tmdbId}` as const),
+  VAULT: "/vault",
+  VAULT_RECORDS: "/vault/records",
+  VAULT_PASSWORDS: "/vault/passwords",
+  VAULT_BANKS: "/vault/banks",
+  VAULT_BANK_DETAIL: (id: string) => `/vault/banks/${id}`,
+  VAULT_DOCUMENTS: "/vault/documents",
 } as const;
 
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];

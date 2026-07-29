@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Task, TaskMode } from "@/types/taskmanager";
 import type { Priority } from "@/types/common";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
@@ -49,15 +49,27 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
     triggerToast,
   } = useModalBaseState();
 
-  // ── Baseline: computed once, used by both reset AND dirty check ──
-  const baseline = useMemo(() => ({
+  // ── Baseline form values (state, synced from props) ──
+  const [baseline, setBaseline] = useState({
     name: task?.name ?? "",
     priority: task?.priority ?? "medium",
     dueDate: normalizeDateForInput(task?.due_date, defaultDate ?? ""),
     mode: task?.mode ?? "online",
     description: task?.description ?? "",
     isCompleted: task?.is_completed ?? false,
-  }), [task, defaultDate]);
+  });
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync baseline from props
+    setBaseline({
+      name: task?.name ?? "",
+      priority: task?.priority ?? "medium",
+      dueDate: normalizeDateForInput(task?.due_date, defaultDate ?? ""),
+      mode: task?.mode ?? "online",
+      description: task?.description ?? "",
+      isCompleted: task?.is_completed ?? false,
+    });
+  }, [task, defaultDate]);
 
   // Dirty check: compare current state against the same baseline object
   const isDirty =
@@ -78,17 +90,36 @@ export default function TaskModal({ task, defaultDate, onClose, onSave, onDelete
     setError(null);
 
     try {
+      const finalName = name.trim();
+      const finalDescription = description.trim();
+
       await onSave(
         {
-          name: name.trim(),
+          name: finalName,
           priority,
           due_date: dueDate || null,
           mode,
-          description: description.trim(),
+          description: finalDescription,
           is_completed: isCompleted,
         },
         task
       );
+
+      // Update local state to trimmed values so isDirty stays false
+      setName(finalName);
+      setDescription(finalDescription);
+
+      // Reset baseline to current form values so isDirty stays false even
+      // before the parent pushes fresh props down
+      setBaseline({
+        name: finalName,
+        priority,
+        dueDate,
+        mode,
+        description: finalDescription,
+        isCompleted,
+      });
+
       triggerToast("✓ Saved", "success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save task.");

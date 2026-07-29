@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
 import GlobalActionModal from "@/components/common/GlobalActionModal";
@@ -59,6 +59,14 @@ export default function StoreDocumentModal({
 
   // --- File state (single file only) ---
   const [storeFile, setStoreFile] = useState<File | null>(null);
+
+  // --- Baseline linked-id (state, synced from document prop) ---
+  const [initialLinkedId, setInitialLinkedId] = useState(doc?.linked_id ?? "");
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync baseline from props
+    setInitialLinkedId(doc?.linked_id ?? "");
+  }, [doc?.linked_id]);
 
   // --- Parent record dropdown state ---
   const [linkedParentId, setLinkedParentId] = useState("");
@@ -131,7 +139,7 @@ export default function StoreDocumentModal({
   // --- Dirty check ---
   const formDisabled = linkedParentId !== "";
   const isDirty = isEditing
-    ? storeFile !== null || linkedParentId !== (doc?.linked_id ?? "") || (!!extractNewRecordData && !!extractNewRecordData())
+    ? storeFile !== null || linkedParentId !== initialLinkedId || (!!extractNewRecordData && !!extractNewRecordData())
     : storeFile !== null || linkedParentId !== "" || (!!extractNewRecordData && !!extractNewRecordData());
 
   // --- File handlers ---
@@ -218,6 +226,12 @@ export default function StoreDocumentModal({
         newParentRecord: newParentData || undefined,
         existingDocument: doc,
       });
+
+      // Clear local file state and sync linked-id baseline so isDirty
+      // resets immediately — before the parent pushes fresh props down
+      setStoreFile(null);
+      setInitialLinkedId(linkedParentId);
+
       triggerToast("✓ Saved", "success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save document.");

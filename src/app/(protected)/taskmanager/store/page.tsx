@@ -250,7 +250,6 @@ export default function TaskManagerStorePage() {
         title="Note Store"
         description="View all uploaded files across all your notes."
         backHref={ROUTES.TASK_MANAGER}
-        backLabel="← Back to Task Manager"
         parentRecords={parentRecords}
         onDeleteParentRecord={handleDeleteParent}
         onUnlinkFromParent={handleUnlinkFromParent}

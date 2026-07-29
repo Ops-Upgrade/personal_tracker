@@ -394,7 +394,6 @@ export default function MedicalStorePage() {
         title="Medical Document Store"
         description="View all uploaded medical reports and documents."
         backHref={ROUTES.MEDICAL}
-        backLabel="← Back to Medical Records"
         parentRecords={parentRecords}
         onDeleteParentRecord={handleDeleteParent}
         onUnlinkFromParent={handleUnlinkFromParent}

@@ -374,7 +374,6 @@ export default function EducationStorePage() {
         title="Certificate Store"
         description="View all uploaded certificates across all your educations."
         backHref={ROUTES.EDUCATION}
-        backLabel="← Back to Education"
         parentRecords={parentRecords}
         onDeleteParentRecord={handleDeleteParent}
         onUnlinkFromParent={handleUnlinkFromParent}

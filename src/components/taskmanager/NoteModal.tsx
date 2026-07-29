@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import type { Note } from "@/types/taskmanager";
 import type { Document } from "@/types/document";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
@@ -80,6 +80,21 @@ export default function NoteModal({
     return docs.length > 0 ? docs[0].id : null;
   });
 
+  // Auto-select the first attached document when documents arrive (handles
+  // stale-documents-on-mount race — the parent may pass fresh docs after mount)
+  useEffect(() => {
+    if (note && !selectedDocId) {
+      const docs = documents.filter(
+        (d) => d.domain === "taskmanager" && d.linked_id === note.id
+      );
+      if (docs.length > 0) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelectedDocId(docs[0].id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note, documents]);
+
   // Moved up: needed by the hook below
   const linkedDocs = useMemo(
     () =>
@@ -115,14 +130,19 @@ export default function NoteModal({
     markedForRemoval: markedForDeletion,
   });
 
-  // ── Baseline form values ──
-  const formBaseline = useMemo(
-    () => ({
+  // ── Baseline form values (state, synced from props) ──
+  const [formBaseline, setFormBaseline] = useState({
+    name: note?.name ?? "",
+    content: note?.content ?? "",
+  });
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync baseline from props
+    setFormBaseline({
       name: note?.name ?? "",
       content: note?.content ?? "",
-    }),
-    [note]
-  );
+    });
+  }, [note]);
 
   // --- Dirty check ---
 
@@ -410,16 +430,19 @@ export default function NoteModal({
         ? { file: firstNewFile.file, label: firstNewFile.label }
         : undefined;
 
+      const finalName = name.trim();
+      const finalContent = content.trim();
+
       await onSave(
         {
-          name: name.trim(),
-          content: content.trim(),
+          name: finalName,
+          content: finalContent,
         },
         note,
         pendingDoc,
         docToLink ?? undefined,
         docsToUnlink.length > 0 ? docsToUnlink : undefined,
-        docsToDelete.length > 0 ? docsToDelete : undefined,
+        docsToDelete.length > 0 ? docsToDelete : undefined
       );
 
       // Synchronously clear local file state so isDirty resets immediately
@@ -428,6 +451,17 @@ export default function NoteModal({
       setMarkedForUnlink(new Set());
       setStagedLinkDocId(null);
       hookResetFileState();
+
+      // Update local state to trimmed values so isDirty stays false
+      setName(finalName);
+      setContent(finalContent);
+
+      // Reset baseline to current form values so isDirty stays false even
+      // before the parent pushes fresh props down
+      setFormBaseline({
+        name: finalName,
+        content: finalContent,
+      });
 
       triggerToast("✓ Saved", "success");
     } catch (err) {

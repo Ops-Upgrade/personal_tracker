@@ -19,7 +19,7 @@ interface InputFieldProps {
   onChange: (value: string) => void;
   disabled?: boolean;
   placeholder?: string;
-  type?: "text" | "date" | "number";
+  type?: "text" | "date" | "number" | "password";
   min?: string | number;
   step?: string;
 }

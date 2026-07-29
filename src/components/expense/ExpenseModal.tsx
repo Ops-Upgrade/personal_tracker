@@ -149,17 +149,25 @@ export default function ExpenseModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expense, documents]);
 
-  // ── Baseline form values ──
-  const formBaseline = useMemo(
-    () => ({
+  // ── Baseline form values (state, synced from props) ──
+  const [formBaseline, setFormBaseline] = useState({
+    item: expense?.item ?? "",
+    seller: expense?.seller ?? "",
+    cost: expense?.cost != null ? String(expense.cost) : "",
+    date: normalizeDateForInput(expense?.date, defaultDate ?? ""),
+    reason: expense?.reason ?? "",
+  });
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync baseline from props
+    setFormBaseline({
       item: expense?.item ?? "",
       seller: expense?.seller ?? "",
       cost: expense?.cost != null ? String(expense.cost) : "",
       date: normalizeDateForInput(expense?.date, defaultDate ?? ""),
       reason: expense?.reason ?? "",
-    }),
-    [expense, defaultDate]
-  );
+    });
+  }, [expense, defaultDate]);
 
   // --- Dirty check ---
 
@@ -391,13 +399,17 @@ export default function ExpenseModal({
         ? { file: firstNewFile.file, label: firstNewFile.label }
         : undefined;
 
+      const finalItem = item.trim();
+      const finalSeller = seller.trim();
+      const finalReason = reason.trim();
+
       await onSave(
         {
-          item: item.trim(),
-          seller: seller.trim(),
+          item: finalItem,
+          seller: finalSeller,
           cost: parsedCost,
           date,
-          reason: reason.trim(),
+          reason: finalReason,
         },
         expense,
         pendingDoc,
@@ -410,6 +422,21 @@ export default function ExpenseModal({
       setNewFiles([]);
       setMarkedForDeletion(new Set());
       hookResetFileState();
+
+      // Update local state to trimmed values so isDirty stays false
+      setItem(finalItem);
+      setSeller(finalSeller);
+      setReason(finalReason);
+
+      // Reset baseline to current form values so isDirty stays false even
+      // before the parent pushes fresh props down
+      setFormBaseline({
+        item: finalItem,
+        seller: finalSeller,
+        cost: String(parsedCost),
+        date,
+        reason: finalReason,
+      });
 
       triggerToast("✓ Saved", "success");
     } catch (err) {

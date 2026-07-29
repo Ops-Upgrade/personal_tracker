@@ -77,13 +77,16 @@ export default function MedicalModal({
   // --- File state (from shared hook) ---
   const [markedForRemoval, setMarkedForRemoval] = useState<Set<string>>(new Set());
   const [markedForUnlink, setMarkedForUnlink] = useState<Set<string>>(new Set());
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(() => {
+    if (!record) return null;
+    const existingDocs = attachedDocuments.filter((d) => d.linked_id === record.id);
+    return existingDocs.length > 0 ? existingDocs[0].id : null;
+  });
 
   const {
     newFiles,
     stagedLinkDocId,
     setStagedLinkDocId,
-    selectedFileId,
-    setSelectedFileId,
     linkSearchQuery,
     setLinkSearchQuery,
     linkDropdownOpen,
@@ -92,9 +95,6 @@ export default function MedicalModal({
     filteredLinkDocs,
     addNewFile,
     removeNewFile,
-    handleFileDownload,
-    handleFileRename,
-    handleLoadPreview,
     resetFileState,
   } = useModalDocumentState({
     attachedDocuments,
@@ -105,13 +105,23 @@ export default function MedicalModal({
 
   const isEditing = Boolean(record);
 
-  // ── Baseline: computed once, used by both reset AND dirty check ──
-  const baseline = useMemo(() => ({
+  // ── Baseline form values (state, synced from props) ──
+  const [baseline, setBaseline] = useState({
     name: record?.name ?? "",
     clinic: record?.clinic ?? "",
     date: normalizeDateForInput(record?.date, defaultDate ?? new Date().toISOString().split("T")[0]),
     diagnosisTimeline: record?.diagnosis_timeline ?? "",
-  }), [record, defaultDate]);
+  });
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync baseline from props
+    setBaseline({
+      name: record?.name ?? "",
+      clinic: record?.clinic ?? "",
+      date: normalizeDateForInput(record?.date, defaultDate ?? new Date().toISOString().split("T")[0]),
+      diagnosisTimeline: record?.diagnosis_timeline ?? "",
+    });
+  }, [record, defaultDate]);
 
   // Reset form fields to baseline whenever the record changes
   useEffect(() => {
@@ -136,10 +146,11 @@ export default function MedicalModal({
 
   // Auto-select the first attached document when opening an existing record
   useEffect(() => {
-    if (record && !selectedFileId) {
+    if (record && !selectedDocId) {
       const existingDocs = attachedDocuments.filter((d) => d.linked_id === record.id);
       if (existingDocs.length > 0) {
-        setSelectedFileId(existingDocs[0].id);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelectedDocId(existingDocs[0].id);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -166,14 +177,14 @@ export default function MedicalModal({
     // If it's the staged link, unstage it
     if (stagedLinkDocId === fileId) {
       setStagedLinkDocId(null);
-      if (selectedFileId === fileId) setSelectedFileId(null);
+      if (selectedDocId === fileId) setSelectedDocId(null);
       return;
     }
 
     const newFile = newFiles.find((nf) => nf.tempId === fileId);
     if (newFile) {
       removeNewFile(fileId);
-      if (selectedFileId === fileId) setSelectedFileId(null);
+      if (selectedDocId === fileId) setSelectedDocId(null);
       return;
     }
 
@@ -183,10 +194,14 @@ export default function MedicalModal({
       else next.add(fileId);
       return next;
     });
-  }, [newFiles, selectedFileId, stagedLinkDocId, removeNewFile, setStagedLinkDocId, setSelectedFileId]);
+  }, [newFiles, selectedDocId, stagedLinkDocId, removeNewFile, setStagedLinkDocId, setSelectedDocId]);
 
   const handleFileUnlinkWrapped = useCallback((fileId: string) => {
-    if (stagedLinkDocId === fileId) { setStagedLinkDocId(null); return; }
+    if (stagedLinkDocId === fileId) {
+      setStagedLinkDocId(null);
+      if (selectedDocId === fileId) setSelectedDocId(null);
+      return;
+    }
     if (newFiles.find((nf) => nf.tempId === fileId)) return;
 
     setMarkedForUnlink((prev) => {
@@ -196,7 +211,7 @@ export default function MedicalModal({
       return next;
     });
     setMarkedForRemoval((prev) => { const next = new Set(prev); next.delete(fileId); return next; });
-  }, [newFiles, stagedLinkDocId, setStagedLinkDocId]);
+  }, [newFiles, selectedDocId, stagedLinkDocId, setStagedLinkDocId, setSelectedDocId]);
 
   // Custom files array that keeps marked-for-removal/unlink docs visible with badges.
   // The shared hook's `files` filters them out, so we build our own matching the
@@ -331,10 +346,13 @@ export default function MedicalModal({
             }
           : undefined;
 
+      const finalName = name.trim();
+      const finalClinic = clinic.trim();
+
       await onSave(
         {
-          name: name.trim(),
-          clinic: clinic.trim(),
+          name: finalName,
+          clinic: finalClinic,
           date,
           diagnosis_timeline: diagnosisTimeline,
         },
@@ -348,6 +366,19 @@ export default function MedicalModal({
       setMarkedForUnlink(new Set());
       setStagedLinkDocId(null);
       resetFileState();
+
+      // Update local state to trimmed values so isDirty stays false
+      setName(finalName);
+      setClinic(finalClinic);
+
+      // Reset baseline to current form values so isDirty stays false even
+      // before the parent pushes fresh props down
+      setBaseline({
+        name: finalName,
+        clinic: finalClinic,
+        date,
+        diagnosisTimeline,
+      });
 
       triggerToast("✓ Saved", "success");
     } catch (err) {
@@ -448,7 +479,7 @@ export default function MedicalModal({
                       setStagedLinkDocId(doc.id);
                       setLinkSearchQuery("");
                       setLinkDropdownOpen(false);
-                      setSelectedFileId(null);
+                      setSelectedDocId(null);
                     }}
                     className="w-full px-3 py-1.5 text-left text-xs text-zinc-700 hover:bg-emerald-50 hover:text-emerald-700 dark:text-zinc-300 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400"
                   >
@@ -465,7 +496,7 @@ export default function MedicalModal({
         )}
       </div>
     );
-  }, [availableStandalone, stagedLinkDocId, linkSearchQuery, linkDropdownOpen, filteredLinkDocs, isSaving, setLinkDropdownOpen, setLinkSearchQuery, setSelectedFileId, setStagedLinkDocId]);
+  }, [availableStandalone, stagedLinkDocId, linkSearchQuery, linkDropdownOpen, filteredLinkDocs, isSaving, setLinkDropdownOpen, setLinkSearchQuery, setSelectedDocId, setStagedLinkDocId]);
 
   // --- Render ---
 
@@ -478,14 +509,11 @@ export default function MedicalModal({
         onClose={onClose}
         isDirty={isDirty}
         files={displayFiles}
-        selectedFileId={selectedFileId}
-        onSelectFile={(id) => setSelectedFileId(id)}
+        selectedFileId={selectedDocId}
+        onSelectFile={(id) => setSelectedDocId(id)}
         onFileUpload={handleFileUploadWrapped}
         onFileDelete={displayFiles.length > 0 ? handleFileDeleteWrapped : undefined}
         onFileUnlink={displayFiles.length > 0 ? handleFileUnlinkWrapped : undefined}
-        onFileDownload={displayFiles.length > 0 ? handleFileDownload : undefined}
-        onFileRename={displayFiles.length > 0 ? handleFileRename : undefined}
-        onLoadPreview={handleLoadPreview}
         onSave={handleSave}
         isSaving={isSaving}
         onDelete={isEditing ? handleDelete : undefined}

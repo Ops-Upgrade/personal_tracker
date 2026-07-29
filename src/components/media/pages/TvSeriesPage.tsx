@@ -24,6 +24,7 @@ import type {
 } from "@/types/media";
 import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import { useMediaTracking } from "@/hooks/useMediaTracking";
+import { useTmdbRetry } from "@/hooks/useTmdbRetry";
 import MediaHeroSection from "@/components/media/shared/MediaHeroSection";
 import StatusChipGroup from "@/components/media/shared/StatusChipGroup";
 import CollectionPicker from "@/components/media/shared/CollectionPicker";
@@ -162,22 +163,24 @@ export default function TvSeriesPage({
     });
   }, [load, tmdbId, hydrateFromExisting]);
 
+  // Season loading with retry
+  const {
+    execute: executeSeason,
+    loading: seasonLoading,
+    error: seasonError,
+    clearError: clearSeasonError,
+  } = useTmdbRetry();
+  const [seasonRetryCount, setSeasonRetryCount] = useState(0);
+
   // Load season data
   useEffect(() => {
-    let cancelled = false;
-    async function loadSeason() {
-      try {
-        const data = await getSeasonDetails(tmdbId, selectedSeason);
-        if (!cancelled) setSeasonData(data);
-      } catch {
-        /* non-fatal */
-      }
-    }
-    loadSeason();
-    return () => {
-      cancelled = true;
-    };
-  }, [tmdbId, selectedSeason]);
+    executeSeason(async (signal) => {
+      const data = await getSeasonDetails(tmdbId, selectedSeason, signal);
+      setSeasonData(data);
+    }).catch(() => {
+      /* executeSeason already surfaces the error via its own state */
+    });
+  }, [executeSeason, tmdbId, selectedSeason, seasonRetryCount]);
 
   // ── isDirty ──
   const isDirty = useMemo(() => {
@@ -509,7 +512,24 @@ export default function TvSeriesPage({
                 <ViewToggle value={viewMode} onChange={setViewMode} variant="media" />
               </div>
 
+              {seasonLoading && (
+                <p className="py-8 text-center text-sm text-zinc-500">
+                  Loading episodes…
+                </p>
+              )}
+
+              {seasonError && (
+                <ErrorBanner
+                  message={seasonError}
+                  onRetry={() => {
+                    clearSeasonError();
+                    setSeasonRetryCount((c) => c + 1);
+                  }}
+                />
+              )}
+
               {/* Episode cards */}
+              {!seasonLoading && !seasonError && (
               <div
                 className={
                   viewMode === "detail"
@@ -681,6 +701,7 @@ export default function TvSeriesPage({
                   );
                 })}
               </div>
+              )}
             </div>
           </div>
         )}

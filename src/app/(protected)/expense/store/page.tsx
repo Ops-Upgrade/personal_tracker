@@ -168,7 +168,6 @@ export default function ExpenseStorePage() {
         title="Receipt Store"
         description="View all uploaded receipts across all your expenses."
         backHref={ROUTES.EXPENSE}
-        backLabel="← Back to Expenses"
         parentRecords={parentRecords}
         onDeleteParentRecord={handleDeleteParent}
         onActionClick={handleActionClick}

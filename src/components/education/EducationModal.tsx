@@ -151,15 +151,27 @@ export default function EducationModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [education, documents]);
 
-  // ── Baseline form values ──
-  const formBaseline = useMemo(() => ({
+  // ── Baseline form values (state, synced from props) ──
+  const [formBaseline, setFormBaseline] = useState({
     name: education?.name ?? "",
     provider: education?.provider ?? "",
     priority: education?.priority ?? "medium",
     dueDate: initialDueDate,
     description: education?.description ?? "",
     isCompleted: education?.is_completed ?? false,
-  }), [education, initialDueDate]);
+  });
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- by-design: sync baseline from props
+    setFormBaseline({
+      name: education?.name ?? "",
+      provider: education?.provider ?? "",
+      priority: education?.priority ?? "medium",
+      dueDate: initialDueDate,
+      description: education?.description ?? "",
+      isCompleted: education?.is_completed ?? false,
+    });
+  }, [education, initialDueDate]);
 
   // --- Dirty check ---
 
@@ -433,6 +445,22 @@ export default function EducationModal({
       setMarkedForUnlink(new Set());
       setStagedLinkDocId(null);
       hookResetFileState();
+
+      // Update local state to trimmed values so isDirty stays false
+      setName(finalName);
+      setProvider(finalProvider);
+      setDescription(finalDescription);
+
+      // Reset baseline to current form values so isDirty stays false even
+      // before the parent pushes fresh props down
+      setFormBaseline({
+        name: finalName,
+        provider: finalProvider,
+        priority: finalPriority,
+        dueDate: finalDueDate,
+        description: finalDescription,
+        isCompleted: finalIsCompleted,
+      });
 
       triggerToast("✓ Saved", "success");
     } catch (err) {

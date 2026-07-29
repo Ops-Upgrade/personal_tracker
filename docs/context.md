@@ -48,6 +48,11 @@ src/
 │   │   ├── education/          # Education manager feature page
 │   │   ├── medical/            # Medical records feature page
 │   │   │   └── store/          # Medical Document Store sub-page
+│   │   ├── vault/              # Vault feature pages
+│   │   │   ├── records/        # Personal Records
+│   │   │   ├── passwords/      # Password Manager
+│   │   │   ├── banks/          # Bank Manager (Layer 1 + dynamic detail)
+│   │   │   └── documents/      # Document Vault store
 │   │   └── settings/
 │   │       └── change-password/ # Change password page
 │   ├── api/auth/callback/      # Supabase auth callback endpoint
@@ -83,6 +88,11 @@ src/
 │   │   ├── collections.ts      # encrypted CRUD for media_collections table
 │   │   ├── tmdb.ts             # client wrappers for TMDB proxy routes
 │   │   └── index.ts            # media sub-barrel
+│   ├── vault/
+│   │   ├── vaultPin.ts         # Server Actions: verify/set/reset vault PIN
+│   │   ├── vaultEntries.ts     # encrypted CRUD for vault_entries table
+│   │   ├── vaultDocumentStorage.ts  # encrypted file upload/download for vault docs
+│   │   └── index.ts            # vault sub-barrel
 │   ├── serverDate.ts           # getServerDateIST() — IST date from Supabase RPC
 │   └── index.ts                # Barrel export
 ├── components/                 # Reusable UI
@@ -112,6 +122,18 @@ src/
 │   ├── medical/                # Medical Records feature components
 │   │   ├── MedicalView.tsx     # Main controller for medical records
 │   │   └── MedicalModal.tsx    # Create/edit medical record + document attachment
+│   ├── vault/                  # Vault feature components
+│   │   ├── VaultProvider.tsx    # Context + state machine + grace timer
+│   │   ├── VaultLockScreen.tsx  # Numpad PIN entry
+│   │   ├── VaultPinSetup.tsx    # First-time PIN setup
+│   │   ├── VaultPinReset.tsx    # Forgot PIN → reset via password
+│   │   ├── VaultHeader.tsx      # Lock button + grace countdown
+│   │   ├── VaultHome.tsx        # 2×2 section tile grid
+│   │   ├── SecretField.tsx      # Masked value with reveal toggle + copy
+│   │   ├── records/             # Personal Records section
+│   │   ├── passwords/           # Password Manager section
+│   │   ├── banks/               # Bank Manager section
+│   │   └── documents/           # Document Vault section
 │   └── media/                  # Media Tracker feature components
 │       ├── MediaView.tsx       # Main orchestrator (tabs, data, CRUD)
 │       ├── CollectionFilterBar.tsx # Filter bar for DefaultView
@@ -244,13 +266,13 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-07-12 | Migrated file storage from Supabase Storage to Cloudflare R2. Added `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`, R2 client singleton (`src/lib/r2/`), presigned-URL API routes (`src/app/api/storage/`), rewrote `encryptedFileStorage.ts` to use R2 via API routes. Removed all `supabase.storage` SDK calls. Updated CSP, docs, and UI text. |
 | 2026-07-13 | Medical Records, Global Document Store & Rich Text Editor completed: Extracted Store out of Education into reusable `documents` table + global components. Tiptap Rich Text Editor integrated into Task, Expense, Education, and new Medical domains. Built `/medical` feature route with `MedicalModal` and `MedicalView`. |
 | 2026-07-15 | Media Tracker feature completed: `/media` route, `media` + `media_collections` tables (HLD documented in schema.md), 4 TMDB proxy routes (`/api/tmdb/*`), encrypted CRUD API layer (`src/api/media/`), 12 UI components (MediaView orchestrator, DefaultView with Watching/Unwatched/Watched lanes, CollectionView, DiscoverView with TMDB search, MoviePage, TvSeriesPage with episode matrix, EpisodePage, CollectionDetailPage, MediaCard with inline status/rating, CollectionModal with color picker, CollectionFilterBar, TmdbAttribution), dashboard tile integration (violet), `next.config.ts` TMDB image domain + CSP update, StarRating common component. |
+| 2026-07-24 | Vault feature completed: `/vault` route with PIN-protected access, server-side Argon2id PIN hashing with brute-force protection (10 attempts / 10-min sliding window, permanent DB-persisted lockout), 4 sub-sections (Personal Records, Password Manager, Bank Manager, Document Vault), `vault_entries` encrypted table + RLS, vault storage bucket folder, 2×2 gray-themed dashboard tile replacing Analytics placeholder, 30-second navigation-away grace period. |
 
 ---
 
 ## What's Not Built Yet
 
 - Cross-subdomain deployment (config-only change when ready)
-- Analytics page
 - Phase 10: manual testing of crypto flows
 
 ---

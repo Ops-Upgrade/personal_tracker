@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pencil, Trash2, Link } from "lucide-react";
 import BackButton from "@/components/common/BackButton";
 import ErrorBanner from "@/components/common/ErrorBanner";
+import BulkActionBar from "@/components/common/BulkActionBar";
+import { useSelection } from "@/hooks/useSelection";
 import { getSession } from "@/api/auth";
 import {
   fetchDocuments,
@@ -51,6 +53,12 @@ const DOMAIN_THEMES = {
     lightBg:
       "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50",
     inputFocus: "focus:border-emerald-500 focus:ring-emerald-500",
+  },
+  vault: {
+    primaryBtn: "bg-zinc-900 text-white hover:bg-black focus-visible:outline-zinc-900 dark:bg-zinc-100 dark:text-black dark:hover:bg-white dark:focus-visible:outline-zinc-100",
+    lightBg:
+      "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800",
+    inputFocus: "focus:border-zinc-900 focus:ring-zinc-900 dark:focus:border-zinc-100 dark:focus:ring-zinc-100",
   },
 } as const;
 
@@ -143,7 +151,7 @@ export default function GlobalStoreView({
   const isAddingDocument = modals.add;
 
   // --- Bulk selection state ---
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const { selectedIds, toggleSelection, selectAll, clearSelection } = useSelection();
   const [showBulkRename, setShowBulkRename] = useState(false);
   const [bulkRenameBase, setBulkRenameBase] = useState("");
   const [showBulkDelete, setShowBulkDelete] = useState(false);
@@ -407,7 +415,7 @@ export default function GlobalStoreView({
       });
       await Promise.all(updates);
       await loadData();
-      setSelectedIds(new Set());
+      clearSelection();
     } catch (err) {
       alert("Failed to bulk rename: " + (err instanceof Error ? err.message : "Unknown error"));
     } finally {
@@ -433,7 +441,7 @@ export default function GlobalStoreView({
         await deleteDocument(d.id);
       }
       await loadData();
-      setSelectedIds(new Set());
+      clearSelection();
     } catch (err) {
       alert("Failed to bulk delete: " + (err instanceof Error ? err.message : "Unknown error"));
     } finally {
@@ -452,7 +460,7 @@ export default function GlobalStoreView({
           parentId,
         );
         await loadData();
-        setSelectedIds(new Set());
+        clearSelection();
         setShowBulkLink(false);
       } catch (err) {
         alert("Failed to bulk link: " + (err instanceof Error ? err.message : "Unknown error"));
@@ -471,7 +479,7 @@ export default function GlobalStoreView({
       );
       await Promise.all(updates);
       await loadData();
-      setSelectedIds(new Set());
+      clearSelection();
       setShowBulkLink(false);
     } catch (err) {
       alert("Failed to bulk link: " + (err instanceof Error ? err.message : "Unknown error"));
@@ -545,23 +553,16 @@ export default function GlobalStoreView({
           onRenameConfirmed={handleRenameConfirmed}
           selectionEnabled
           selectedIds={selectedIds}
-          onSelectionChange={(id, checked) => {
-            setSelectedIds((prev) => {
-              const next = new Set(prev);
-              if (checked) next.add(id);
-              else next.delete(id);
-              return next;
-            });
-          }}
+          onSelectionChange={toggleSelection}
           onSelectAll={(checked) => {
-            if (checked) setSelectedIds(new Set(domainDocuments.map((d) => d.id)));
-            else setSelectedIds(new Set());
+            if (checked) selectAll(domainDocuments.map((d) => d.id));
+            else clearSelection();
           }}
           bulkActions={
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-                {selectedIds.size} selected
-              </span>
+            <BulkActionBar
+              selectedCount={selectedIds.size}
+              onClear={clearSelection}
+            >
               <button
                 onClick={() => { setBulkRenameBase(""); setShowBulkRename(true); }}
                 className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors"
@@ -581,13 +582,7 @@ export default function GlobalStoreView({
               >
                 <Link className="h-4 w-4" /> Link
               </button>
-              <button
-                onClick={() => setSelectedIds(new Set())}
-                className="ml-1 text-sm text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
+            </BulkActionBar>
           }
         />
       </BoxContainer>
