@@ -13,12 +13,16 @@ import { ROUTES } from "@/routes/paths";
 import { useNoteActions } from "@/hooks/useNoteActions";
 import type { Note } from "@/types/taskmanager";
 import type { Document } from "@/types/document";
-import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
+import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
+import type { ColumnDef } from "@/components/common/GenericViewPage";
+import { PaperClipIcon } from "@/components/common/Icons";
+import { useLocalStorage } from "@/lib/useLocalStorage";
 import {
   getNoteTitle,
   getUnifiedNotes,
+  type UnifiedNoteRecord,
 } from "@/components/taskmanager/helpers";
 import { trunc } from "@/lib/viewHelpers";
 import { formatShortDate } from "@/lib/format";
@@ -26,14 +30,6 @@ import NoteModal from "@/components/taskmanager/NoteModal";
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, "").trim();
-}
-
-function PaperClipIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-5.7-1.477-1.477" />
-    </svg>
-  );
 }
 
 export default function NotesPage() {
@@ -58,6 +54,8 @@ export default function NotesPage() {
     [notes, documents],
   );
 
+  const [activeView, setActiveView] = useLocalStorage<string>("notesView", "all");
+
   const [noteModalTarget, setNoteModalTarget] = useState<Note | null>(null);
 
   const closeNoteModal = () => {
@@ -77,6 +75,78 @@ export default function NotesPage() {
     router.push(`${ROUTES.TASK_MANAGER_STORE}#edit-document-${doc.id}`);
   };
 
+  // ── Column definitions ──
+
+  const noteColumns: ColumnDef<UnifiedNoteRecord>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Name",
+        colSpan: 3,
+        render: (item) =>
+          item.type === "note" ? (
+            <div className="truncate font-medium">{getNoteTitle(item.data)}</div>
+          ) : (
+            <div className="text-zinc-400 dark:text-zinc-500">—</div>
+          ),
+      },
+      {
+        key: "note",
+        header: "Note",
+        colSpan: 5,
+        render: (item) =>
+          item.type === "note" ? (
+            <div className="truncate text-zinc-500 dark:text-zinc-400">
+              {(() => {
+                const stripped = stripHtml(item.data.content || "");
+                return stripped ? trunc(stripped, 60) : "—";
+              })()}
+            </div>
+          ) : (
+            <div className="text-zinc-400 dark:text-zinc-500">—</div>
+          ),
+      },
+      {
+        key: "date",
+        header: "Date Added",
+        colSpan: 2,
+        render: (item) => (
+          <div className="text-zinc-500 dark:text-zinc-400">
+            {formatShortDate(item.dateStr)}
+          </div>
+        ),
+      },
+      {
+        key: "files",
+        header: "Files",
+        colSpan: 2,
+        render: (item) =>
+          item.type === "note" ? (
+            item.attachedDocs.length > 0 ? (
+              <span
+                className="inline-flex items-center gap-1 text-sky-500"
+                title={`${item.attachedDocs.length} document(s) attached`}
+              >
+                <PaperClipIcon className="h-4 w-4" />
+                <span className="text-zinc-500 dark:text-zinc-400">
+                  ({item.attachedDocs.length})
+                </span>
+              </span>
+            ) : (
+              <span className="text-zinc-400">—</span>
+            )
+          ) : (
+            <div className="truncate text-zinc-500 dark:text-zinc-400">
+              {item.data.label || "Unnamed"}
+            </div>
+          ),
+      },
+    ],
+    [],
+  );
+
+  // ── Render ──
+
   return (
     <PageShell
       backHref={ROUTES.TASK_MANAGER}
@@ -88,76 +158,22 @@ export default function NotesPage() {
       {isLoading && <LoadingSpinner />}
 
       {!isLoading && (
-        <BoxContainer>
-          <div className={`${SCROLLABLE_CLASSES} space-y-1 rounded-lg border border-zinc-200 p-2 dark:border-zinc-800`}>
-            {/* Column headers */}
-            <div className="grid grid-cols-12 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-              <div className="col-span-3">Name</div>
-              <div className="col-span-5">Note</div>
-              <div className="col-span-2">Date Added</div>
-              <div className="col-span-2">Files</div>
-            </div>
-
-            {unifiedNotes.length === 0 && (
-              <div className="px-2 py-4 text-sm text-zinc-500 dark:text-zinc-400">
-                None
-              </div>
-            )}
-
-            {unifiedNotes.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => {
-                  if (item.type === "note") {
-                    setNoteModalTarget(item.data);
-                  } else {
-                    handleSelectDocument(item.data);
-                  }
-                }}
-                className="grid grid-cols-12 items-center gap-2 w-full rounded-md border border-zinc-200 px-2 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
-              >
-                {item.type === "note" ? (
-                  <>
-                    <div className="col-span-3 truncate font-medium">
-                      {getNoteTitle(item.data)}
-                    </div>
-                    <div className="col-span-5 truncate text-zinc-500 dark:text-zinc-400">
-                      {(() => {
-                        const stripped = stripHtml(item.data.content || "");
-                        return stripped ? trunc(stripped, 60) : "—";
-                      })()}
-                    </div>
-                    <div className="col-span-2 text-zinc-500 dark:text-zinc-400">
-                      {formatShortDate(item.data.created_at)}
-                    </div>
-                    <div className="col-span-2">
-                      {item.attachedDocs.length > 0 ? (
-                        <span className="inline-flex items-center gap-1 text-sky-500" title={`${item.attachedDocs.length} document(s) attached`}>
-                          <PaperClipIcon className="h-4 w-4" />
-                          <span className="text-zinc-500 dark:text-zinc-400">({item.attachedDocs.length})</span>
-                        </span>
-                      ) : (
-                        <span className="text-zinc-400">—</span>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="col-span-3 text-zinc-400 dark:text-zinc-500">—</div>
-                    <div className="col-span-5 text-zinc-400 dark:text-zinc-500">—</div>
-                    <div className="col-span-2 text-zinc-500 dark:text-zinc-400">
-                      {formatShortDate(item.data.created_at)}
-                    </div>
-                    <div className="col-span-2 truncate text-zinc-500 dark:text-zinc-400">
-                      {item.data.label || "Unnamed"}
-                    </div>
-                  </>
-                )}
-              </button>
-            ))}
-          </div>
-        </BoxContainer>
+        <GenericViewPage
+          items={unifiedNotes}
+          columns={noteColumns}
+          getItemKey={(item) => item.id}
+          views={STANDARD_VIEWS.ALL_ONLY}
+          activeView={activeView}
+          onViewChange={setActiveView}
+          emptyMessage="None"
+          onRowClick={(item) => {
+            if (item.type === "note") {
+              setNoteModalTarget(item.data);
+            } else {
+              handleSelectDocument(item.data);
+            }
+          }}
+        />
       )}
 
       {noteModalTarget && userId && (

@@ -5,18 +5,14 @@ import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { deleteTask, fetchTasks, updateTask } from "@/api/taskmanager";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { ROUTES } from "@/routes/paths";
-import type { Task, TaskView } from "@/types/taskmanager";
+import type { Task } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/common";
-import type { ViewToggleOption } from "@/components/common/ViewToggle";
-import ViewToggle from "@/components/common/ViewToggle";
-import YearDropdown from "@/components/common/YearDropdown";
-import SortableHeader from "@/components/common/SortableHeader";
 import type { SortState } from "@/components/common/SortableHeader";
-import MonthTile from "@/components/common/MonthTile";
-import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import PriorityBadge from "@/components/common/PriorityBadge";
+import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
+import type { ColumnDef, MonthGroup, PriorityGroup } from "@/components/common/GenericViewPage";
 import {
   byPriority,
   completedByMonths,
@@ -26,13 +22,6 @@ import {
   trunc,
 } from "@/components/taskmanager/helpers";
 import TaskModal from "@/components/taskmanager/TaskModal";
-import { MONTH_NAMES } from "@/lib/constants";
-
-const VIEW_OPTIONS: readonly ViewToggleOption<TaskView>[] = [
-  { value: "completion", label: "Completion" },
-  { value: "months", label: "Months" },
-  { value: "priority", label: "Priority" },
-];
 
 export default function CompletedTasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -45,7 +34,7 @@ export default function CompletedTasksPage() {
   const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
     useAuthBootstrap({ loadData });
 
-  const [view, setView] = useLocalStorage<TaskView>("taskManagerCompletedView", "completion");
+  const [view, setView] = useLocalStorage<string>("taskManagerCompletedView", "all");
   const [taskModalTarget, setTaskModalTarget] = useState<Task | null>(null);
 
   // ── Year filtering ──
@@ -100,8 +89,16 @@ export default function CompletedTasksPage() {
 
   // ── Grouped views ──
 
-  const priorityGroups = byPriority(tasksForYear);
-  const monthGroups = completedByMonths(tasksForYear, selectedYear);
+  const priorityGroupsRecord = byPriority(tasksForYear);
+  const priorityGroups: PriorityGroup<Task>[] = useMemo(
+    () =>
+      PRIORITIES.map((p) => ({
+        priority: p,
+        items: [...(priorityGroupsRecord[p] ?? [])].sort(sortByCompletedDesc),
+      })),
+    [priorityGroupsRecord],
+  );
+  const monthGroups: MonthGroup<Task>[] = completedByMonths(tasksForYear, selectedYear);
 
   // ── Handlers ──
 
@@ -155,10 +152,81 @@ export default function CompletedTasksPage() {
     await refreshData(userId);
   };
 
-  // ── Column header styling ──
+  // ── Column definitions ──
 
-  const headerClasses =
-    "grid w-full grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 uppercase tracking-wider mt-2";
+  const renderTaskName = (task: Task) => (
+    <span className="font-semibold text-zinc-800 dark:text-zinc-100">
+      {trunc(task.name, 42)}
+    </span>
+  );
+
+  const renderTaskPriority = (task: Task) => (
+    <PriorityBadge priority={task.priority} />
+  );
+
+  const renderTaskMode = (task: Task) => (
+    <span className="text-xs capitalize text-zinc-500 dark:text-zinc-400">
+      {task.mode}
+    </span>
+  );
+
+  const renderTaskDate = (task: Task) => (
+    <span className="text-zinc-600 dark:text-zinc-300">
+      {formatShortDate(task.completed_at)}
+    </span>
+  );
+
+  const renderReopenAction = (task: Task) => (
+    <div className="flex justify-end items-center">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); handleReopen(task); }}
+        className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
+      >
+        Reopen
+      </button>
+    </div>
+  );
+
+  const completionColumns: ColumnDef<Task, "name" | "date">[] = useMemo(
+    () => [
+      { key: "name",     header: "Name",     colSpan: 4, sortColumn: "name", render: renderTaskName },
+      { key: "priority", header: "Priority", colSpan: 2, render: renderTaskPriority },
+      { key: "mode",     header: "Mode",     colSpan: 2, render: renderTaskMode },
+      { key: "date",     header: "Date",     colSpan: 2, sortColumn: "date", render: renderTaskDate },
+      { key: "actions",  header: "Actions",  colSpan: 2, render: renderReopenAction },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const priorityViewColumns: ColumnDef<Task>[] = useMemo(
+    () => [
+      { key: "name",    header: "Name",    colSpan: 4, render: renderTaskName },
+      { key: "mode",    header: "Mode",    colSpan: 3, render: renderTaskMode },
+      { key: "date",    header: "Date",    colSpan: 3, render: renderTaskDate },
+      { key: "actions", header: "Actions", colSpan: 2, render: renderReopenAction },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const monthsViewColumns: ColumnDef<Task>[] = useMemo(
+    () => [
+      { key: "name",     header: "Name",     colSpan: 4, render: renderTaskName },
+      { key: "priority", header: "Priority", colSpan: 2, render: renderTaskPriority },
+      { key: "mode",     header: "Mode",     colSpan: 2, render: renderTaskMode },
+      { key: "date",     header: "Date",     colSpan: 2, render: renderTaskDate },
+      { key: "actions",  header: "Actions",  colSpan: 2, render: renderReopenAction },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const taskRowClass = (task: Task) => {
+    const colors = getPriorityColor(task.priority);
+    return `border-l-[3px] ${colors.border}`;
+  };
 
   // ── Render ──
 
@@ -173,221 +241,31 @@ export default function CompletedTasksPage() {
       {isLoading && <LoadingSpinner />}
 
       {!isLoading && (
-        <BoxContainer>
-          <header className="mb-3 flex items-center justify-between gap-3">
-            <ViewToggle
-              value={view}
-              onChange={setView}
-              options={VIEW_OPTIONS}
-              ariaLabel="Completed tasks view toggle"
-            />
-            <YearDropdown
-              years={availableYears}
-              selectedYear={selectedYear}
-              onChange={setSelectedYear}
-            />
-          </header>
-
-          <div className={`${SCROLLABLE_CLASSES} space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800`}>
-            {completedTasks.length === 0 && (
-              <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
-            )}
-
-            {/* ── Completion View ── */}
-
-            {view === "completion" && (
-              <>
-                <div className={headerClasses}>
-                  <SortableHeader<"name" | "date">
-                    as="div"
-                    column="name"
-                    label="Name"
-                    sortState={sortState}
-                    onSort={setSortState}
-                    className="col-span-4"
-                  />
-                  <div className="col-span-2">Priority</div>
-                  <div className="col-span-2">Mode</div>
-                  <SortableHeader<"name" | "date">
-                    as="div"
-                    column="date"
-                    label="Date"
-                    sortState={sortState}
-                    onSort={setSortState}
-                    className="col-span-2"
-                  />
-                  <div className="col-span-2 text-right">Actions</div>
-                </div>
-
-                {completionTasks.length === 0 && (
-                  <div className="text-sm text-zinc-500 dark:text-zinc-400 px-2">
-                    No tasks completed in {selectedYear}.
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  {completionTasks.map((task) => {
-                    const colors = getPriorityColor(task.priority);
-                    return (
-                      <div
-                        key={task.id}
-                        className={`grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm dark:border-zinc-700 border-l-[3px] ${colors.border}`}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => handleEditTask(task)}
-                          className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
-                        >
-                          {trunc(task.name, 42)}
-                        </button>
-                        <div className="col-span-2 flex items-center">
-                          <PriorityBadge priority={task.priority} />
-                        </div>
-                        <span className="col-span-2 text-xs capitalize text-zinc-500 dark:text-zinc-400 flex items-center">
-                          {task.mode}
-                        </span>
-                        <span className="col-span-2 text-zinc-600 dark:text-zinc-300 flex items-center">
-                          {formatShortDate(task.completed_at)}
-                        </span>
-                        <div className="col-span-2 flex justify-end items-center">
-                          <button
-                            type="button"
-                            onClick={() => handleReopen(task)}
-                            className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
-                          >
-                            Reopen
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-
-            {/* ── Priority View ── */}
-
-            {view === "priority" &&
-              PRIORITIES.map((priority) => {
-                const group = [...(priorityGroups[priority] ?? [])].sort(sortByCompletedDesc);
-                if (group.length === 0) return null;
-                const colors = getPriorityColor(priority);
-                return (
-                  <section
-                    key={priority}
-                    className={`rounded-lg border ${colors.border} ${colors.bg} p-2`}
-                  >
-                    <h3 className="mb-2">
-                      <PriorityBadge priority={priority} />
-                    </h3>
-
-                    <div className={headerClasses}>
-                      <div className="col-span-4">Name</div>
-                      <div className="col-span-3">Mode</div>
-                      <div className="col-span-3">Date</div>
-                      <div className="col-span-2 text-right">Actions</div>
-                    </div>
-
-                    <div className="space-y-2">
-                      {group.map((task) => (
-                        <div
-                          key={task.id}
-                          className={`grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm dark:border-zinc-700 border-l-[3px] ${colors.border}`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => handleEditTask(task)}
-                            className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
-                          >
-                            {trunc(task.name, 42)}
-                          </button>
-                          <span className="col-span-3 text-xs capitalize text-zinc-500 dark:text-zinc-400 flex items-center">
-                            {task.mode}
-                          </span>
-                          <span className="col-span-3 text-zinc-600 dark:text-zinc-300 flex items-center">
-                            {formatShortDate(task.completed_at)}
-                          </span>
-                          <div className="col-span-2 flex justify-end items-center">
-                            <button
-                              type="button"
-                              onClick={() => handleReopen(task)}
-                              className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
-                            >
-                              Reopen
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
-
-            {/* ── Months View ── */}
-
-            {view === "months" &&
-              monthGroups.map((group, index) => {
-                const isCurrentMonth =
-                  selectedYear === nowYear && MONTH_NAMES[nowMonth] === group.label;
-                return (
-                  <MonthTile
-                    key={group.label}
-                    title={group.label}
-                    defaultExpanded={index === 0}
-                    accent
-                    className="text-sm"
-                    highlight={isCurrentMonth}
-                  >
-                    <div className={headerClasses}>
-                      <div className="col-span-4">Name</div>
-                      <div className="col-span-2">Priority</div>
-                      <div className="col-span-2">Mode</div>
-                      <div className="col-span-2">Date</div>
-                      <div className="col-span-2 text-right">Actions</div>
-                    </div>
-
-                    <div className="space-y-2">
-                      {group.items.map((task) => {
-                        const colors = getPriorityColor(task.priority);
-                        return (
-                          <div
-                            key={task.id}
-                            className={`grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm dark:border-zinc-700 border-l-[3px] ${colors.border}`}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => handleEditTask(task)}
-                              className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
-                            >
-                              {trunc(task.name, 42)}
-                            </button>
-                            <div className="col-span-2 flex items-center">
-                              <PriorityBadge priority={task.priority} />
-                            </div>
-                            <span className="col-span-2 text-xs capitalize text-zinc-500 dark:text-zinc-400 flex items-center">
-                              {task.mode}
-                            </span>
-                            <span className="col-span-2 text-zinc-600 dark:text-zinc-300 flex items-center">
-                              {formatShortDate(task.completed_at)}
-                            </span>
-                            <div className="col-span-2 flex justify-end items-center">
-                              <button
-                                type="button"
-                                onClick={() => handleReopen(task)}
-                                className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
-                              >
-                                Reopen
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </MonthTile>
-                );
-              })}
-          </div>
-        </BoxContainer>
+        <GenericViewPage
+          items={completionTasks}
+          columns={completionColumns}
+          getItemKey={(t) => t.id}
+          views={STANDARD_VIEWS.COMPLETION_MONTHS_PRIORITY}
+          activeView={view}
+          onViewChange={setView}
+          yearFilter={{
+            years: availableYears,
+            selectedYear,
+            onChange: setSelectedYear,
+          }}
+          sortState={sortState}
+          onSortChange={setSortState}
+          emptyMessage={`No tasks completed in ${selectedYear}.`}
+          onRowClick={handleEditTask}
+          rowClassName={taskRowClass}
+          monthGroups={monthGroups}
+          priorityGroups={priorityGroups}
+          nowYear={nowYear}
+          nowMonth={nowMonth}
+          completionColumns={completionColumns}
+          monthColumns={monthsViewColumns}
+          priorityColumns={priorityViewColumns}
+        />
       )}
 
       {taskModalTarget && (

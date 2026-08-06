@@ -38,6 +38,11 @@ export interface MonthTileProps {
   highlight?: boolean;
   /** Optional DOM id for the root element (e.g., for scroll-into-view) */
   id?: string;
+  /**
+   * When provided, clicking the header navigates via this callback
+   * instead of expanding/collapsing. The tile body is not rendered.
+   */
+  onClick?: () => void;
 }
 
 /**
@@ -61,6 +66,7 @@ export default function MonthTile({
   className = "",
   highlight = false,
   id,
+  onClick,
 }: MonthTileProps) {
   const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
   const isControlled = controlledExpanded !== undefined;
@@ -71,6 +77,10 @@ export default function MonthTile({
       : internalExpanded;
 
   function handleHeaderClick() {
+    if (onClick) {
+      onClick();
+      return;
+    }
     if (alwaysExpanded) return;
     const next = !isExpanded;
     if (!isControlled) {

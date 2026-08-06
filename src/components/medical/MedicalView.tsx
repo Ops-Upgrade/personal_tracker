@@ -38,7 +38,7 @@ import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContain
 import MedicalModal from "./MedicalModal";
 import MedicalTable from "./MedicalTable";
 import MedicalMonthRow from "./MedicalMonthRow";
-import MedicalYearRow from "./MedicalYearRow";
+import YearDropdown from "@/components/common/YearDropdown";
 
 type MedicalViewMode = "all" | "single" | "multi";
 
@@ -73,7 +73,7 @@ export default function MedicalView() {
 
   const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
 
-  const currentYear = istParsed?.year ?? new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [viewMode, setViewMode] = useLocalStorage<MedicalViewMode>("medicalViewMode", "all");
 
   // Query-param-driven modal state via shared hook
@@ -88,45 +88,38 @@ export default function MedicalView() {
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 100);
     return () => clearTimeout(timeout);
-  }, [isLoading, viewMode]);
+  }, [isLoading, selectedYear, viewMode]);
 
   // --- Derived data ---
 
-  // Records grouped by month for the current year
+  // All distinct years from records + current year, sorted descending
+  const availableYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const yearsFromData = new Set(
+      records.map((r) => new Date(r.date).getFullYear())
+    );
+    yearsFromData.add(currentYear);
+    return Array.from(yearsFromData).sort((a, b) => b - a);
+  }, [records]);
+
+  // Records grouped by month for the selected year
   const recordsByMonth = useMemo(() => {
     return MONTHS.map((monthName, monthIndex) => {
       const filtered = records.filter((r) => {
         const d = new Date(r.date);
-        return d.getFullYear() === currentYear && d.getMonth() === monthIndex;
+        return d.getFullYear() === selectedYear && d.getMonth() === monthIndex;
       });
       return { monthName, monthIndex, records: filtered };
     });
-  }, [records, currentYear]);
+  }, [records, selectedYear]);
 
-  // Past years: one group per year < currentYear, sorted descending
-  const pastYearGroups = useMemo(() => {
-    const pastYears = new Set<number>();
-    for (const r of records) {
-      const y = new Date(r.date).getFullYear();
-      if (y < currentYear) pastYears.add(y);
-    }
-    return Array.from(pastYears)
-      .sort((a, b) => b - a)
-      .map((year) => ({
-        year,
-        records: records.filter((r) => new Date(r.date).getFullYear() === year),
-      }));
-  }, [records, currentYear]);
+  // Records filtered to the selected year (for table view)
+  const recordsForSelectedYear = useMemo(() => {
+    return records.filter((r) => new Date(r.date).getFullYear() === selectedYear);
+  }, [records, selectedYear]);
 
-  // Combined groups: current year months + past years
-  const allGroups = useMemo(() => {
-    const months = recordsByMonth.map((m) => ({ ...m, type: "month" as const }));
-    const years = pastYearGroups.map((y) => ({ ...y, type: "year" as const }));
-    return [...months, ...years];
-  }, [recordsByMonth, pastYearGroups]);
-
-  // Total records across all time
-  const totalRecords = records.length;
+  // Total records for the selected year
+  const totalRecords = recordsForSelectedYear.length;
 
   // --- CRUD handlers ---
 
@@ -345,42 +338,40 @@ export default function MedicalView() {
                 hideContainerOnMobile={false}
               />
             </div>
-            <Button variant="secondary" size="md" onClick={() => openCreate()} disabled={isLoading}>
-              + Add
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="secondary" size="md" onClick={() => openCreate()} disabled={isLoading}>
+                + Add
+              </Button>
+              <YearDropdown
+                years={availableYears}
+                selectedYear={selectedYear}
+                onChange={setSelectedYear}
+              />
+            </div>
           </header>
           {viewMode === "all" ? (
             <div className={SCROLLABLE_CLASSES}>
-              <MedicalTable records={records} onSelectRecord={openEdit} />
+              <MedicalTable records={recordsForSelectedYear} onSelectRecord={openEdit} />
             </div>
           ) : (
             <div className={`${SCROLLABLE_CLASSES} flex flex-col md:flex-row gap-4 items-start`}>
               {/* Left Column (or Single Column) */}
               <div className="flex-1 flex flex-col gap-4 w-full">
-                {allGroups
+                {recordsByMonth
                   .filter((_, i) => viewMode === "multi" ? i % 2 === 0 : true)
-                  .map((group) => {
-                    if (group.type === "month") {
-                      const isCurrentMonth =
-                        istParsed !== null &&
-                        group.monthIndex === istParsed.month;
-                      return (
-                        <MedicalMonthRow
-                          key={`month-${group.monthName}`}
-                          monthName={group.monthName}
-                          monthIndex={group.monthIndex}
-                          year={currentYear}
-                          records={group.records}
-                          isCurrentMonth={isCurrentMonth}
-                          onSelectRecord={(record) => openEdit(record)}
-                        />
-                      );
-                    }
+                  .map(({ monthName, monthIndex, records: monthRecords }) => {
+                    const isCurrentMonth =
+                      istParsed !== null &&
+                      selectedYear === istParsed.year &&
+                      monthIndex === istParsed.month;
                     return (
-                      <MedicalYearRow
-                        key={`year-${group.year}`}
-                        year={group.year}
-                        records={group.records}
+                      <MedicalMonthRow
+                        key={`month-${monthName}`}
+                        monthName={monthName}
+                        monthIndex={monthIndex}
+                        year={selectedYear}
+                        records={monthRecords}
+                        isCurrentMonth={isCurrentMonth}
                         onSelectRecord={(record) => openEdit(record)}
                       />
                     );
@@ -390,32 +381,23 @@ export default function MedicalView() {
               {/* Right Column (only visible in multi view) */}
               {viewMode === "multi" && (
                 <div className="flex-1 flex-col gap-4 w-full hidden md:flex">
-                  {allGroups
+                  {recordsByMonth
                     .filter((_, i) => i % 2 !== 0)
-                    .map((group) => {
-                      if (group.type === "month") {
-                        const isCurrentMonth =
-                          istParsed !== null &&
-                          group.monthIndex === istParsed.month;
-                        return (
-                          <MedicalMonthRow
-                            key={`month-${group.monthName}`}
-                            monthName={group.monthName}
-                            monthIndex={group.monthIndex}
-                            year={currentYear}
-                            records={group.records}
-                            isCurrentMonth={isCurrentMonth}
-                            onSelectRecord={(record) => openEdit(record)}
-                            />
-                        );
-                      }
+                    .map(({ monthName, monthIndex, records: monthRecords }) => {
+                      const isCurrentMonth =
+                        istParsed !== null &&
+                        selectedYear === istParsed.year &&
+                        monthIndex === istParsed.month;
                       return (
-                        <MedicalYearRow
-                          key={`year-${group.year}`}
-                          year={group.year}
-                          records={group.records}
+                        <MedicalMonthRow
+                          key={`month-${monthName}`}
+                          monthName={monthName}
+                          monthIndex={monthIndex}
+                          year={selectedYear}
+                          records={monthRecords}
+                          isCurrentMonth={isCurrentMonth}
                           onSelectRecord={(record) => openEdit(record)}
-                        />
+                          />
                       );
                     })}
                 </div>

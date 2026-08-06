@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Expense } from "@/types/expense";
+import { ROUTES } from "@/routes/paths";
 import Button from "@/components/common/Button";
 import ExpenseTable from "./ExpenseTable";
 import MonthTile from "@/components/common/MonthTile";
@@ -17,26 +18,28 @@ interface MonthRowProps {
 
 /**
  * A single month row in the expense tracker.
- * Uses the reusable MonthTile component for consistent styling
- * with the Task Manager month sections.
+ * Uses the reusable MonthTile component for consistent styling.
  *
- * Clicking the tile header expands/collapses the inline preview.
- * When expanded, shows a preview table (up to 5 items) with a
- * "View All" toggle to expand the full list inline.
+ * Shows a preview of the latest 5 items inline. A "View All" button
+ * navigates to the dedicated /expense/all page pre-filtered to this
+ * month and year.
  */
 export default function MonthRow({
   monthName,
+  monthIndex,
+  year,
   expenses,
   isCurrentMonth,
   onSelectExpense,
 }: MonthRowProps) {
+  const router = useRouter();
   const total = expenses.reduce((sum, e) => sum + e.cost, 0);
-  const [showAll, setShowAll] = useState(false);
+  const count = expenses.length;
 
   const sorted = [...expenses].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
   );
-  const preview = showAll ? sorted : sorted.slice(0, 5);
+  const preview = sorted.slice(0, 5);
 
   return (
     <MonthTile
@@ -44,25 +47,29 @@ export default function MonthRow({
       title={monthName}
       subtitle={
         <>
-          Total Expense: ₹ {total.toLocaleString("en-IN")}
+          Total Expense: ₹ {total.toLocaleString("en-IN")} · {count} item{count !== 1 ? "s" : ""}
         </>
       }
       accent={total > 0}
       defaultExpanded={isCurrentMonth}
       highlight={isCurrentMonth}
       footerActions={
-        sorted.length > 5 ? (
+        expenses.length > 5 ? (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setShowAll((prev) => !prev)}
+            onClick={() =>
+              router.push(`${ROUTES.EXPENSE_ALL}?year=${year}&month=${monthIndex}`)
+            }
           >
-            {showAll ? "View Less" : `View All (${sorted.length})`}
+            View All {monthName} ({expenses.length})
           </Button>
         ) : undefined
       }
     >
-      <ExpenseTable expenses={preview} onSelectExpense={onSelectExpense} disableSorting />
+      {preview.length > 0 && (
+        <ExpenseTable expenses={preview} onSelectExpense={onSelectExpense} disableSorting />
+      )}
     </MonthTile>
   );
 }

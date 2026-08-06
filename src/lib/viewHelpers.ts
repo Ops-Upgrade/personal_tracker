@@ -20,6 +20,11 @@ interface HasPriority {
   priority: string;
 }
 
+/** Minimum shape for date-based month grouping */
+interface HasDate {
+  date: string;
+}
+
 /** Minimum shape for media status grouping */
 interface HasStatus {
   status: string;
@@ -244,6 +249,45 @@ export function groupByStatus<T extends HasStatus>(
         (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99)
     );
 }
+// ---- Month grouping (by date field) ----
+
+/**
+ * Group items by their `date` field into month-year buckets.
+ * For expense and medical records that use a plain `date` field
+ * rather than `completed_at` or `due_date`.
+ *
+ * Returns groups sorted by most recent first.
+ */
+export function byMonth<T extends HasDate>(
+  items: T[],
+  selectedYear: number,
+): Array<{ label: string; items: T[]; sortKey: number }> {
+  const monthMap = new Map<number, { items: T[]; sortKey: number }>();
+
+  for (const item of items) {
+    const d = new Date(item.date + "T00:00:00");
+    const monthIndex = d.getMonth();
+    const existing = monthMap.get(monthIndex);
+
+    if (!existing) {
+      monthMap.set(monthIndex, { items: [item], sortKey: monthIndex });
+    } else {
+      existing.items.push(item);
+      monthMap.set(monthIndex, existing);
+    }
+  }
+
+  return Array.from(monthMap.entries())
+    .map(([monthIndex, value]) => ({
+      label: MONTH_YEAR_FORMATTER.format(new Date(selectedYear, monthIndex)),
+      items: value.items.sort(
+        (a, b) => new Date(b.date + "T00:00:00").getTime() - new Date(a.date + "T00:00:00").getTime(),
+      ),
+      sortKey: monthIndex,
+    }))
+    .sort((a, b) => b.sortKey - a.sortKey);
+}
+
 /**
  * Returns a unique file name by appending (1), (2), ... if the desired name
  * already exists in the provided set of taken names.
