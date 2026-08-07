@@ -212,7 +212,7 @@ The generic page knows nothing about expense dates or task priorities — domain
 
 ## Stage 2: GenericStorePage — Store Standardization
 
-> **Current focus.** 
+> **Complete.**
 
 **The problem:** Every domain store page (`taskmanager/store`, `expense/store`, `education/store`, `medical/store`) and `VaultDocumentsView` independently implements identical boilerplate: `getSession` auth init, two `useEffect` hooks for data loading, a `refreshAll` `useCallback`, a `refreshTrigger` `useState`, and `parentRecords` derivation. `GlobalStoreView` is only a display component — it has no data-fetching responsibility. This boilerplate is copy-pasted verbatim across 5 files.
 
@@ -384,18 +384,156 @@ The generic page knows nothing about expense dates or task priorities — domain
 
 ## Stage 3: GenericMediaPage — Media Detail Standardization
 
-> **Future.** Do not start until Stage 2 is reviewed and merged.
+> **Current focus.** Do not start until Stage 2 commit is verified.
 
-**The problem:** `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) share identical structure: `useMediaTracking`, `MediaHeroSection`, `StatusChipGroup`, `CollectionPicker`, `ReviewSection`, `StickyActionBar`, navigation guard, dirty state tracking, remove/untrack flow. The extra ~400 lines in TV is entirely the episode matrix (season selector, episode grid, `EpisodePage` sub-view).
+### What GenericMediaPage replaces
 
-**The fix:** A `GenericMediaPage` absorbs all shared structure. It accepts:
-- `mediaType: "movie" | "tv"`
-- `episodeMatrix?: ReactNode` — opt-in slot for TV episode tracking (only TV passes this)
-- `watchedOnField?: boolean` — opt-in for the Movie-specific "Watched On" date field
+Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independently implement the following identical structure:
+
+**Shared state (copy-pasted verbatim):**
+- `useMediaTracking({ tmdbId, userId, type, onRefresh })` — data fetch hook
+- `status`, `rating`, `reviewNotes`, `collectionIds` — form state
+- `originalMedia` snapshot for `isDirty` diffing
+- `showRemove` + `collectionToRemove` — untrack/collection-remove flow
+- `handleRemove` — calls `removeMedia`, resets all state
+- `isTracked`, `title`, `year` — derived display values
+- `useEffect` load + hydrate pattern
+- `isDirty` `useMemo` — deep comparison vs `originalMedia`
+- `doCancel` — resets form state to original
+- `useNavigationGuard` — dirty-state nav interception
+- `handleStatusClick` / `handleRatingChange` / `handleToggleCollection` / `handleRemoveCollectionClick` / `handleConfirmRemoveCollection`
+- `handleSave` — builds patch + extraCreateFields, calls `save`, updates `originalMedia`
+
+**Shared JSX structure (copy-pasted):**
+- Loading guard → spinner
+- Error guard → `BackButton + ErrorBanner`
+- `BackButton`
+- `Toast`
+- `MediaHeroSection` (posterPath, typeLabel, title, year, genres, overview, contentRating, watchProviders, fallbackIcon)
+- "Untrack this [X]" button (only shown when `isTracked`)
+- Tracking form card: `StatusChipGroup`, `CollectionPicker`, `ReviewSection`
+- `StickyActionBar` (onSave, onCancel, saving, isDirty)
+- `UntrackConfirmation` dialog
+- "Unsaved Changes" `ConfirmDialog`
+- "Remove from Collection" `ConfirmDialog`
+
+**TV-only state and JSX (stays in TV wrapper):**
+- `searchParams` tab switcher (`tracking` vs `episodes`)
+- `selectedSeason`, `seasonData`, `viewMode`, `episodeState`
+- Episode override conflict dialog (`overrideConfig`)
+- `useTmdbRetry` for season loading
+- `hydrateFromExisting` — also hydrates `episodeState`
+- `isDirty` includes episode state comparison
+- `doCancel` also resets `episodeState`
+- `handleParentStatusClick` — conflict detection before setting status
+- `handleConfirmOverride` / `handleCancelOverride`
+- `handleSave` patch also includes `episodes`
+- Tab bar JSX (`tracking` | `episodes` tabs)
+- Full episode matrix JSX (season selector sidebar + episode grid)
+- Episode override `ConfirmDialog`
+
+**Movie-only state and JSX (stays in Movie wrapper):**
+- `watchedOn` form field + `setWatchedOn`
+- `handleStatusClick` sets `watchedOn` to today when status → "watched"
+- `handleRatingChange` sets `watchedOn` to today when rating > 0
+- `handleSave` patch includes `watched_on`
+- `StatusChipGroup` receives `showWatchedOn={true}` + `watchedOn` + `onWatchedOnChange`
+
+### Opt-in features (centrally defined, domain chooses)
+
+| Opt-in | Prop | Used By |
+|---|---|---|
+| Media type | `mediaType: "movie" \| "tv"` | Both (required) |
+| Watched-on date field | `showWatchedOn?: boolean` | Movie only |
+| Episode matrix slot | `episodeSlot?: ReactNode` | TV only |
+| Episode dirty tracking | `extraDirty?: boolean` | TV only (caller computes, passes result) |
+| Episode cancel callback | `onExtraCancel?: () => void` | TV only (caller resets episode state) |
+| Episode save data | `extraPatchFields?: Partial<MediaPlaintext>` | TV only (caller passes `{ episodes }`) |
+| Episode create fields | `extraCreateFields?: Partial<MediaPlaintext>` | TV only (caller passes `{ episodes, runtime }`) |
+| Fallback icon | `fallbackIcon: ReactNode` | Both |
+| Type label | `typeLabel: string` | Both |
+
+### Phase 3A — Core GenericMediaPage Component ⬜
+
+**Status: Not started.**
+
+**What changes:**
+- Create `src/components/media/pages/GenericMediaPage.tsx`.
+  - Absorbs: all shared state, all shared handlers, all shared JSX listed above.
+  - Accepts `mediaType`, `tmdbId`, `userId`, `userName`, `userAvatarUrl`, `collections`, `onRefresh`.
+  - Accepts `showWatchedOn?: boolean` — if true, passes `watchedOn` state to `StatusChipGroup`.
+  - Accepts `episodeSlot?: ReactNode` — rendered as a second tab "Episodes" only when provided. The tab bar itself is internal to `GenericMediaPage` (rendered only when `episodeSlot` is provided).
+  - Accepts `extraDirty?: boolean` — ORed with internal `isDirty`.
+  - Accepts `onExtraCancel?: () => void` — called inside `doCancel` after resetting form state.
+  - Accepts `extraPatchFields?: Partial<MediaPlaintext>` — merged into the save patch.
+  - Accepts `extraCreateFields?: Partial<MediaPlaintext>` — merged into the save create fields.
 
 **What gets deleted:**
-- `MoviePage.tsx` — replaced by a thin wrapper passing `mediaType="movie"`
-- `TvSeriesPage.tsx` — replaced by a thin wrapper passing `mediaType="tv"` + episode matrix slot
+- `src/components/media/pages/MoviePage.tsx` — fully absorbed.
+- `src/components/media/pages/TvSeriesPage.tsx` — all shared logic absorbed; TV-only state remains in a thin wrapper.
+
+**New thin wrappers:**
+- `src/components/media/pages/MoviePageWrapper.tsx` — calls `<GenericMediaPage mediaType="movie" showWatchedOn />`. Has zero state, zero handlers.
+- `src/components/media/pages/TvSeriesPageWrapper.tsx` — owns TV-only state (`episodeState`, `selectedSeason`, `seasonData`, `viewMode`, `overrideConfig`), TV-only handlers (`handleParentStatusClick` with conflict logic, `handleConfirmOverride`, `hydrateFromExisting`), and passes `episodeSlot={<EpisodeMatrix .../>}`, `extraDirty`, `onExtraCancel`, `extraPatchFields`, `extraCreateFields` into `<GenericMediaPage mediaType="tv">`.
+
+**Route pages updated:**
+- `src/app/(protected)/media/movie/[tmdb_id]/page.tsx` — change import from `MoviePage` → `MoviePageWrapper`.
+- `src/app/(protected)/media/tv/[tmdb_id]/page.tsx` — change import from `TvSeriesPage` → `TvSeriesPageWrapper`.
+
+#### Step-by-Step Plan (Phase 3A)
+
+```
+1. Create src/components/media/pages/GenericMediaPage.tsx.
+   - Move all shared state from MoviePage into this component.
+   - Add showWatchedOn prop: if true, pass watchedOn + onWatchedOnChange to StatusChipGroup.
+   - Add episodeSlot?: ReactNode prop: if provided, render tab bar (tracking | episodes)
+     and render episodeSlot inside the episodes tab pane.
+   - Add extraDirty?: boolean prop: OR with internal isDirty in the useMemo.
+   - Add onExtraCancel?: () => void prop: call at the end of doCancel.
+   - Add extraPatchFields?: Partial<MediaPlaintext> prop: spread into patch in handleSave.
+   - Add extraCreateFields?: Partial<MediaPlaintext> prop: spread into extraCreateFields in handleSave.
+   - Keep fallbackIcon and typeLabel as required props (Film vs Tv icon, "Movie" vs "TV Series" string).
+
+2. Create src/components/media/pages/MoviePageWrapper.tsx.
+   - Zero state, zero handlers.
+   - Render <GenericMediaPage mediaType="movie" showWatchedOn fallbackIcon={<Film size={48}/>}
+     typeLabel="Movie" {...rest} />.
+
+3. Create src/components/media/pages/TvSeriesPageWrapper.tsx.
+   - Own: episodeState, selectedSeason, seasonData, viewMode, overrideConfig.
+   - Own: hydrateFromExisting (passed as onHydrate to GenericMediaPage if needed,
+     or called by GenericMediaPage via a ref callback).
+   - Own: handleParentStatusClick (with conflict detection).
+   - Own: handleConfirmOverride, handleCancelOverride.
+   - Compute: extraDirty = (JSON.stringify(episodeState) !== JSON.stringify(originalEpisodes)).
+   - Render: <GenericMediaPage mediaType="tv" episodeSlot={<EpisodeMatrix .../>}
+     extraDirty={extraDirty} onExtraCancel={() => resetEpisodeState()}
+     extraPatchFields={{ episodes: episodeState }}
+     extraCreateFields={{ episodes: episodeState, runtime: totalRuntime }}
+     fallbackIcon={<Tv size={48}/>} typeLabel="TV Series"
+     onStatusChange={handleParentStatusClick}
+     {...rest} />.
+   - Pass EpisodeMatrix (the full season selector + episode grid JSX extracted from TvSeriesPage)
+     as the episodeSlot.
+
+4. Update src/app/(protected)/media/movie/[tmdb_id]/page.tsx.
+   - Change import from MoviePage → MoviePageWrapper.
+
+5. Update src/app/(protected)/media/tv/[tmdb_id]/page.tsx.
+   - Change import from TvSeriesPage → TvSeriesPageWrapper.
+
+6. Delete src/components/media/pages/MoviePage.tsx.
+7. Delete src/components/media/pages/TvSeriesPage.tsx.
+```
+
+**Human Actions Required:**
+- None.
+
+**Out of Scope:**
+- `CollectionDetailPage.tsx`, `EpisodePage.tsx`, `NewCollectionPage.tsx` — not duplicated, not touched.
+- `MediaHeroSection`, `StatusChipGroup`, `CollectionPicker`, `ReviewSection`, `StickyActionBar`, `UntrackConfirmation` — these remain as sub-components used internally by `GenericMediaPage`.
+
+---
 
 ---
 
