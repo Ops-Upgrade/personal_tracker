@@ -19,72 +19,204 @@ They do not share a base; they share only the philosophy of opt-in composability
 
 ---
 
-## Stage 1: GenericViewPage — "View All" Standardization ✅
+## Stage 1: GenericViewPage — "View All" Standardization
 
 > **Complete.**
 
-### What was built
+### What GenericViewPage replaces
 
-- `src/components/common/GenericViewPage.tsx` — The core generic component. Manages view toggle, year/month filter dropdowns, and all three layout strategies (flat list, month-grouped tiles, priority-grouped sections) internally. Domains pass data and column definitions; the generic handles all rendering.
-- `STANDARD_VIEWS` exported constant — Pre-packaged view option arrays (`COMPLETION_MONTHS_PRIORITY`, `ALL_ONLY`, `ALL_MONTHS`) so domain pages never manually define their own view arrays.
-- `src/components/common/MonthDropdown.tsx` — New month dropdown component used by the Expense and Medical "View All" pages.
+Every "View All" page currently manually implements:
+- A `PageShell` (title, back button, description, error banner)
+- A `BoxContainer` with a scrollable inner border
+- A 12-column CSS grid header with `SortableHeader` per sortable column
+- View toggle state and the hardcoded JSX for each view layout
+- Year/month filter state and the corresponding dropdown UI
+- Empty state messages
 
-### Phases completed
+All of this is duplicated across completed tasks, notes, completed education, and will be duplicated again for expense/medical month views without this generic.
 
-| Phase | Description | Status |
-|---|---|---|
-| 1A | Core component + taskmanager/completed, taskmanager/notes, education/completed adopters | ✅ |
-| 1B | Standardize to `STANDARD_VIEWS`, rename internal view value from `"completion"` to `"all"` | ✅ |
-| 1C | New `/expense/all` and `/medical/all` routes. Restored 5-item preview + `footerActions` "View All" button in `MonthRow`/`MedicalMonthRow`. Deleted `FullMonthModal.tsx`. | ✅ |
-
-### What was deleted
-- `src/components/common/GenericDataList.tsx` — Replaced by `GenericViewPage.tsx`
-- `src/components/expense/FullMonthModal.tsx` — Dead file, superseded by `/expense/all` route
-- Hardcoded view-layout JSX (Priority sections, Month tile loops) from `taskmanager/completed/page.tsx`
-- Hardcoded local `VIEW_OPTIONS` arrays from all adopting page files
-- `showAll` inline expansion state from `MonthRow.tsx` and `MedicalMonthRow.tsx`
-
-### Opt-in features available in GenericViewPage
+### Opt-in features (centrally defined, domain chooses which to enable)
 
 | Opt-in | Prop | Used By |
 |---|---|---|
 | Year dropdown | `yearFilter` | Completed Tasks, Completed Education, Expense/Medical "All" |
-| Month dropdown | `monthFilter` | Expense "All", Medical "All" |
-| Flat / "All" view | `STANDARD_VIEWS.*` includes `{ value: "all" }` | All adopters |
-| Month-grouped view | `STANDARD_VIEWS.*` includes `{ value: "months" }` | Tasks, Education, Expense, Medical |
-| Priority-grouped view | `STANDARD_VIEWS.COMPLETION_MONTHS_PRIORITY` | Tasks, Education only |
+| Month dropdown | `monthFilter` | Expense "Month View All", Medical "Month View All" |
+| Completion / Date-Added view | `views={["completion"]}` | All domains (named differently per domain) |
+| Month-grouped view | `views={["months"]}` | Tasks, Education, Expense, Medical |
+| Priority-grouped view | `views={["priority"]}` | Tasks, Education only (Medical omits this) |
 | Sortable column headers | `sortColumn` on `ColumnDef` | Per column, per domain |
-| Row click → edit modal | `onRowClick` | All adopters |
+| Row click → edit modal | `onRowClick` | All domains |
 | Priority-colored row borders | `rowClassName` callback | Tasks only |
+
+### Column definitions (domain responsibility)
+
+Each domain defines its own `ColumnDef<T>[]` array specifying the columns specific to that data type.
+The generic page knows nothing about expense dates or task priorities — domains inject that via `render`.
+
+### Phase 1A — Core Component & Initial Adopters ✅
+
+**Status: Implemented.**
+
+**What was done:**
+- `src/components/common/GenericViewPage.tsx` — Created
+- `/taskmanager/completed/page.tsx` — Uses `GenericViewPage`
+- `/taskmanager/notes/page.tsx` — Uses `GenericViewPage`
+- `/education/completed/page.tsx` — Uses `GenericViewPage`
+
+**What got deleted:**
+- Hardcoded Priority-section JSX in `taskmanager/completed/page.tsx`
+- Hardcoded Month-tile JSX in `taskmanager/completed/page.tsx`
+- Local `VIEW_OPTIONS` constant in `taskmanager/completed/page.tsx`
+- `src/components/common/GenericDataList.tsx` — replaced by `GenericViewPage.tsx`
+
+#### Step-by-Step Plan (Phase 1A)
+
+```
+1. Create src/components/common/GenericViewPage.tsx, replacing GenericDataList.tsx.
+   - Accept `views` prop as a subset of ["completion", "months", "priority"].
+   - Internally manage view toggle state and render the correct layout strategy
+     based on active view: flat GenericDataList for completion, MonthTile-grouped
+     for months, Priority-section-grouped for priority.
+   - Accept `yearFilter` and `monthFilter` as optional prop objects
+     ({ selectedYear, availableYears, onChange }) — render YearDropdown /
+     MonthDropdown in the header bar only when provided.
+   - Retain the ColumnDef<T> API, getItemKey, onRowClick, rowClassName as-is.
+
+2. Refactor taskmanager/completed/page.tsx to use GenericViewPage.
+   - Remove hardcoded Priority and Months view JSX.
+   - Pass views={["completion", "months", "priority"]}.
+   - Pass yearFilter={{ selectedYear, availableYears, onChange: setSelectedYear }}.
+   - Remove local VIEW_OPTIONS constant.
+
+3. Refactor education/completed/page.tsx to use GenericViewPage.
+   - Add year-filtering logic (same pattern as taskmanager completed).
+   - Pass views={["completion", "months", "priority"]}.
+   - Pass yearFilter prop.
+
+4. Refactor taskmanager/notes/page.tsx to use GenericViewPage.
+   - Notes have no priority, so pass views={["completion", "months"]}.
+   - No year filter needed for notes (notes are not date-scoped by year).
+
+5. Delete src/components/common/GenericDataList.tsx.
+```
+
+**Human Actions Required:**
+- None.
+
+**Out of Scope:**
+- CRUD consolidation across domains (deferred to Stage 4).
+- Expense and Medical month views (Phase 1C).
+
+---
+
+### Phase 1B — Cleanups (View Options Standardization) ✅
+
+**Status: Implemented.**
+
+**Tasks:**
+1. **Centralize View Options:** Define standard view options (like `VIEW_ALL_MONTHS_PRIORITY`, `VIEW_ALL_MONTHS`, `VIEW_ALL_ONLY`) as exported constants in `GenericViewPage.tsx` so domains can import them instead of typing `{ value, label }` arrays repeatedly.
+2. **Rename "completion" value to "all":** The internal value for the flat list view should be `"all"` instead of `"completion"`. 
+   - `GenericViewPage.tsx` needs to check for `currentView === "all"`.
+   - The label should remain domain-specific where needed (e.g., "Completion" for tasks, "All" for notes).
+
+#### Step-by-Step Plan (Phase 1B)
+
+```
+1. In `src/components/common/GenericViewPage.tsx`:
+   - Export a `STANDARD_VIEWS` constant object with pre-built arrays:
+     - `COMPLETION_MONTHS_PRIORITY`: [{ value: "all", label: "Completion" }, { value: "months", label: "Months" }, { value: "priority", label: "Priority" }]
+     - `ALL_ONLY`: [{ value: "all", label: "All" }]
+   - Update `currentView === "completion"` fallback and render checks to `currentView === "all"`.
+2. In `src/app/(protected)/taskmanager/completed/page.tsx`:
+   - Delete local `VIEW_OPTIONS`.
+   - Import `STANDARD_VIEWS` and pass `views={STANDARD_VIEWS.COMPLETION_MONTHS_PRIORITY}`.
+   - Change `useLocalStorage` default from `"completion"` to `"all"`.
+3. In `src/app/(protected)/taskmanager/notes/page.tsx`:
+   - Delete local `VIEW_OPTIONS`.
+   - Import `STANDARD_VIEWS` and pass `views={STANDARD_VIEWS.ALL_ONLY}`.
+   - Change `useLocalStorage` default from `"completion"` to `"all"`.
+4. In `src/app/(protected)/education/completed/page.tsx`:
+   - Ensure it imports `STANDARD_VIEWS.COMPLETION_MONTHS_PRIORITY` and uses `"all"` as the default active view.
+```
+
+**Human Actions Required:**
+- None.
+
+**Out of Scope:**
+- Any functional changes to existing views.
+
+---
+
+### Phase 1C — Expense & Medical "View All" ✅
+
+**Status: Implemented.**
+
+**Two new routes, both using GenericViewPage.**
+
+**Expense `/expense/all`:**
+- Opt-in: `views={["completion", "months"]}` (expenses have no priority)
+- Opt-in: `yearFilter` + `monthFilter` (year + month dropdown in header)
+- Columns: Date, Description, Category, Amount, Receipt icon
+- Row click → open `ExpenseModal`
+- No priority view (expenses are not prioritized)
+
+**Medical `/medical/all`:**
+- Opt-in: `views={["completion", "months"]}` (no priority in medical)
+- Opt-in: `yearFilter` + `monthFilter`
+- Columns: Date, Description, Provider, Cost, Receipt icon
+- Row click → open `MedicalModal`
+
+**Changes to existing components:**
+- `MonthRow.tsx` — Replace `showAll` inline toggle with `router.push(ROUTES.EXPENSE_ALL + '?year=X&month=Y')`
+- `MedicalMonthRow.tsx` — Same, replace `showAll` toggle with route navigation
+
+**What got deleted:**
+- `showAll` state and inline expansion logic in `MonthRow.tsx`
+- `showAll` state and inline expansion logic in `MedicalMonthRow.tsx`
+- `src/components/expense/FullMonthModal.tsx` — pre-built but unused, superseded by the new route
+
+#### Step-by-Step Plan (Phase 1C)
+
+```
+1. Update Generic Components:
+   - Create src/components/common/MonthDropdown.tsx.
+   - In GenericViewPage.tsx, add ALL_MONTHS to STANDARD_VIEWS.
+   - In GenericViewPage.tsx, accept monthFilter prop and render MonthDropdown in the header.
+
+2. Add Routes:
+   - Add EXPENSE_ALL and MEDICAL_ALL to src/routes/paths.ts.
+
+3. Build Expense View All:
+   - Create src/app/(protected)/expense/all/page.tsx using GenericViewPage.
+   - Pass STANDARD_VIEWS.ALL_MONTHS.
+
+4. Build Medical View All:
+   - Create src/app/(protected)/medical/all/page.tsx using GenericViewPage.
+   - Pass STANDARD_VIEWS.ALL_MONTHS.
+
+5. Clean up Inline Rows:
+   - In MonthRow.tsx (Expense), remove inline expansion table. Change click to route navigation, but preserve 5-item preview.
+   - In MedicalMonthRow.tsx (Medical), remove inline expansion table. Change click to route navigation, but preserve 5-item preview.
+
+6. Delete Dead Code:
+   - Delete src/components/expense/FullMonthModal.tsx.
+```
+
+**Human Actions Required:**
+- None.
+
+**Out of Scope:**
+- Routing query-param synchronization with the parent domain view's selected year (deferred).
 
 ---
 
 ## Stage 2: GenericStorePage — Store Standardization
 
-> **Current focus.** Do not start until Stage 1 is reviewed and merged.
+> **Current focus.** 
 
-### What GenericStorePage replaces
+**The problem:** Every domain store page (`taskmanager/store`, `expense/store`, `education/store`, `medical/store`) and `VaultDocumentsView` independently implements identical boilerplate: `getSession` auth init, two `useEffect` hooks for data loading, a `refreshAll` `useCallback`, a `refreshTrigger` `useState`, and `parentRecords` derivation. `GlobalStoreView` is only a display component — it has no data-fetching responsibility. This boilerplate is copy-pasted verbatim across 5 files.
 
-Every domain store page (`taskmanager/store`, `expense/store`, `education/store`, `medical/store`) and `VaultDocumentsView` independently implements the same boilerplate:
-
-```
-getSession() → setUserId
-useEffect [userId] → fetchDomainData + fetchDocuments → setState
-refreshAll useCallback → re-fetch + setRefreshTrigger(prev + 1)
-parentRecords derivation (map domain rows to { id, name })
-linkedRecord state + linked modal open/close
-```
-
-This exact pattern is copy-pasted into each of the 5 files. `GlobalStoreView` only handles the display layer — it knows nothing about auth or data fetching.
-
-Additionally, the 3 Vault record sections (Banks, Passwords, Records) each build their own `useVaultSection` hook wrapper + selection + delete confirm + modal state before passing to `VaultRecordView`. `VaultRecordView` is also display-only.
-
-### Two subtypes
-
-| Subtype | Existing display component | Current adopters |
-|---|---|---|
-| `doc` | `GlobalStoreView` | taskmanager/store, expense/store, education/store, medical/store, vault/documents |
-| `record` | `VaultRecordView` | vault/banks, vault/passwords, vault/records |
+**The fix:** Create `GenericStorePage` as a data-fetching + auth wrapper that resolves `userId`, fetches domain data and documents together, manages the refresh cycle, derives parent records, and then delegates display entirely to `GlobalStoreView`. Each domain page is reduced to passing its domain-specific fetch callbacks and its modal slot.
 
 ### Opt-in features (centrally defined, domain chooses)
 
@@ -96,9 +228,10 @@ Additionally, the 3 Vault record sections (Banks, Passwords, Records) each build
 | Inline modal for linked doc click | `onLinkedRecordClick` callback | taskmanager (NoteModal), expense (ExpenseModal) |
 | Standalone upload → create parent | `onStandaloneUpload` callback | taskmanager only |
 | Title, description, back link | `title`, `description`, `backHref` | All adopters |
-| Selection + bulk delete | `selectionEnabled` | Vault record stores |
 
-### Phase 2A — Core GenericStorePage Component ⬜
+### Phase 2A — Core GenericStorePage Component ✅
+
+**Status: Implemented.**
 
 **What changes:**
 - Create `src/components/common/store/GenericStorePage.tsx`.
@@ -109,8 +242,8 @@ Additionally, the 3 Vault record sections (Banks, Passwords, Records) each build
   - When `storeType === "record"`: renders `VaultRecordView` (future Phase 2B).
 
 **What gets deleted:**
-- The auth + data loading boilerplate block (lines 30–86) duplicated across all 4 domain store page files
-- `VaultDocumentsView.tsx` — fully absorbed into the generic with `storeType="doc"` + `domain="vault"`
+- The auth + data loading boilerplate block (lines 30–86) duplicated across all 4 domain store page files.
+- `VaultDocumentsView.tsx` — fully absorbed into the generic with `storeType="doc"` + `domain="vault"`.
 
 #### Step-by-Step Plan (Phase 2A)
 
@@ -155,29 +288,97 @@ Additionally, the 3 Vault record sections (Banks, Passwords, Records) each build
 
 ---
 
-### Phase 2B — Vault Record Stores ⬜
+### Phase 2B — Vault Record Stores ⚠️
 
-**What changes:**
-- Extend `GenericStorePage` to handle `storeType="record"`.
-  - When `storeType === "record"`: renders `VaultRecordView` with selection, bulk delete, and modal state managed generically.
-  - Accept `useSection` hook adapter so vault domains can still use their `useVaultSection` pattern.
+**Status: Incorrectly implemented.**
 
-**Current adopters of `VaultRecordView`:**
-- `vault/banks/BankListView.tsx` — 103 lines, uses `useVaultSection`, `useSelection`, `useDeleteConfirm`, passes items to `VaultRecordView`
-- `vault/passwords/PasswordView.tsx` — same structure
-- `vault/records/RecordsView.tsx` — same structure
+**What was intended:** `GenericStorePage` absorbs all boilerplate from the 3 vault record view files. `VaultRecordView` and `GlobalStoreView` were to be deleted — they are middle-layer display components that should not exist. Every adopter renders `<GenericStorePage>` directly, and `GenericStorePage` owns 100% of the UI.
 
-All three replicate identical selection, delete-confirm, and modal wiring before passing to `VaultRecordView`.
+**What was actually done:** The boilerplate (`useVaultSection`, `useSelection`, `useDeleteConfirm`) was moved into `GenericStorePage`, but `VaultRecordView` (305 lines) and `GlobalStoreView` (698 lines) were **kept alive** as separate display layers that `GenericStorePage` delegates to. `BankDetailView` was explicitly scoped out and still bypasses `GenericStorePage` entirely, calling `VaultRecordView` directly. This violates the architecture.
+
+**Correct target state** (to be completed in Phase 2C):
+- `GenericStorePage` is the **only** store UI component — it owns tiles, search, list/tile toggle, bulk bar, header, theming, and all modals internally.
+- `GlobalStoreView.tsx` — **deleted**
+- `VaultRecordView.tsx` — **deleted**
+- `BankDetailView.tsx` — **deleted**, replaced by a thin `<GenericStorePage storeType="record">` wrapper with `headerActions` (Delete Bank button) and PIN-level `onActionClick` as opt-ins.
+
+---
+
+### Phase 2C — Collapse Display Layers into GenericStorePage ⬜
+
+**Status: Not started.**
+
+**The problem:** `GenericStorePage` currently delegates rendering to two separate display components (`GlobalStoreView` for doc stores, `VaultRecordView` for record stores), both of which own their own UI logic (tiles, search bar, tile/list toggle, bulk bars, modals). This defeats the entire point: the UI is still fragmented across 3 components instead of 1.
+
+**The fix:** Absorb all UI logic from both `GlobalStoreView` and `VaultRecordView` directly into `GenericStorePage`. The `storeType` prop switches the rendering mode internally. All opt-in UI elements (bulk rename, bulk link, headerActions, tileLayout, domain theming) become props on `GenericStorePage` directly.
 
 **What gets deleted:**
-- Duplicated `useSelection` + `useDeleteConfirm` + modal wiring in each of the 3 vault view files
-- `BankListView.tsx`, `PasswordView.tsx`, `RecordsView.tsx` shrink from ~100 lines each to thin domain-config wrappers
+- `src/components/common/store/GlobalStoreView.tsx` — fully absorbed into `GenericStorePage`
+- `src/components/vault/VaultRecordView.tsx` — fully absorbed into `GenericStorePage`
+- `src/components/vault/banks/BankDetailView.tsx` — replaced by a thin `<GenericStorePage>` wrapper
+
+**Current adopters that call `GenericStorePage` (all correct after 2C):**
+- `taskmanager/store/page.tsx` — `storeType="doc"`
+- `expense/store/page.tsx` — `storeType="doc"`
+- `education/store/page.tsx` — `storeType="doc"`
+- `medical/store/page.tsx` — `storeType="doc"`
+- `vault/documents/page.tsx` — `storeType="doc"`
+- `vault/passwords/PasswordView.tsx` — `storeType="record"`
+- `vault/records/RecordsView.tsx` — `storeType="record"`
+- `vault/banks/BankListView.tsx` — `storeType="record"` + `onActionClick → router.push(VAULT_BANK_DETAIL)`
+- `vault/banks/[id]/page.tsx` (new, replaces BankDetailView) — `storeType="record"` + `headerActions={<Delete Bank>}` + `onActionClick → open BankPinModal`
+
+**Opt-in features all domains choose from (all centrally defined in GenericStorePage):**
+
+| Opt-in | Prop | storeType |
+|---|---|---|
+| Domain theming (colors) | `domain` | `doc` only |
+| File tile grid | `storeType="doc"` | — |
+| Record tile grid / list toggle | `storeType="record"` | — |
+| Tile layout mode | `tileLayout: "standard" \| "body-only"` | `record` only |
+| Bulk rename | internal to doc mode | `doc` only |
+| Bulk link to parent | internal to doc mode | `doc` only |
+| Bulk delete | internal to both modes | both |
+| Header action slot | `headerActions?: ReactNode` | both |
+| Add button | `onAdd` or `disableAdd` | both |
+| Linked record click override | `onActionClick` | both |
+| Domain modal slot (edit/create) | `modalSlot` / `recordModalSlot` | both |
+| Search bar | internal | `record` only (doc uses TileView's own search) |
+| Empty state message | `emptyMessage` | both |
+
+#### Step-by-Step Plan (Phase 2C)
+
+```
+1. Absorb GlobalStoreView into GenericStorePage (doc mode).
+   - Move: DOMAIN_THEMES, TileView, BulkActionBar, BulkLinkModal,
+     StoreDocumentModal, bulk-rename modal, bulk-delete confirm,
+     hash-driven modal state, fetchDocuments data load.
+   - GenericStorePage storeType="doc" renders this entire UI.
+   - Delete GlobalStoreView.tsx.
+
+2. Absorb VaultRecordView into GenericStorePage (record mode).
+   - Move: DataListView (tile/list toggle + search), InlineSecretValue,
+     selection rendering, headerActions slot, tile/list row rendering.
+   - GenericStorePage storeType="record" renders this entire UI.
+   - Delete VaultRecordView.tsx.
+
+3. Add headerActions?: ReactNode to GenericRecordStoreProps.
+   - Pass through to the record mode header row.
+
+4. Replace BankDetailView.tsx with a thin page wrapper.
+   - Create vault/banks/[id]/page.tsx (if not existing) using GenericStorePage.
+   - storeType="record", vaultSection="banks", fetch single bank's pins.
+   - Pass headerActions={<Delete Bank button>}.
+   - Pass onActionClick={open BankPinModal}.
+   - Pass recordModalSlot={BankPinModal}.
+   - Delete BankDetailView.tsx.
+```
 
 **Human Actions Required:**
 - None.
 
 **Out of Scope:**
-- Bank detail view (`BankDetailView.tsx`) — this is a sub-page, not a list store. Remains unchanged.
+- Any changes to `StoreDocumentModal`, `BulkLinkModal`, `TileView`, `DataListView` — these remain as sub-components used internally by `GenericStorePage`.
 
 ---
 

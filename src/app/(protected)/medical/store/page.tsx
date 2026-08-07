@@ -1,8 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ROUTES } from "@/routes/paths";
-import { getSession } from "@/api/auth";
 import {
   fetchMedicalRecords,
   updateMedicalRecord,
@@ -22,102 +21,64 @@ import {
 import { InputField, TextareaField } from "@/components/common/FormField";
 import type { MedicalRecord, MedicalPlaintext } from "@/types/medical";
 import type { Document, DocumentPlaintext } from "@/types/document";
-import GlobalStoreView from "@/components/common/store/GlobalStoreView";
+import GenericStorePage from "@/components/common/store/GenericStorePage";
 import MedicalModal from "@/components/medical/MedicalModal";
 
 /**
  * Medical Document Store.
- * Renders the global document store filtered to the "medical" domain,
- * with medical records as linkable parent items.
+ * Uses GenericStorePage with medical records as parent items.
  *
- * Mirrors Education's CertificateStoreView: clicking a linked document
- * opens MedicalModal for the parent record instead of StoreDocumentModal.
+ * Clicking a linked document opens MedicalModal for the parent record.
  */
 export default function MedicalStorePage() {
-  const [userId, setUserId] = useState<string | null>(null);
-  const [parentRecords, setParentRecords] = useState<{ id: string; name: string }[]>([]);
-  const [allRecords, setAllRecords] = useState<MedicalRecord[]>([]);
-  const [allDocuments, setAllDocuments] = useState<Document[]>([]);
+  // --- Inline record creation form state ---
+  const [newRecordName, setNewRecordName] = useState("");
+  const [newRecordClinic, setNewRecordClinic] = useState("");
+  const [newRecordDate, setNewRecordDate] = useState("");
+  const [newRecordDiagnosis, setNewRecordDiagnosis] = useState("");
 
-  // Modal state for linked document → open parent MedicalModal
-  const [linkedRecord, setLinkedRecord] = useState<MedicalRecord | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  // --- Auth + data loading (single source of truth) ---
-  useEffect(() => {
-    const init = async () => {
-      const session = await getSession();
-      if (session?.user.id) setUserId(session.user.id);
-    };
-    init();
-  }, []);
-
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    const load = async () => {
-      const [records, docs] = await Promise.all([
-        fetchMedicalRecords(userId),
-        fetchDocuments(userId),
-      ]);
-      if (!cancelled) {
-        setAllRecords(records);
-        setAllDocuments(docs);
-        setParentRecords(records.map((r) => ({ id: r.id, name: r.name })));
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [userId]);
-
-  /** Refresh both records AND documents (used after mutations) */
-  const refreshAll = useCallback(async () => {
-    if (!userId) return;
+  // --- fetchData ---
+  const fetchData = useCallback(async (userId: string) => {
     const [records, docs] = await Promise.all([
       fetchMedicalRecords(userId),
       fetchDocuments(userId),
     ]);
-    setAllRecords(records);
-    setAllDocuments(docs);
-    setParentRecords(records.map((r) => ({ id: r.id, name: r.name })));
-    setRefreshTrigger((prev) => prev + 1);
-  }, [userId]);
+    return { domainRows: records, documents: docs };
+  }, []);
 
-  // --- Action click override: linked doc → open MedicalModal for parent ---
-  const handleActionClick = useCallback(
-    (docId: string) => {
-      const doc = allDocuments.find((d) => d.id === docId);
-      // Return false so GlobalStoreView opens the StoreDocumentModal for unlinked docs
-      if (!doc?.linked_id) return false;
-      const record = allRecords.find((r) => r.id === doc.linked_id);
-      if (record) {
-        setLinkedRecord(record);
-        return true; // Handled
-      }
-      return false; // Not handled
-    },
-    [allDocuments, allRecords],
+  // --- deriveParentRecords ---
+  const deriveParentRecords = useCallback(
+    (rows: MedicalRecord[]) => rows.map((r) => ({ id: r.id, name: r.name })),
+    [],
   );
 
-  const closeLinkedRecord = useCallback(() => {
-    setLinkedRecord(null);
-    refreshAll();
-  }, [refreshAll]);
+  // --- onLinkedRecordClick ---
+  const onLinkedRecordClick = useCallback(
+    (docId: string, allDocuments: Document[], allRows: MedicalRecord[]) => {
+      const doc = allDocuments.find((d) => d.id === docId);
+      if (!doc?.linked_id) return null;
+      return allRows.find((r) => r.id === doc.linked_id) ?? null;
+    },
+    [],
+  );
 
   // --- Parent CRUD handlers ---
 
   const handleDeleteParent = useCallback(
-    async (parentId: string) => {
-      if (!userId) return;
+    async (parentId: string, _userId: string, refreshAll: () => Promise<void>) => {
       await deleteMedicalRecord(parentId);
       await refreshAll();
     },
-    [userId, refreshAll],
+    [],
   );
 
   const handleUnlinkFromParent = useCallback(
-    async (documentId: string, parentId: string) => {
-      if (!userId) return;
+    async (
+      documentId: string,
+      parentId: string,
+      userId: string,
+      refreshAll: () => Promise<void>,
+    ) => {
       const records = await fetchMedicalRecords(userId);
       const record = records.find((r) => r.id === parentId);
       if (record) {
@@ -133,12 +94,16 @@ export default function MedicalStorePage() {
       }
       await refreshAll();
     },
-    [userId, refreshAll],
+    [],
   );
 
   const handleBulkLinkToParent = useCallback(
-    async (documentIds: string[], parentId: string) => {
-      if (!userId) return;
+    async (
+      documentIds: string[],
+      parentId: string,
+      userId: string,
+      refreshAll: () => Promise<void>,
+    ) => {
       const records = await fetchMedicalRecords(userId);
       const record = records.find((r) => r.id === parentId);
       if (record) {
@@ -151,13 +116,17 @@ export default function MedicalStorePage() {
       }
       await refreshAll();
     },
-    [userId, refreshAll],
+    [],
   );
 
-  // --- onDocumentSaved: sync parent medical-record document_ids after store-modal save ---
   const handleDocumentSaved = useCallback(
-    async (documentId: string, newLinkedId: string, oldLinkedId: string) => {
-      if (!userId) return;
+    async (
+      documentId: string,
+      newLinkedId: string,
+      oldLinkedId: string,
+      userId: string,
+      refreshAll: () => Promise<void>,
+    ) => {
       if (oldLinkedId === newLinkedId) {
         await refreshAll();
         return;
@@ -165,7 +134,6 @@ export default function MedicalStorePage() {
 
       const records = await fetchMedicalRecords(userId);
 
-      // Remove from old parent
       if (oldLinkedId) {
         const oldRecord = records.find((r) => r.id === oldLinkedId);
         if (oldRecord) {
@@ -178,7 +146,6 @@ export default function MedicalStorePage() {
         }
       }
 
-      // Add to new parent
       if (newLinkedId) {
         const newRecord = records.find((r) => r.id === newLinkedId);
         if (newRecord) {
@@ -188,22 +155,174 @@ export default function MedicalStorePage() {
             document_ids: merged,
             updated_at: new Date().toISOString(),
           } as MedicalPlaintext);
-          setLinkedRecord(newRecord);
         }
       }
 
       await refreshAll();
     },
-    [userId, refreshAll],
+    [],
   );
 
-  // --- MedicalModal handlers (for linked record editing from store) ---
+  // --- Inline record creation ---
+  const renderNewRecordForm = useCallback(
+    ({ disabled, isSaving }: { disabled: boolean; isSaving: boolean }) => (
+      <fieldset disabled={disabled || isSaving} className="space-y-3">
+        <InputField
+          label="Record Name"
+          value={newRecordName}
+          onChange={setNewRecordName}
+          disabled={isSaving || disabled}
+          placeholder="e.g. Annual Checkup"
+        />
+        <InputField
+          label="Clinic / Hospital"
+          value={newRecordClinic}
+          onChange={setNewRecordClinic}
+          disabled={isSaving || disabled}
+          placeholder="e.g. Apollo Hospital"
+        />
+        <InputField
+          label="Date"
+          type="date"
+          value={newRecordDate}
+          onChange={setNewRecordDate}
+          disabled={isSaving || disabled}
+        />
+        <TextareaField
+          label="Diagnosis / Timeline"
+          value={newRecordDiagnosis}
+          onChange={setNewRecordDiagnosis}
+          disabled={isSaving || disabled}
+          rows={2}
+        />
+      </fieldset>
+    ),
+    [newRecordName, newRecordClinic, newRecordDate, newRecordDiagnosis],
+  );
+
+  const extractNewRecordData = useCallback((): Record<string, string> | null => {
+    if (!newRecordName.trim()) return null;
+    return {
+      name: newRecordName.trim(),
+      clinic: newRecordClinic.trim(),
+      date: newRecordDate,
+      diagnosis_timeline: newRecordDiagnosis.trim(),
+    };
+  }, [newRecordName, newRecordClinic, newRecordDate, newRecordDiagnosis]);
+
+  const handleCreateParentFromStore = useCallback(
+    async (
+      data: Record<string, string>,
+      userId: string,
+      refreshAll: () => Promise<void>,
+    ): Promise<string> => {
+      const nowIso = new Date().toISOString();
+      const record = await createMedicalRecord(userId, {
+        name: data.name || "",
+        clinic: data.clinic || "",
+        date: data.date || nowIso.split("T")[0],
+        diagnosis_timeline: data.diagnosis_timeline || "",
+        document_ids: [],
+        updated_at: nowIso,
+      });
+      await refreshAll();
+      setNewRecordName("");
+      setNewRecordClinic("");
+      setNewRecordDate("");
+      setNewRecordDiagnosis("");
+      return record.id;
+    },
+    [],
+  );
+
+  // --- modalSlot ---
+  const modalSlot = useCallback(
+    ({
+      linkedRecord,
+      allDocuments,
+      userId,
+      refreshAll,
+      onClose,
+    }: {
+      linkedRecord: MedicalRecord;
+      allRows: MedicalRecord[];
+      allDocuments: Document[];
+      userId: string;
+      refreshAll: () => Promise<void>;
+      onClose: () => void;
+    }) => (
+      <MedicalModalWrapper
+        record={linkedRecord}
+        allDocuments={allDocuments}
+        userId={userId}
+        refreshAll={refreshAll}
+        onClose={onClose}
+      />
+    ),
+    [],
+  );
+
+  return (
+    <GenericStorePage
+      domain="medical"
+      title="Medical Document Store"
+      description="View all uploaded medical reports and documents."
+      backHref={ROUTES.MEDICAL}
+      fetchData={fetchData}
+      deriveParentRecords={deriveParentRecords}
+      onLinkedRecordClick={onLinkedRecordClick}
+      modalSlot={modalSlot}
+      onDeleteParentRecord={handleDeleteParent}
+      onUnlinkFromParent={handleUnlinkFromParent}
+      onBulkLinkToParent={handleBulkLinkToParent}
+      onDocumentSaved={handleDocumentSaved}
+      renderNewRecordForm={renderNewRecordForm}
+      extractNewRecordData={extractNewRecordData}
+      onCreateParentFromStore={handleCreateParentFromStore}
+    />
+  );
+}
+
+// --- MedicalModal wrapper with inline save/delete handlers ---
+
+function MedicalModalWrapper({
+  record,
+  allDocuments,
+  userId,
+  refreshAll,
+  onClose,
+}: {
+  record: MedicalRecord;
+  allDocuments: Document[];
+  userId: string;
+  refreshAll: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const attachedDocuments = useMemo(
+    () => allDocuments.filter((d) => record.document_ids?.includes(d.id)),
+    [record, allDocuments],
+  );
+
+  const standaloneDocuments = useMemo(
+    () => allDocuments.filter((d) => d.domain === "medical" && !d.linked_id),
+    [allDocuments],
+  );
 
   const handleMedicalSave = useCallback(
     async (
-      draft: { name: string; clinic: string; date: string; diagnosis_timeline: string },
+      draft: {
+        name: string;
+        clinic: string;
+        date: string;
+        diagnosis_timeline: string;
+      },
       existingRecord: MedicalRecord | null,
-      fileAction?: { newFiles: File[]; removeDocIds: string[]; unlinkDocIds?: string[]; linkDocId?: string },
+      fileAction?: {
+        newFiles: File[];
+        removeDocIds: string[];
+        unlinkDocIds?: string[];
+        linkDocId?: string;
+      },
     ) => {
       if (!userId) throw new Error("No active session.");
       const nowIso = new Date().toISOString();
@@ -213,19 +332,30 @@ export default function MedicalStorePage() {
         for (const docId of fileAction.removeDocIds) {
           const doc = allDocuments.find((d) => d.id === docId);
           if (doc?.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+            try {
+              await deleteDocumentFile(userId, doc.file_name);
+            } catch {
+              /* best-effort */
+            }
           }
-          try { await deleteDocument(docId); } catch { /* best-effort */ }
+          try {
+            await deleteDocument(docId);
+          } catch {
+            /* best-effort */
+          }
           document_ids = document_ids.filter((id) => id !== docId);
         }
       }
 
-      // Process unlinks: clear linked_id, remove from parent, keep file
       if (fileAction?.unlinkDocIds) {
         for (const docId of fileAction.unlinkDocIds) {
           const doc = allDocuments.find((d) => d.id === docId);
           if (doc) {
-            await updateDocument(userId, docId, { ...doc, linked_id: "", updated_at: nowIso } as DocumentPlaintext);
+            await updateDocument(userId, docId, {
+              ...doc,
+              linked_id: "",
+              updated_at: nowIso,
+            } as DocumentPlaintext);
           }
           document_ids = document_ids.filter((id) => id !== docId);
         }
@@ -275,13 +405,18 @@ export default function MedicalStorePage() {
         savedRecord = await createMedicalRecord(userId, payload);
       }
 
-      // Backfill linked_id for newly created documents
       if (!existingRecord && fileAction?.newFiles && fileAction.newFiles.length > 0) {
         const freshDocs = await fetchDocuments(userId);
         for (const doc of freshDocs) {
-          if (doc.domain === "medical" && doc.linked_id === "" && document_ids.includes(doc.id)) {
+          if (
+            doc.domain === "medical" &&
+            doc.linked_id === "" &&
+            document_ids.includes(doc.id)
+          ) {
             await updateDocument(userId, doc.id, {
-              ...doc, linked_id: savedRecord.id, updated_at: new Date().toISOString(),
+              ...doc,
+              linked_id: savedRecord.id,
+              updated_at: new Date().toISOString(),
             } as DocumentPlaintext);
           }
         }
@@ -289,135 +424,59 @@ export default function MedicalStorePage() {
 
       await refreshAll();
 
-      // When unlinking from the Store page, close the parent modal and open
-      // the unlinked file in StoreDocumentModal via URL hash.
       if (fileAction?.unlinkDocIds && fileAction.unlinkDocIds.length > 0) {
-        closeLinkedRecord();
+        onClose();
         const unlinkedId = fileAction.unlinkDocIds[fileAction.unlinkDocIds.length - 1];
         window.location.hash = `#edit-document-${unlinkedId}`;
       }
     },
-    [userId, allDocuments, refreshAll, closeLinkedRecord],
+    [userId, allDocuments, refreshAll, onClose],
   );
 
   const handleMedicalDelete = useCallback(
-    async (recordId: string, cascadeMode: 'unlink' | 'cascade' = 'cascade') => {
+    async (recordId: string, cascadeMode: "unlink" | "cascade" = "cascade") => {
       if (!userId) throw new Error("No active session.");
-      const record = allRecords.find((r) => r.id === recordId);
-      if (record?.document_ids) {
-        if (cascadeMode === 'unlink') {
-          const nowIso = new Date().toISOString();
-          for (const docId of record.document_ids) {
-            const doc = allDocuments.find((d) => d.id === docId);
-            if (doc) {
-              await updateDocument(userId, docId, { ...doc, linked_id: "", updated_at: nowIso } as DocumentPlaintext);
+      const recordDocs = allDocuments.filter((d) => d.linked_id === recordId);
+      const nowIso = new Date().toISOString();
+      if (cascadeMode === "unlink") {
+        for (const doc of recordDocs) {
+          await updateDocument(userId, doc.id, {
+            ...doc,
+            linked_id: "",
+            updated_at: nowIso,
+          } as DocumentPlaintext);
+        }
+      } else {
+        for (const doc of recordDocs) {
+          if (doc.file_name) {
+            try {
+              await deleteDocumentFile(userId, doc.file_name);
+            } catch {
+              /* best-effort */
             }
           }
-        } else {
-          for (const docId of record.document_ids) {
-            const doc = allDocuments.find((d) => d.id === docId);
-            if (doc?.file_name) {
-              try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-            }
-            try { await deleteDocument(docId); } catch { /* best-effort */ }
+          try {
+            await deleteDocument(doc.id);
+          } catch {
+            /* best-effort */
           }
         }
       }
       await deleteMedicalRecord(recordId);
       await refreshAll();
     },
-    [userId, allRecords, allDocuments, refreshAll],
-  );
-
-  // Attached documents for the linked record
-  const linkedAttachedDocs = useMemo(
-    () =>
-      linkedRecord
-        ? allDocuments.filter((d) => linkedRecord.document_ids?.includes(d.id))
-        : [],
-    [linkedRecord, allDocuments],
-  );
-
-  const linkedStandaloneDocs = useMemo(
-    () => allDocuments.filter((d) => d.domain === "medical" && !d.linked_id),
-    [allDocuments],
-  );
-
-  // --- Inline record creation form state (for StoreDocumentModal) ---
-  const [newRecordName, setNewRecordName] = useState("");
-  const [newRecordClinic, setNewRecordClinic] = useState("");
-  const [newRecordDate, setNewRecordDate] = useState("");
-  const [newRecordDiagnosis, setNewRecordDiagnosis] = useState("");
-
-  const renderNewRecordForm = useCallback(
-    ({ disabled, isSaving }: { disabled: boolean; isSaving: boolean }) => (
-      <fieldset disabled={disabled || isSaving} className="space-y-3">
-        <InputField label="Record Name" value={newRecordName} onChange={setNewRecordName}
-          disabled={isSaving || disabled} placeholder="e.g. Annual Checkup" />
-        <InputField label="Clinic / Hospital" value={newRecordClinic} onChange={setNewRecordClinic}
-          disabled={isSaving || disabled} placeholder="e.g. Apollo Hospital" />
-        <InputField label="Date" type="date" value={newRecordDate} onChange={setNewRecordDate}
-          disabled={isSaving || disabled} />
-        <TextareaField label="Diagnosis / Timeline" value={newRecordDiagnosis}
-          onChange={setNewRecordDiagnosis} disabled={isSaving || disabled} rows={2} />
-      </fieldset>
-    ),
-    [newRecordName, newRecordClinic, newRecordDate, newRecordDiagnosis],
-  );
-
-  const extractNewRecordData = useCallback((): Record<string, string> | null => {
-    if (!newRecordName.trim()) return null;
-    return { name: newRecordName.trim(), clinic: newRecordClinic.trim(), date: newRecordDate, diagnosis_timeline: newRecordDiagnosis.trim() };
-  }, [newRecordName, newRecordClinic, newRecordDate, newRecordDiagnosis]);
-
-  const onCreateParentFromStore = useCallback(
-    async (data: Record<string, string>): Promise<string> => {
-      if (!userId) throw new Error("No active session.");
-      const nowIso = new Date().toISOString();
-      const record = await createMedicalRecord(userId, {
-        name: data.name || "", clinic: data.clinic || "",
-        date: data.date || nowIso.split("T")[0],
-        diagnosis_timeline: data.diagnosis_timeline || "",
-        document_ids: [], updated_at: nowIso,
-      });
-      await refreshAll();
-      setNewRecordName(""); setNewRecordClinic(""); setNewRecordDate(""); setNewRecordDiagnosis("");
-      return record.id;
-    },
-    [userId, refreshAll],
+    [userId, allDocuments, refreshAll],
   );
 
   return (
-    <>
-      <GlobalStoreView
-        domain="medical"
-        title="Medical Document Store"
-        description="View all uploaded medical reports and documents."
-        backHref={ROUTES.MEDICAL}
-        parentRecords={parentRecords}
-        onDeleteParentRecord={handleDeleteParent}
-        onUnlinkFromParent={handleUnlinkFromParent}
-        onBulkLinkToParent={handleBulkLinkToParent}
-        onActionClick={handleActionClick}
-        renderNewRecordForm={renderNewRecordForm}
-        extractNewRecordData={extractNewRecordData}
-        onCreateParentFromStore={onCreateParentFromStore}
-        onDocumentSaved={handleDocumentSaved}
-        refreshTrigger={refreshTrigger}
-      />
-
-      {/* MedicalModal for linked record editing (mirrors Education's CertificateStoreView) */}
-      {linkedRecord && userId && (
-        <MedicalModal
-          record={linkedRecord}
-          attachedDocuments={linkedAttachedDocs}
-          standaloneDocuments={linkedStandaloneDocs}
-          userId={userId}
-          onClose={closeLinkedRecord}
-          onSave={handleMedicalSave}
-          onDelete={handleMedicalDelete}
-        />
-      )}
-    </>
+    <MedicalModal
+      record={record}
+      attachedDocuments={attachedDocuments}
+      standaloneDocuments={standaloneDocuments}
+      userId={userId}
+      onClose={onClose}
+      onSave={handleMedicalSave}
+      onDelete={handleMedicalDelete}
+    />
   );
 }
