@@ -432,12 +432,12 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
 - Full episode matrix JSX (season selector sidebar + episode grid)
 - Episode override `ConfirmDialog`
 
-**Movie-only state and JSX (stays in Movie wrapper):**
-- `watchedOn` form field + `setWatchedOn`
-- `handleStatusClick` sets `watchedOn` to today when status → "watched"
-- `handleRatingChange` sets `watchedOn` to today when rating > 0
-- `handleSave` patch includes `watched_on`
-- `StatusChipGroup` receives `showWatchedOn={true}` + `watchedOn` + `onWatchedOnChange`
+**Movie-only state and JSX (absorbed into `GenericMediaPage`, gated by `showWatchedOn` prop):**
+- `watchedOn` state + `setWatchedOn` — declared inside `GenericMediaPage`, only active when `showWatchedOn=true`
+- `handleStatusClick` auto-sets `watchedOn` to today when status → "watched" (only when `showWatchedOn=true`)
+- `handleRatingChange` auto-sets `watchedOn` to today when rating > 0 (only when `showWatchedOn=true`)
+- `handleSave` spreads `watched_on` into patch only when `showWatchedOn=true`
+- `StatusChipGroup` receives `showWatchedOn`, `watchedOn`, `onWatchedOnChange` only when `showWatchedOn=true`
 
 ### Opt-in features (centrally defined, domain chooses)
 
@@ -469,61 +469,70 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
   - Accepts `extraCreateFields?: Partial<MediaPlaintext>` — merged into the save create fields.
 
 **What gets deleted:**
-- `src/components/media/pages/MoviePage.tsx` — fully absorbed.
-- `src/components/media/pages/TvSeriesPage.tsx` — all shared logic absorbed; TV-only state remains in a thin wrapper.
+- `src/components/media/pages/MoviePage.tsx` — fully absorbed into `GenericMediaPage`. No wrapper needed.
+- `src/components/media/pages/TvSeriesPage.tsx` — all shared logic absorbed; TV-only episode state remains in a thin wrapper.
 
-**New thin wrappers:**
-- `src/components/media/pages/MoviePageWrapper.tsx` — calls `<GenericMediaPage mediaType="movie" showWatchedOn />`. Has zero state, zero handlers.
-- `src/components/media/pages/TvSeriesPageWrapper.tsx` — owns TV-only state (`episodeState`, `selectedSeason`, `seasonData`, `viewMode`, `overrideConfig`), TV-only handlers (`handleParentStatusClick` with conflict logic, `handleConfirmOverride`, `hydrateFromExisting`), and passes `episodeSlot={<EpisodeMatrix .../>}`, `extraDirty`, `onExtraCancel`, `extraPatchFields`, `extraCreateFields` into `<GenericMediaPage mediaType="tv">`.
+**New thin wrapper (TV only):**
+- `src/components/media/pages/TvSeriesPageWrapper.tsx` — owns TV-only state (`episodeState`, `selectedSeason`, `seasonData`, `viewMode`, `overrideConfig`), TV-only handlers (`handleParentStatusClick` with conflict detection, `handleConfirmOverride`, `hydrateFromExisting`), and passes `episodeSlot={<EpisodeMatrix .../>}`, `extraDirty`, `onExtraCancel`, `extraPatchFields`, `extraCreateFields` into `<GenericMediaPage mediaType="tv">`.
+- **No `MoviePageWrapper` is created** — `watchedOn` state is owned by `GenericMediaPage` internally and gated by `showWatchedOn`. The route page renders `GenericMediaPage` directly.
 
 **Route pages updated:**
-- `src/app/(protected)/media/movie/[tmdb_id]/page.tsx` — change import from `MoviePage` → `MoviePageWrapper`.
+- `src/app/(protected)/media/movie/[tmdb_id]/page.tsx` — change import from `MoviePage` → `GenericMediaPage` directly, with `showWatchedOn` prop.
 - `src/app/(protected)/media/tv/[tmdb_id]/page.tsx` — change import from `TvSeriesPage` → `TvSeriesPageWrapper`.
 
 #### Step-by-Step Plan (Phase 3A)
 
 ```
 1. Create src/components/media/pages/GenericMediaPage.tsx.
-   - Move all shared state from MoviePage into this component.
-   - Add showWatchedOn prop: if true, pass watchedOn + onWatchedOnChange to StatusChipGroup.
+   - Move all shared state and handlers from MoviePage into this component.
+   - Add showWatchedOn?: boolean prop.
+     - If true: declare watchedOn state internally, pass to StatusChipGroup.
+     - handleStatusClick auto-sets watchedOn to today when status → "watched".
+     - handleRatingChange auto-sets watchedOn to today when rating > 0.
+     - handleSave spreads { watched_on: watchedOn || undefined } into patch.
    - Add episodeSlot?: ReactNode prop: if provided, render tab bar (tracking | episodes)
-     and render episodeSlot inside the episodes tab pane.
+     and render episodeSlot inside the episodes tab pane. Tab bar is NOT rendered
+     when episodeSlot is absent.
    - Add extraDirty?: boolean prop: OR with internal isDirty in the useMemo.
-   - Add onExtraCancel?: () => void prop: call at the end of doCancel.
+   - Add onExtraCancel?: () => void prop: called at the end of doCancel.
    - Add extraPatchFields?: Partial<MediaPlaintext> prop: spread into patch in handleSave.
    - Add extraCreateFields?: Partial<MediaPlaintext> prop: spread into extraCreateFields in handleSave.
-   - Keep fallbackIcon and typeLabel as required props (Film vs Tv icon, "Movie" vs "TV Series" string).
+   - Add onStatusChange?: (status) => void prop: if provided, replaces the internal
+     handleStatusClick (TV uses this for conflict-detection interception).
+   - Keep fallbackIcon and typeLabel as required props.
 
-2. Create src/components/media/pages/MoviePageWrapper.tsx.
-   - Zero state, zero handlers.
-   - Render <GenericMediaPage mediaType="movie" showWatchedOn fallbackIcon={<Film size={48}/>}
-     typeLabel="Movie" {...rest} />.
-
-3. Create src/components/media/pages/TvSeriesPageWrapper.tsx.
+2. Create src/components/media/pages/TvSeriesPageWrapper.tsx.
    - Own: episodeState, selectedSeason, seasonData, viewMode, overrideConfig.
-   - Own: hydrateFromExisting (passed as onHydrate to GenericMediaPage if needed,
-     or called by GenericMediaPage via a ref callback).
-   - Own: handleParentStatusClick (with conflict detection).
-   - Own: handleConfirmOverride, handleCancelOverride.
+   - Own: hydrateFromExisting — hydrates episodeState from loaded media.
+   - Own: handleParentStatusClick — checks for episode conflicts before setting status;
+     shows overrideConfig dialog if conflicts exist.
+   - Own: handleConfirmOverride, handleCancelOverride — resolve the conflict dialog.
+   - Own: episode override ConfirmDialog JSX (rendered in this wrapper, not in GenericMediaPage).
    - Compute: extraDirty = (JSON.stringify(episodeState) !== JSON.stringify(originalEpisodes)).
-   - Render: <GenericMediaPage mediaType="tv" episodeSlot={<EpisodeMatrix .../>}
-     extraDirty={extraDirty} onExtraCancel={() => resetEpisodeState()}
-     extraPatchFields={{ episodes: episodeState }}
-     extraCreateFields={{ episodes: episodeState, runtime: totalRuntime }}
-     fallbackIcon={<Tv size={48}/>} typeLabel="TV Series"
-     onStatusChange={handleParentStatusClick}
-     {...rest} />.
-   - Pass EpisodeMatrix (the full season selector + episode grid JSX extracted from TvSeriesPage)
-     as the episodeSlot.
+   - Render <GenericMediaPage
+       mediaType="tv"
+       episodeSlot={<EpisodeMatrix .../>}
+       extraDirty={extraDirty}
+       onExtraCancel={() => resetEpisodeState()}
+       extraPatchFields={{ episodes: episodeState }}
+       extraCreateFields={{ episodes: episodeState, runtime: totalRuntime }}
+       onStatusChange={handleParentStatusClick}
+       fallbackIcon={<Tv size={48}/>}
+       typeLabel="TV Series"
+       {...rest}
+     />.
+   - Pass EpisodeMatrix (full season selector + episode grid JSX from TvSeriesPage) as episodeSlot.
 
-4. Update src/app/(protected)/media/movie/[tmdb_id]/page.tsx.
-   - Change import from MoviePage → MoviePageWrapper.
+3. Update src/app/(protected)/media/movie/[tmdb_id]/page.tsx.
+   - Change import from MoviePage → GenericMediaPage.
+   - Pass showWatchedOn, fallbackIcon={<Film size={48}/>}, typeLabel="Movie".
+   - No wrapper file is created for Movie.
 
-5. Update src/app/(protected)/media/tv/[tmdb_id]/page.tsx.
+4. Update src/app/(protected)/media/tv/[tmdb_id]/page.tsx.
    - Change import from TvSeriesPage → TvSeriesPageWrapper.
 
-6. Delete src/components/media/pages/MoviePage.tsx.
-7. Delete src/components/media/pages/TvSeriesPage.tsx.
+5. Delete src/components/media/pages/MoviePage.tsx.
+6. Delete src/components/media/pages/TvSeriesPage.tsx.
 ```
 
 **Human Actions Required:**
