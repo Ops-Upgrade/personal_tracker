@@ -1,9 +1,9 @@
-# Global Architecture Refactor Roadmap
+﻿# Global Architecture Refactor Roadmap
 
 This document tracks the architectural refactoring of the application to eliminate duplicated page structure
 and standardize all list-based, store, media, and domain views into composable opt-in generic pages.
 
-There are **4 distinct generic page types** — each solving a different class of duplication.
+There are **4 distinct generic page types** â€” each solving a different class of duplication.
 They do not share a base; they share only the philosophy of opt-in composability.
 
 ---
@@ -19,7 +19,7 @@ They do not share a base; they share only the philosophy of opt-in composability
 
 ---
 
-## Stage 1: GenericViewPage — "View All" Standardization
+## Stage 1: GenericViewPage â€” "View All" Standardization
 
 > **Complete.**
 
@@ -45,29 +45,29 @@ All of this is duplicated across completed tasks, notes, completed education, an
 | Month-grouped view | `views={["months"]}` | Tasks, Education, Expense, Medical |
 | Priority-grouped view | `views={["priority"]}` | Tasks, Education only (Medical omits this) |
 | Sortable column headers | `sortColumn` on `ColumnDef` | Per column, per domain |
-| Row click → edit modal | `onRowClick` | All domains |
+| Row click â†’ edit modal | `onRowClick` | All domains |
 | Priority-colored row borders | `rowClassName` callback | Tasks only |
 
 ### Column definitions (domain responsibility)
 
 Each domain defines its own `ColumnDef<T>[]` array specifying the columns specific to that data type.
-The generic page knows nothing about expense dates or task priorities — domains inject that via `render`.
+The generic page knows nothing about expense dates or task priorities â€” domains inject that via `render`.
 
-### Phase 1A — Core Component & Initial Adopters ✅
+### Phase 1A â€” Core Component & Initial Adopters âœ…
 
 **Status: Implemented.**
 
 **What was done:**
-- `src/components/common/GenericViewPage.tsx` — Created
-- `/taskmanager/completed/page.tsx` — Uses `GenericViewPage`
-- `/taskmanager/notes/page.tsx` — Uses `GenericViewPage`
-- `/education/completed/page.tsx` — Uses `GenericViewPage`
+- `src/components/common/GenericViewPage.tsx` â€” Created
+- `/taskmanager/completed/page.tsx` â€” Uses `GenericViewPage`
+- `/taskmanager/notes/page.tsx` â€” Uses `GenericViewPage`
+- `/education/completed/page.tsx` â€” Uses `GenericViewPage`
 
 **What got deleted:**
 - Hardcoded Priority-section JSX in `taskmanager/completed/page.tsx`
 - Hardcoded Month-tile JSX in `taskmanager/completed/page.tsx`
 - Local `VIEW_OPTIONS` constant in `taskmanager/completed/page.tsx`
-- `src/components/common/GenericDataList.tsx` — replaced by `GenericViewPage.tsx`
+- `src/components/common/GenericDataList.tsx` â€” replaced by `GenericViewPage.tsx`
 
 #### Step-by-Step Plan (Phase 1A)
 
@@ -78,7 +78,7 @@ The generic page knows nothing about expense dates or task priorities — domain
      based on active view: flat GenericDataList for completion, MonthTile-grouped
      for months, Priority-section-grouped for priority.
    - Accept `yearFilter` and `monthFilter` as optional prop objects
-     ({ selectedYear, availableYears, onChange }) — render YearDropdown /
+     ({ selectedYear, availableYears, onChange }) â€” render YearDropdown /
      MonthDropdown in the header bar only when provided.
    - Retain the ColumnDef<T> API, getItemKey, onRowClick, rowClassName as-is.
 
@@ -109,7 +109,7 @@ The generic page knows nothing about expense dates or task priorities — domain
 
 ---
 
-### Phase 1B — Cleanups (View Options Standardization) ✅
+### Phase 1B â€” Cleanups (View Options Standardization) âœ…
 
 **Status: Implemented.**
 
@@ -147,7 +147,7 @@ The generic page knows nothing about expense dates or task priorities — domain
 
 ---
 
-### Phase 1C — Expense & Medical "View All" ✅
+### Phase 1C â€” Expense & Medical "View All" âœ…
 
 **Status: Implemented.**
 
@@ -157,23 +157,23 @@ The generic page knows nothing about expense dates or task priorities — domain
 - Opt-in: `views={["completion", "months"]}` (expenses have no priority)
 - Opt-in: `yearFilter` + `monthFilter` (year + month dropdown in header)
 - Columns: Date, Description, Category, Amount, Receipt icon
-- Row click → open `ExpenseModal`
+- Row click â†’ open `ExpenseModal`
 - No priority view (expenses are not prioritized)
 
 **Medical `/medical/all`:**
 - Opt-in: `views={["completion", "months"]}` (no priority in medical)
 - Opt-in: `yearFilter` + `monthFilter`
 - Columns: Date, Description, Provider, Cost, Receipt icon
-- Row click → open `MedicalModal`
+- Row click â†’ open `MedicalModal`
 
 **Changes to existing components:**
-- `MonthRow.tsx` — Replace `showAll` inline toggle with `router.push(ROUTES.EXPENSE_ALL + '?year=X&month=Y')`
-- `MedicalMonthRow.tsx` — Same, replace `showAll` toggle with route navigation
+- `MonthRow.tsx` â€” Replace `showAll` inline toggle with `router.push(ROUTES.EXPENSE_ALL + '?year=X&month=Y')`
+- `MedicalMonthRow.tsx` â€” Same, replace `showAll` toggle with route navigation
 
 **What got deleted:**
 - `showAll` state and inline expansion logic in `MonthRow.tsx`
 - `showAll` state and inline expansion logic in `MedicalMonthRow.tsx`
-- `src/components/expense/FullMonthModal.tsx` — pre-built but unused, superseded by the new route
+- `src/components/expense/FullMonthModal.tsx` â€” pre-built but unused, superseded by the new route
 
 #### Step-by-Step Plan (Phase 1C)
 
@@ -210,11 +210,11 @@ The generic page knows nothing about expense dates or task priorities — domain
 
 ---
 
-## Stage 2: GenericStorePage — Store Standardization
+## Stage 2: GenericStorePage â€” Store Standardization
 
 > **Complete.**
 
-**The problem:** Every domain store page (`taskmanager/store`, `expense/store`, `education/store`, `medical/store`) and `VaultDocumentsView` independently implements identical boilerplate: `getSession` auth init, two `useEffect` hooks for data loading, a `refreshAll` `useCallback`, a `refreshTrigger` `useState`, and `parentRecords` derivation. `GlobalStoreView` is only a display component — it has no data-fetching responsibility. This boilerplate is copy-pasted verbatim across 5 files.
+**The problem:** Every domain store page (`taskmanager/store`, `expense/store`, `education/store`, `medical/store`) and `VaultDocumentsView` independently implements identical boilerplate: `getSession` auth init, two `useEffect` hooks for data loading, a `refreshAll` `useCallback`, a `refreshTrigger` `useState`, and `parentRecords` derivation. `GlobalStoreView` is only a display component â€” it has no data-fetching responsibility. This boilerplate is copy-pasted verbatim across 5 files.
 
 **The fix:** Create `GenericStorePage` as a data-fetching + auth wrapper that resolves `userId`, fetches domain data and documents together, manages the refresh cycle, derives parent records, and then delegates display entirely to `GlobalStoreView`. Each domain page is reduced to passing its domain-specific fetch callbacks and its modal slot.
 
@@ -226,10 +226,10 @@ The generic page knows nothing about expense dates or task priorities — domain
 | Domain for document scoping | `domain: string` | Doc stores (passed to `GlobalStoreView`) |
 | Parent records for linking | `fetchParentRecords` callback | taskmanager, expense, education, medical, vault/documents |
 | Inline modal for linked doc click | `onLinkedRecordClick` callback | taskmanager (NoteModal), expense (ExpenseModal) |
-| Standalone upload → create parent | `onStandaloneUpload` callback | taskmanager only |
+| Standalone upload â†’ create parent | `onStandaloneUpload` callback | taskmanager only |
 | Title, description, back link | `title`, `description`, `backHref` | All adopters |
 
-### Phase 2A — Core GenericStorePage Component ✅
+### Phase 2A â€” Core GenericStorePage Component âœ…
 
 **Status: Implemented.**
 
@@ -242,8 +242,8 @@ The generic page knows nothing about expense dates or task priorities — domain
   - When `storeType === "record"`: renders `VaultRecordView` (future Phase 2B).
 
 **What gets deleted:**
-- The auth + data loading boilerplate block (lines 30–86) duplicated across all 4 domain store page files.
-- `VaultDocumentsView.tsx` — fully absorbed into the generic with `storeType="doc"` + `domain="vault"`.
+- The auth + data loading boilerplate block (lines 30â€“86) duplicated across all 4 domain store page files.
+- `VaultDocumentsView.tsx` â€” fully absorbed into the generic with `storeType="doc"` + `domain="vault"`.
 
 #### Step-by-Step Plan (Phase 2A)
 
@@ -284,27 +284,27 @@ The generic page knows nothing about expense dates or task priorities — domain
 - None.
 
 **Out of Scope:**
-- Vault record stores (Banks, Passwords, Records) — Phase 2B.
+- Vault record stores (Banks, Passwords, Records) â€” Phase 2B.
 
 ---
 
-### Phase 2B — Vault Record Stores ⚠️
+### Phase 2B â€” Vault Record Stores âš ï¸
 
 **Status: Incorrectly implemented.**
 
-**What was intended:** `GenericStorePage` absorbs all boilerplate from the 3 vault record view files. `VaultRecordView` and `GlobalStoreView` were to be deleted — they are middle-layer display components that should not exist. Every adopter renders `<GenericStorePage>` directly, and `GenericStorePage` owns 100% of the UI.
+**What was intended:** `GenericStorePage` absorbs all boilerplate from the 3 vault record view files. `VaultRecordView` and `GlobalStoreView` were to be deleted â€” they are middle-layer display components that should not exist. Every adopter renders `<GenericStorePage>` directly, and `GenericStorePage` owns 100% of the UI.
 
 **What was actually done:** The boilerplate (`useVaultSection`, `useSelection`, `useDeleteConfirm`) was moved into `GenericStorePage`, but `VaultRecordView` (305 lines) and `GlobalStoreView` (698 lines) were **kept alive** as separate display layers that `GenericStorePage` delegates to. `BankDetailView` was explicitly scoped out and still bypasses `GenericStorePage` entirely, calling `VaultRecordView` directly. This violates the architecture.
 
 **Correct target state** (to be completed in Phase 2C):
-- `GenericStorePage` is the **only** store UI component — it owns tiles, search, list/tile toggle, bulk bar, header, theming, and all modals internally.
-- `GlobalStoreView.tsx` — **deleted**
-- `VaultRecordView.tsx` — **deleted**
-- `BankDetailView.tsx` — **deleted**, replaced by a thin `<GenericStorePage storeType="record">` wrapper with `headerActions` (Delete Bank button) and PIN-level `onActionClick` as opt-ins.
+- `GenericStorePage` is the **only** store UI component â€” it owns tiles, search, list/tile toggle, bulk bar, header, theming, and all modals internally.
+- `GlobalStoreView.tsx` â€” **deleted**
+- `VaultRecordView.tsx` â€” **deleted**
+- `BankDetailView.tsx` â€” **deleted**, replaced by a thin `<GenericStorePage storeType="record">` wrapper with `headerActions` (Delete Bank button) and PIN-level `onActionClick` as opt-ins.
 
 ---
 
-### Phase 2C — Collapse Display Layers into GenericStorePage ⬜
+### Phase 2C â€” Collapse Display Layers into GenericStorePage â¬œ
 
 **Status: Not started.**
 
@@ -313,28 +313,28 @@ The generic page knows nothing about expense dates or task priorities — domain
 **The fix:** Absorb all UI logic from both `GlobalStoreView` and `VaultRecordView` directly into `GenericStorePage`. The `storeType` prop switches the rendering mode internally. All opt-in UI elements (bulk rename, bulk link, headerActions, tileLayout, domain theming) become props on `GenericStorePage` directly.
 
 **What gets deleted:**
-- `src/components/common/store/GlobalStoreView.tsx` — fully absorbed into `GenericStorePage`
-- `src/components/vault/VaultRecordView.tsx` — fully absorbed into `GenericStorePage`
-- `src/components/vault/banks/BankDetailView.tsx` — replaced by a thin `<GenericStorePage>` wrapper
+- `src/components/common/store/GlobalStoreView.tsx` â€” fully absorbed into `GenericStorePage`
+- `src/components/vault/VaultRecordView.tsx` â€” fully absorbed into `GenericStorePage`
+- `src/components/vault/banks/BankDetailView.tsx` â€” replaced by a thin `<GenericStorePage>` wrapper
 
 **Current adopters that call `GenericStorePage` (all correct after 2C):**
-- `taskmanager/store/page.tsx` — `storeType="doc"`
-- `expense/store/page.tsx` — `storeType="doc"`
-- `education/store/page.tsx` — `storeType="doc"`
-- `medical/store/page.tsx` — `storeType="doc"`
-- `vault/documents/page.tsx` — `storeType="doc"`
-- `vault/passwords/PasswordView.tsx` — `storeType="record"`
-- `vault/records/RecordsView.tsx` — `storeType="record"`
-- `vault/banks/BankListView.tsx` — `storeType="record"` + `onActionClick → router.push(VAULT_BANK_DETAIL)`
-- `vault/banks/[id]/page.tsx` (new, replaces BankDetailView) — `storeType="record"` + `headerActions={<Delete Bank>}` + `onActionClick → open BankPinModal`
+- `taskmanager/store/page.tsx` â€” `storeType="doc"`
+- `expense/store/page.tsx` â€” `storeType="doc"`
+- `education/store/page.tsx` â€” `storeType="doc"`
+- `medical/store/page.tsx` â€” `storeType="doc"`
+- `vault/documents/page.tsx` â€” `storeType="doc"`
+- `vault/passwords/PasswordView.tsx` â€” `storeType="record"`
+- `vault/records/RecordsView.tsx` â€” `storeType="record"`
+- `vault/banks/BankListView.tsx` â€” `storeType="record"` + `onActionClick â†’ router.push(VAULT_BANK_DETAIL)`
+- `vault/banks/[id]/page.tsx` (new, replaces BankDetailView) â€” `storeType="record"` + `headerActions={<Delete Bank>}` + `onActionClick â†’ open BankPinModal`
 
 **Opt-in features all domains choose from (all centrally defined in GenericStorePage):**
 
 | Opt-in | Prop | storeType |
 |---|---|---|
 | Domain theming (colors) | `domain` | `doc` only |
-| File tile grid | `storeType="doc"` | — |
-| Record tile grid / list toggle | `storeType="record"` | — |
+| File tile grid | `storeType="doc"` | â€” |
+| Record tile grid / list toggle | `storeType="record"` | â€” |
 | Tile layout mode | `tileLayout: "standard" \| "body-only"` | `record` only |
 | Bulk rename | internal to doc mode | `doc` only |
 | Bulk link to parent | internal to doc mode | `doc` only |
@@ -378,11 +378,11 @@ The generic page knows nothing about expense dates or task priorities — domain
 - None.
 
 **Out of Scope:**
-- Any changes to `StoreDocumentModal`, `BulkLinkModal`, `TileView`, `DataListView` — these remain as sub-components used internally by `GenericStorePage`.
+- Any changes to `StoreDocumentModal`, `BulkLinkModal`, `TileView`, `DataListView` â€” these remain as sub-components used internally by `GenericStorePage`.
 
 ---
 
-## Stage 3: GenericMediaPage — Media Detail Standardization
+## Stage 3: GenericMediaPage â€” Media Detail Standardization
 
 > **Current focus.** Do not start until Stage 2 commit is verified.
 
@@ -391,22 +391,22 @@ The generic page knows nothing about expense dates or task priorities — domain
 Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independently implement the following identical structure:
 
 **Shared state (copy-pasted verbatim):**
-- `useMediaTracking({ tmdbId, userId, type, onRefresh })` — data fetch hook
-- `status`, `rating`, `reviewNotes`, `collectionIds` — form state
+- `useMediaTracking({ tmdbId, userId, type, onRefresh })` â€” data fetch hook
+- `status`, `rating`, `reviewNotes`, `collectionIds` â€” form state
 - `originalMedia` snapshot for `isDirty` diffing
-- `showRemove` + `collectionToRemove` — untrack/collection-remove flow
-- `handleRemove` — calls `removeMedia`, resets all state
-- `isTracked`, `title`, `year` — derived display values
+- `showRemove` + `collectionToRemove` â€” untrack/collection-remove flow
+- `handleRemove` â€” calls `removeMedia`, resets all state
+- `isTracked`, `title`, `year` â€” derived display values
 - `useEffect` load + hydrate pattern
-- `isDirty` `useMemo` — deep comparison vs `originalMedia`
-- `doCancel` — resets form state to original
-- `useNavigationGuard` — dirty-state nav interception
+- `isDirty` `useMemo` â€” deep comparison vs `originalMedia`
+- `doCancel` â€” resets form state to original
+- `useNavigationGuard` â€” dirty-state nav interception
 - `handleStatusClick` / `handleRatingChange` / `handleToggleCollection` / `handleRemoveCollectionClick` / `handleConfirmRemoveCollection`
-- `handleSave` — builds patch + extraCreateFields, calls `save`, updates `originalMedia`
+- `handleSave` â€” builds patch + extraCreateFields, calls `save`, updates `originalMedia`
 
 **Shared JSX structure (copy-pasted):**
-- Loading guard → spinner
-- Error guard → `BackButton + ErrorBanner`
+- Loading guard â†’ spinner
+- Error guard â†’ `BackButton + ErrorBanner`
 - `BackButton`
 - `Toast`
 - `MediaHeroSection` (posterPath, typeLabel, title, year, genres, overview, contentRating, watchProviders, fallbackIcon)
@@ -422,10 +422,10 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
 - `selectedSeason`, `seasonData`, `viewMode`, `episodeState`
 - Episode override conflict dialog (`overrideConfig`)
 - `useTmdbRetry` for season loading
-- `hydrateFromExisting` — also hydrates `episodeState`
+- `hydrateFromExisting` â€” also hydrates `episodeState`
 - `isDirty` includes episode state comparison
 - `doCancel` also resets `episodeState`
-- `handleParentStatusClick` — conflict detection before setting status
+- `handleParentStatusClick` â€” conflict detection before setting status
 - `handleConfirmOverride` / `handleCancelOverride`
 - `handleSave` patch also includes `episodes`
 - Tab bar JSX (`tracking` | `episodes` tabs)
@@ -433,8 +433,8 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
 - Episode override `ConfirmDialog`
 
 **Movie-only state and JSX (absorbed into `GenericMediaPage`, gated by `showWatchedOn` prop):**
-- `watchedOn` state + `setWatchedOn` — declared inside `GenericMediaPage`, only active when `showWatchedOn=true`
-- `handleStatusClick` auto-sets `watchedOn` to today when status → "watched" (only when `showWatchedOn=true`)
+- `watchedOn` state + `setWatchedOn` â€” declared inside `GenericMediaPage`, only active when `showWatchedOn=true`
+- `handleStatusClick` auto-sets `watchedOn` to today when status â†’ "watched" (only when `showWatchedOn=true`)
 - `handleRatingChange` auto-sets `watchedOn` to today when rating > 0 (only when `showWatchedOn=true`)
 - `handleSave` spreads `watched_on` into patch only when `showWatchedOn=true`
 - `StatusChipGroup` receives `showWatchedOn`, `watchedOn`, `onWatchedOnChange` only when `showWatchedOn=true`
@@ -453,7 +453,7 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
 | Fallback icon | `fallbackIcon: ReactNode` | Both |
 | Type label | `typeLabel: string` | Both |
 
-### Phase 3A — Core GenericMediaPage Component ⬜
+### Phase 3A â€” Core GenericMediaPage Component â¬œ
 
 **Status: Not started.**
 
@@ -461,24 +461,24 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
 - Create `src/components/media/pages/GenericMediaPage.tsx`.
   - Absorbs: all shared state, all shared handlers, all shared JSX listed above.
   - Accepts `mediaType`, `tmdbId`, `userId`, `userName`, `userAvatarUrl`, `collections`, `onRefresh`.
-  - Accepts `showWatchedOn?: boolean` — if true, passes `watchedOn` state to `StatusChipGroup`.
-  - Accepts `episodeSlot?: ReactNode` — rendered as a second tab "Episodes" only when provided. The tab bar itself is internal to `GenericMediaPage` (rendered only when `episodeSlot` is provided).
-  - Accepts `extraDirty?: boolean` — ORed with internal `isDirty`.
-  - Accepts `onExtraCancel?: () => void` — called inside `doCancel` after resetting form state.
-  - Accepts `extraPatchFields?: Partial<MediaPlaintext>` — merged into the save patch.
-  - Accepts `extraCreateFields?: Partial<MediaPlaintext>` — merged into the save create fields.
+  - Accepts `showWatchedOn?: boolean` â€” if true, passes `watchedOn` state to `StatusChipGroup`.
+  - Accepts `episodeSlot?: ReactNode` â€” rendered as a second tab "Episodes" only when provided. The tab bar itself is internal to `GenericMediaPage` (rendered only when `episodeSlot` is provided).
+  - Accepts `extraDirty?: boolean` â€” ORed with internal `isDirty`.
+  - Accepts `onExtraCancel?: () => void` â€” called inside `doCancel` after resetting form state.
+  - Accepts `extraPatchFields?: Partial<MediaPlaintext>` â€” merged into the save patch.
+  - Accepts `extraCreateFields?: Partial<MediaPlaintext>` â€” merged into the save create fields.
 
 **What gets deleted:**
-- `src/components/media/pages/MoviePage.tsx` — fully absorbed into `GenericMediaPage`. No wrapper needed.
-- `src/components/media/pages/TvSeriesPage.tsx` — all shared logic absorbed; TV-only episode state remains in a thin wrapper.
+- `src/components/media/pages/MoviePage.tsx` â€” fully absorbed into `GenericMediaPage`. No wrapper needed.
+- `src/components/media/pages/TvSeriesPage.tsx` â€” all shared logic absorbed; TV-only episode state remains in a thin wrapper.
 
 **New thin wrapper (TV only):**
-- `src/components/media/pages/TvSeriesPageWrapper.tsx` — owns TV-only state (`episodeState`, `selectedSeason`, `seasonData`, `viewMode`, `overrideConfig`), TV-only handlers (`handleParentStatusClick` with conflict detection, `handleConfirmOverride`, `hydrateFromExisting`), and passes `episodeSlot={<EpisodeMatrix .../>}`, `extraDirty`, `onExtraCancel`, `extraPatchFields`, `extraCreateFields` into `<GenericMediaPage mediaType="tv">`.
-- **No `MoviePageWrapper` is created** — `watchedOn` state is owned by `GenericMediaPage` internally and gated by `showWatchedOn`. The route page renders `GenericMediaPage` directly.
+- `src/components/media/pages/TvSeriesPageWrapper.tsx` â€” owns TV-only state (`episodeState`, `selectedSeason`, `seasonData`, `viewMode`, `overrideConfig`), TV-only handlers (`handleParentStatusClick` with conflict detection, `handleConfirmOverride`, `hydrateFromExisting`), and passes `episodeSlot={<EpisodeMatrix .../>}`, `extraDirty`, `onExtraCancel`, `extraPatchFields`, `extraCreateFields` into `<GenericMediaPage mediaType="tv">`.
+- **No `MoviePageWrapper` is created** â€” `watchedOn` state is owned by `GenericMediaPage` internally and gated by `showWatchedOn`. The route page renders `GenericMediaPage` directly.
 
 **Route pages updated:**
-- `src/app/(protected)/media/movie/[tmdb_id]/page.tsx` — change import from `MoviePage` → `GenericMediaPage` directly, with `showWatchedOn` prop.
-- `src/app/(protected)/media/tv/[tmdb_id]/page.tsx` — change import from `TvSeriesPage` → `TvSeriesPageWrapper`.
+- `src/app/(protected)/media/movie/[tmdb_id]/page.tsx` â€” change import from `MoviePage` â†’ `GenericMediaPage` directly, with `showWatchedOn` prop.
+- `src/app/(protected)/media/tv/[tmdb_id]/page.tsx` â€” change import from `TvSeriesPage` â†’ `TvSeriesPageWrapper`.
 
 #### Step-by-Step Plan (Phase 3A)
 
@@ -487,7 +487,7 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
    - Move all shared state and handlers from MoviePage into this component.
    - Add showWatchedOn?: boolean prop.
      - If true: declare watchedOn state internally, pass to StatusChipGroup.
-     - handleStatusClick auto-sets watchedOn to today when status → "watched".
+     - handleStatusClick auto-sets watchedOn to today when status â†’ "watched".
      - handleRatingChange auto-sets watchedOn to today when rating > 0.
      - handleSave spreads { watched_on: watchedOn || undefined } into patch.
    - Add episodeSlot?: ReactNode prop: if provided, render tab bar (tracking | episodes)
@@ -503,10 +503,10 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
 
 2. Create src/components/media/pages/TvSeriesPageWrapper.tsx.
    - Own: episodeState, selectedSeason, seasonData, viewMode, overrideConfig.
-   - Own: hydrateFromExisting — hydrates episodeState from loaded media.
-   - Own: handleParentStatusClick — checks for episode conflicts before setting status;
+   - Own: hydrateFromExisting â€” hydrates episodeState from loaded media.
+   - Own: handleParentStatusClick â€” checks for episode conflicts before setting status;
      shows overrideConfig dialog if conflicts exist.
-   - Own: handleConfirmOverride, handleCancelOverride — resolve the conflict dialog.
+   - Own: handleConfirmOverride, handleCancelOverride â€” resolve the conflict dialog.
    - Own: episode override ConfirmDialog JSX (rendered in this wrapper, not in GenericMediaPage).
    - Compute: extraDirty = (JSON.stringify(episodeState) !== JSON.stringify(originalEpisodes)).
    - Render <GenericMediaPage
@@ -524,12 +524,12 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
    - Pass EpisodeMatrix (full season selector + episode grid JSX from TvSeriesPage) as episodeSlot.
 
 3. Update src/app/(protected)/media/movie/[tmdb_id]/page.tsx.
-   - Change import from MoviePage → GenericMediaPage.
+   - Change import from MoviePage â†’ GenericMediaPage.
    - Pass showWatchedOn, fallbackIcon={<Film size={48}/>}, typeLabel="Movie".
    - No wrapper file is created for Movie.
 
 4. Update src/app/(protected)/media/tv/[tmdb_id]/page.tsx.
-   - Change import from TvSeriesPage → TvSeriesPageWrapper.
+   - Change import from TvSeriesPage â†’ TvSeriesPageWrapper.
 
 5. Delete src/components/media/pages/MoviePage.tsx.
 6. Delete src/components/media/pages/TvSeriesPage.tsx.
@@ -539,34 +539,350 @@ Both `MoviePage.tsx` (368 lines) and `TvSeriesPage.tsx` (764 lines) independentl
 - None.
 
 **Out of Scope:**
-- `CollectionDetailPage.tsx`, `EpisodePage.tsx`, `NewCollectionPage.tsx` — not duplicated, not touched.
-- `MediaHeroSection`, `StatusChipGroup`, `CollectionPicker`, `ReviewSection`, `StickyActionBar`, `UntrackConfirmation` — these remain as sub-components used internally by `GenericMediaPage`.
+- `CollectionDetailPage.tsx`, `EpisodePage.tsx`, `NewCollectionPage.tsx` â€” not duplicated, not touched.
+- `MediaHeroSection`, `StatusChipGroup`, `CollectionPicker`, `ReviewSection`, `StickyActionBar`, `UntrackConfirmation` â€” these remain as sub-components used internally by `GenericMediaPage`.
 
 ---
 
 ---
 
-## Stage 4: GenericDomainPage — Main Domain Shell Standardization
+## Stage 4: GenericDomainPage â€” Main Domain Shell Standardization
 
 > **Future.** Do not start until Stage 3 is reviewed and merged.
 
-**The problem:** `TaskManagerView`, `EducationView`, `ExpenseView`, and `MedicalView` each independently implement:
-- `useAuthBootstrap` + `Promise.all([fetchRows...])` data loading
-- `useLocalStorage` for active view mode
-- `useQueryModal` for query-param-driven modal state
-- Page header with title, description, and back button
-- `ErrorBanner` + loading guard
+### What the code actually looks like today
 
-Additionally, `ExpenseView` and `MedicalView` use their own `MonthRow`/`MedicalMonthRow` components instead of the shared `GenericActiveBox` that Task and Education already use. Migration to `GenericActiveBox` happens here.
+After reading all 4 domain views in full, the real duplication map is:
 
-**The fix:** A `GenericDomainPage` absorbs the shell. It accepts:
-- `loadData` callback (domain-specific fetch logic)
-- `title`, `description`, `backHref`
-- `activeView` / `onViewChange` (delegates to `useLocalStorage`)
-- `children` / slot props for domain-specific box components (`ActiveTasksBox`, `MonthRow`, etc.)
-- Modal rendering as a slot (domain provides the specific modal component)
+**Shared across all 4 (TaskManagerView, EducationView, ExpenseView, MedicalView):**
+- `useAuthBootstrap` + `Promise.all([...])` data loading
+- `BackButton` + `<h1>` + description paragraph â€” page header
+- `<LoadingSpinner />` loading guard
+- `<ErrorBanner />` error guard
+- A domain modal rendered conditionally (query-param-driven)
+- `useLocalStorage` for view mode state
 
-**What gets deleted:**
-- Duplicated shell code (auth bootstrap, page header, error banner, query-modal wiring) from each of the 4 domain view files
-- `MedicalMonthRow.tsx` and `MonthRow.tsx` — replaced by `GenericActiveBox` opt-in for all 4 domains
-- `TaskManagerView.tsx`, `EducationView.tsx`, `ExpenseView.tsx`, `MedicalView.tsx` shrink from ~300 lines each to ~80 lines of domain-specific slot configuration
+**Shared by Expense + Medical only (not Task/Education):**
+- `YearDropdown` + `selectedYear` state
+- `expensesByMonth` / `recordsByMonth` derivation (grouped by month for selected year)
+- `availableYears` derivation (distinct years from data + current year)
+- `auto-scroll to current month tile` `useEffect`
+- `BoxContainer` wrapping the month grid
+
+**Shared by Task + Education only (not Expense/Medical):**
+- `GenericActiveBox` with months/priority view toggle
+- `ActiveTasksBox` / `ActiveEducationsBox` â€” left 3-col panel
+- `CompletedTasksBox` / `CompletedEducationsBox` â€” right panel
+- `useQueryModal` (Education uses it; TaskManager uses its own equivalent that will be replaced)
+
+**Currently separate `MonthRow` patterns:**
+- `MonthRow.tsx` (expense) â†’ `MonthTile` â†’ 5-cap preview + "View All" button â†’ `ROUTES.EXPENSE_ALL?year=X&month=Y`
+- `MedicalMonthRow.tsx` (medical) â†’ `MonthTile` â†’ 5-cap preview + "View All" button â†’ `ROUTES.MEDICAL_ALL?year=X&month=Y`
+- `GenericActiveBox` months view (task/education) â†’ `MonthTile` directly â†’ **no cap, no "View All"** â€” this is what we're standardizing
+
+---
+
+### Phase 4A â€” GenericMonthRow âœ…
+
+**New file:** `src/components/common/GenericMonthRow.tsx`
+
+**What it replaces:** `MonthRow.tsx` (expense) and `MedicalMonthRow.tsx` (medical), and the `MonthTile` usage inside `GenericActiveBox`'s months view.
+
+**Props:**
+```ts
+interface GenericMonthRowProps<T> {
+  monthName: string;
+  monthIndex: number;        // 0-based
+  year: number;
+  items: T[];
+  isCurrentMonth?: boolean;
+  getSubtitle: (items: T[]) => ReactNode;   // e.g. "â‚¹ 3,200 Â· 4 items" or "3 records"
+  renderTable: (items: T[]) => ReactNode;   // domain-specific table (ExpenseTable, MedicalTable, task list)
+  viewAllHref: string;                      // route to navigate to for "View All"
+  viewAllLabel?: string;                    // e.g. "View All January (8)" â€” auto-generated if omitted
+}
+```
+
+**Behavior:**
+- Shows latest 5 items (sorted by date desc) via `renderTable`
+- Shows `footerActions` "View All {monthName} ({count})" button **only when `items.length > 5`**
+- `isCurrentMonth` drives `defaultExpanded`, `highlight`, and the DOM `id="current-month-tile"` for auto-scroll
+- Fully replaces `MonthRow` and `MedicalMonthRow`
+
+**`GenericActiveBox` update (`src/components/common/GenericActiveBox.tsx`):**
+- In the `view === "months"` branch, replace direct `<MonthTile>` with `<GenericMonthRow>` so Task/Education months view gets the 5-cap + "View All" button
+- Requires passing `nowYear`, `getSubtitle`, `renderTable`, `viewAllHref` through from domain callers (`ActiveTasksBox`, `ActiveEducationsBox`)
+
+**Files changed in Phase 4A:**
+- `src/components/common/GenericMonthRow.tsx` â€” **NEW**
+- `src/components/common/GenericActiveBox.tsx` â€” add `getSubtitle`, `renderTable`, `viewAllHref` props; use `GenericMonthRow` in months view
+- `src/components/taskmanager/ActiveTasksBox.tsx` â€” pass new props to `GenericActiveBox`
+- `src/components/education/ActiveEducationsBox.tsx` â€” pass new props to `GenericActiveBox`
+- `src/components/expense/MonthRow.tsx` â€” **DELETE** (replaced by `GenericMonthRow`)
+- `src/components/medical/MedicalMonthRow.tsx` â€” **DELETE** (replaced by `GenericMonthRow`)
+- `src/components/expense/ExpenseView.tsx` â€” replace `<MonthRow>` with `<GenericMonthRow>`
+- `src/components/medical/MedicalView.tsx` â€” replace `<MedicalMonthRow>` with `<GenericMonthRow>`
+- `src/routes/paths.ts` â€” add `TASK_MANAGER_ALL` and `EDUCATION_ALL` routes
+- `src/app/(protected)/taskmanager/all/page.tsx` â€” **NEW** route page; accepts `?year=X&month=Y` query params; mirrors `/expense/all` and `/medical/all` in structure
+- `src/app/(protected)/education/all/page.tsx` â€” **NEW** route page; accepts `?year=X&month=Y` query params; mirrors same pattern
+
+---
+
+### Phase 4B â€” GenericDomainPage âœ…
+
+**New file:** `src/components/common/GenericDomainPage.tsx`
+
+#### Opt-in feature table
+
+| Opt-in | Prop | Used by |
+|---|---|---|
+| Page title | `title: string` | All (required) |
+| Page description | `description: string` | All (required) |
+| Back href | `backHref: string` | All (required) |
+| Data loader | `loadData: (uid: string) => Promise<void>` | All (required) |
+| Main content body | `renderBody: (ctx) => ReactNode` | All (required) |
+| Domain modal | `modalSlot?: ReactNode` | All |
+| Header stat line | `headerStat?: ReactNode` | Expense (yearly total), Medical (record count) |
+| Store button | `storeHref?: string; storeLabel?: string; storeIcon?: ReactNode` | All 4 |
+| Completed items slot | `completedSlot?: ReactNode` | Task, Education |
+| Misc slot | `miscSlot?: ReactNode` | Task Manager only (notes box) |
+
+`renderBody` receives a context object `{ userId, istDate, nowYear, nowMonth, isLoading }` so the domain can render its specific content (month grid, priority view, etc.) using the auth data managed inside the generic page.
+
+#### Layout rules (no visual change from current)
+
+```
+If completedSlot provided (Task, Education):
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ renderBody()     â”‚ completedSlot      â”‚
+  â”‚ (left, 2/3)      â”‚ + miscSlot         â”‚
+  â”‚                  â”‚ (right, 1/3)       â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+
+If completedSlot NOT provided (Expense, Medical):
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ BackButton    title   [storeBtn top-rt] â”‚
+  â”‚ description   headerStat               â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€ renderBody() full width â”€â”€â”€â”€â”€â”€â”€â”€â”
+  â”‚ BoxContainer with month/table view      â”‚
+  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+```
+
+#### What each domain view's adoption looks like
+
+**TaskManagerView after Stage 4:**
+```tsx
+<GenericDomainPage
+  title="Task Manager"
+  description="Track active tasks, completed tasks, and notes."
+  backHref={ROUTES.DASHBOARD}
+  loadData={loadAllData}
+  storeHref={ROUTES.TASK_MANAGER_STORE}
+  storeLabel="Notes Store"
+  storeIcon={<FolderIcon />}
+  completedSlot={<CompletedTasksBox ... />}
+  miscSlot={<NotesBox ... />}
+  modalSlot={taskModalTarget && <TaskModal ... />}
+  renderBody={({ userId, istDate, nowYear, nowMonth, isLoading }) => (
+    <ActiveTasksBox ... />
+  )}
+/>
+```
+
+**ExpenseView after Stage 4:**
+```tsx
+<GenericDomainPage
+  title="Expenses"
+  description="Track and manage your spending."
+  backHref={ROUTES.DASHBOARD}
+  loadData={loadData}
+  storeHref={ROUTES.EXPENSE_STORE}
+  storeLabel="Receipt Store"
+  storeIcon={<FolderIcon />}
+  headerStat={<p>Total for {selectedYear}: â‚¹ {yearlyTotal.toLocaleString("en-IN")}</p>}
+  modalSlot={modalTarget && <ExpenseModal ... />}
+  renderBody={({ isLoading }) => (
+    /* BoxContainer + ViewToggle + YearDropdown + month grid of GenericMonthRow */
+  )}
+/>
+```
+
+Note: `selectedYear`, `viewMode`, `yearlyTotal`, `expensesByMonth` derivations â€” these **remain in ExpenseView**, passed into `renderBody` closure. `GenericDomainPage` does not own year/view state; it only owns auth, loading, error, header, and layout shell.
+
+#### What gets deleted from each view
+
+| View | Lines deleted |
+|---|---|
+| `TaskManagerView.tsx` | `useAuthBootstrap` block, `useRouter`/`useSearchParams` modal wiring, `setModalParam`/`clearModalParam`, header JSX, `ErrorBanner`, loading guard |
+| `EducationView.tsx` | Same shell boilerplate |
+| `ExpenseView.tsx` | Same shell boilerplate |
+| `MedicalView.tsx` | Same shell boilerplate |
+
+**TaskManager modal wiring** (`setModalParam`, `clearModalParam`, manual `useMemo` for `taskModalTarget`/`noteModalTarget`) gets replaced by two calls to `useQueryModal` â€” one for tasks, one for notes â€” since `useQueryModal` supports any prefix string. These calls live inside `TaskManagerView` before it passes `modalSlot` to `GenericDomainPage`.
+
+**Files changed in Phase 4B:**
+- `src/components/common/GenericDomainPage.tsx` â€” **NEW**
+- `src/components/taskmanager/TaskManagerView.tsx` â€” adopt `GenericDomainPage`; replace manual modal wiring with `useQueryModal` Ã— 2
+- `src/components/education/EducationView.tsx` â€” adopt `GenericDomainPage`
+- `src/components/expense/ExpenseView.tsx` â€” adopt `GenericDomainPage`
+- `src/components/medical/MedicalView.tsx` â€” adopt `GenericDomainPage`
+
+---
+
+### Step-by-Step Plan
+
+```
+Phase 4A:
+1. âœ… Add TASK_MANAGER_ALL = "/taskmanager/all" and EDUCATION_ALL = "/education/all"
+   to src/routes/paths.ts.
+   Create src/app/(protected)/taskmanager/all/page.tsx â€” mirrors /expense/all and
+   /medical/all in structure: accepts ?year=X&month=Y, fetches tasks for that
+   period, renders them in a full table view using the existing GenericViewPage.
+
+   Create src/app/(protected)/education/all/page.tsx â€” same pattern for educations.
+
+2. âœ… Create src/components/common/GenericMonthRow.tsx.
+   - Generic MonthTile wrapper accepting items: T[], getSubtitle, renderTable, viewAllHref.
+   - Shows 5 latest items (sorted by date desc).
+   - Shows footerActions "View All" button only when items.length > 5.
+
+3. âœ… Update src/components/common/GenericActiveBox.tsx.
+   - Add getSubtitle, renderTable, viewAllHref props.
+   - Replace <MonthTile> in months view with <GenericMonthRow>.
+   - Pass nowYear into GenericMonthRow for the viewAllHref construction.
+
+4. âœ… Update src/components/taskmanager/ActiveTasksBox.tsx.
+   - Pass getSubtitle, renderTable, viewAllHref to GenericActiveBox.
+
+5. âœ… Update src/components/education/ActiveEducationsBox.tsx.
+   - Pass getSubtitle, renderTable, viewAllHref to GenericActiveBox.
+
+6. âœ… Update src/components/expense/ExpenseView.tsx.
+   - Replace <MonthRow> with <GenericMonthRow>.
+
+7. âœ… Update src/components/medical/MedicalView.tsx.
+   - Replace <MedicalMonthRow> with <GenericMonthRow>.
+
+8. âœ… Delete src/components/expense/MonthRow.tsx.
+9. âœ… Delete src/components/medical/MedicalMonthRow.tsx.
+
+Phase 4B:
+10. âœ… Create src/components/common/GenericDomainPage.tsx.
+    - Owns: page header, LoadingSpinner, ErrorBanner, layout shell.
+    - Accepts all opt-in props as described above.
+    - Implements dual-column layout when completedSlot provided; full-width otherwise.
+
+11. âœ… Update src/components/taskmanager/TaskManagerView.tsx.
+    - Replace manual modal wiring with useQueryModal Ã— 2 (tasks + notes).
+    - Adopt GenericDomainPage.
+
+12. âœ… Update src/components/education/EducationView.tsx.
+    - Adopt GenericDomainPage.
+
+13. âœ… Update src/components/expense/ExpenseView.tsx.
+    - Adopt GenericDomainPage (build on top of Phase 4A changes).
+
+14. âœ… Update src/components/medical/MedicalView.tsx.
+    - Adopt GenericDomainPage (build on top of Phase 4A changes).
+```
+
+### Human Actions Required
+
+- None. Creating `/taskmanager/all` and `/education/all` routes is part of Phase 4A step 1 above.
+
+### Out of Scope for Stage 4
+- `TaskModal`, `NoteModal`, `ExpenseModal`, `MedicalModal`, `EducationModal` â€” not touched
+- CRUD handler logic inside domain views â€” stays domain-owned, unchanged
+- `GenericStorePage`, `GenericMediaPage` â€” already complete from Stages 2 and 3
+
+
+## Stage 5: Structural Loop Deduplication
+
+> **Complete.**
+
+### What Stage 5 replaces
+
+Both `GenericActiveBox` and `GenericViewPage` manually iterated over priority groups and month groups with nearly identical JSX: the `<section>` wrapper for priorities, the `<MonthTile>` wrapper for months, the "View All" button logic, and the empty-state handling. `GenericMonthRow` still implemented its own raw grid-cols-12 column mapping (missed during Phase 4A's grid consolidation).
+
+### Components created
+
+| Component | What it absorbs |
+|---|---|
+| `GenericPriorityList` | Priority-group mapping loop + section wrapper + "View All" button |
+| `GenericMonthsList` | Month-group mapping loop + MonthTile/GenericMonthRow switching |
+| `GenericMonthRow` (upgraded) | Now uses `GenericDataGrid` internally; accepts `previewCount` for capped previews |
+
+### Phase 5A — GenericMonthRow Upgrade
+
+**File:** `src/components/common/GenericMonthRow.tsx`
+
+- Replaced manual `gridSpan`/`HEADER_CLASSES`/row-mapping JSX with a single `<GenericDataGrid>` call.
+- Added `previewCount?: number` prop — when set, caps displayed items and shows the "View All" button; when omitted, shows all items without a "View All" link.
+- Added `getItemKey` prop (required by `GenericDataGrid`).
+- Removed the `gridSpan` helper — all column spanning is now handled by Tailwind `col-span-N` via `GenericDataGrid`.
+
+### Phase 5B — GenericPriorityList
+
+**File:** `src/components/common/GenericPriorityList.tsx` (NEW)
+
+- Accepts `priorities`, `getItems(priority) => T[]`, `getColors(priority) => { border, bg }`, `renderBadge(priority) => ReactNode`.
+- Uses callback props (`getItems`, `getColors`, `renderBadge`) so both callers can adapt their own data shapes: `GenericActiveBox` uses `Record<string, T[]>` from `byPriority()`, while `GenericViewPage` uses `PriorityGroup<T>[]`.
+- Maps over priorities -> renders `<section>` with priority-specific border/bg colours -> delegates item rendering to `<GenericDataGrid>`.
+- `previewCount?: number` — when set, slices items and shows "View All ({count})" button; when omitted, shows all items with no "View All" link.
+- `hideEmpty?: boolean` — when true, skips empty priority groups entirely (used by `GenericViewPage` full view); when false, shows "None" placeholder (used by `GenericActiveBox`).
+
+### Phase 5C — GenericMonthsList
+
+**File:** `src/components/common/GenericMonthsList.tsx` (NEW)
+
+- Two rendering modes controlled by `previewCount`:
+  - **Preview mode** (`previewCount` set): renders `<GenericMonthRow>` for each standard month, with capped items and a "View All" button. Falls back to `<MonthTile>` + `<GenericDataGrid>` for non-standard months (e.g. "Past Years", "Unscheduled").
+  - **Full mode** (`previewCount` omitted): renders `<MonthTile>` + `<GenericDataGrid>` for each month group, with `isCurrentMonth` highlighting via `selectedYear` prop and `defaultExpanded` on the first tile.
+- Accepts `getSubtitle`, `getDate`, `viewAllBaseHref` for preview mode; `hideHeaderOnMobile`, `rowClassName` for full mode.
+
+### Phase 5D — Caller Refactoring
+
+**GenericActiveBox** (`src/components/common/GenericActiveBox.tsx`):
+- Priority view -> `<GenericPriorityList previewCount={5} .../>`
+- Months view -> `<GenericMonthsList previewCount={5} .../>`
+- Removed direct imports of `MonthTile`, `GenericMonthRow`, `GenericDataGrid`, `useRouter`.
+- Added optional `getItemKey` prop (defaults to `(item) => item.id`).
+
+**GenericViewPage** (`src/components/common/GenericViewPage.tsx`):
+- Priority view -> `<GenericPriorityList hideEmpty .../>`
+- Months view -> `<GenericMonthsList .../>`
+- Removed direct imports of `MonthTile`, `MONTH_NAMES`.
+
+**ExpenseView / MedicalView:**
+- Added `getItemKey` and `previewCount={5}` props to their direct `<GenericMonthRow>` calls (these views use `GenericMonthRow` directly, not through `GenericMonthsList`, because they have a custom multi-column layout).
+
+### Files changed in Stage 5
+
+| File | Action |
+|---|---|
+| `src/components/common/GenericMonthRow.tsx` | MODIFY — use GenericDataGrid, add previewCount/getItemKey |
+| `src/components/common/GenericPriorityList.tsx` | NEW |
+| `src/components/common/GenericMonthsList.tsx` | NEW |
+| `src/components/common/GenericActiveBox.tsx` | MODIFY — delegate to GenericPriorityList/GenericMonthsList |
+| `src/components/common/GenericViewPage.tsx` | MODIFY — delegate to GenericPriorityList/GenericMonthsList |
+| `src/components/expense/ExpenseView.tsx` | MODIFY — add getItemKey + previewCount to GenericMonthRow |
+| `src/components/medical/MedicalView.tsx` | MODIFY — add getItemKey + previewCount to GenericMonthRow |
+
+### Out of Scope for Stage 5
+
+- Stage 6 (Generic Modal Shell) — deferred.
+- Any changes to domain modals, CRUD hooks, or query hooks.
+- `GenericStorePage` display-layer collapse (Phase 2C).
+
+---
+
+## Stage 6: Generic Modal Shell
+
+**Goal:** Create a unified `GenericDomainModal` shell to eliminate the exact structural duplication across `TaskModal`, `ExpenseModal`, `EducationModal`, and `MedicalModal`.
+
+**Implementation:**
+- Extract the common Dialog overlay, Title header, standard padding, and responsive constraints.
+- Centralize the Action footer (Save/Delete/Cancel buttons) and their loading states.
+- Centralize the Document attachment UI (Paperclip, file list, upload logic).
+- Make it an opt-in wrapper where domains only need to provide their specific inner `<form>` fields as `children`.
