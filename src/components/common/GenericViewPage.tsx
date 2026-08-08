@@ -2,15 +2,15 @@
 
 import type { ReactNode } from "react";
 import BoxContainer, { SCROLLABLE_CLASSES } from "./BoxContainer";
-import SortableHeader from "./SortableHeader";
 import type { SortState } from "./SortableHeader";
 import type { ViewToggleOption } from "./ViewToggle";
 import ViewToggle from "./ViewToggle";
+import GenericDataGrid from "./GenericDataGrid";
+import GenericPriorityList from "./GenericPriorityList";
+import GenericMonthsList from "./GenericMonthsList";
 import YearDropdown from "./YearDropdown";
 import MonthDropdown from "./MonthDropdown";
-import MonthTile from "./MonthTile";
 import PriorityBadge from "./PriorityBadge";
-import { MONTH_NAMES } from "@/lib/constants";
 import type { Priority } from "@/types/common";
 import { PRIORITIES } from "@/types/common";
 import { getPriorityColor } from "@/lib/priorityColors";
@@ -165,15 +165,6 @@ interface GenericViewPageProps<T, C extends string = string> {
   priorityColumns?: ColumnDef<T, string>[];
 }
 
-// ── Helpers ──
-
-const gridSpan = (n: number): React.CSSProperties => ({
-  gridColumn: `span ${n} / span ${n}`,
-});
-
-const HEADER_CLASSES =
-  "text-xs font-semibold text-zinc-500 uppercase tracking-wider";
-
 // ── Default priority config ──
 
 const DEFAULT_PRIORITY_CONFIG: PriorityGroupConfig = {
@@ -181,108 +172,6 @@ const DEFAULT_PRIORITY_CONFIG: PriorityGroupConfig = {
   getColors: (p) => getPriorityColor(p as Priority),
   renderBadge: (p) => <PriorityBadge priority={p as Priority} />,
 };
-
-// ── Internal grid renderer ──
-
-/**
- * Renders a 12-column grid: sortable headers + rows + empty state.
- * Extracted so all three view strategies (all, months, priority)
- * share the same grid markup without duplication.
- */
-function renderGrid<T, C extends string>(
-  items: T[],
-  columns: ColumnDef<T, C>[],
-  getItemKey: (item: T) => string,
-  sortState: SortState<C> | null | undefined,
-  onSortChange: ((next: SortState<C>) => void) | undefined,
-  emptyMessage: string,
-  emptySubMessage: string | undefined,
-  onRowClick: ((item: T) => void) | undefined,
-  rowClassName: string | ((item: T) => string) | undefined,
-) {
-  const resolveRowClass = (item: T): string => {
-    if (typeof rowClassName === "function") return rowClassName(item);
-    return rowClassName ?? "";
-  };
-
-  return (
-    <>
-      {items.length === 0 ? (
-        <div className="px-2 py-3 text-sm text-zinc-500 dark:text-zinc-400">
-          <p>{emptyMessage}</p>
-          {emptySubMessage && (
-            <p className="mt-1 text-xs">{emptySubMessage}</p>
-          )}
-        </div>
-      ) : (
-        <>
-          {/* Column headers */}
-          <div className="grid w-full grid-cols-12 gap-2 px-2 pb-1">
-            {columns.map((col) => {
-              if (col.sortColumn && sortState !== undefined && onSortChange) {
-                return (
-                  <div key={col.key} style={gridSpan(col.colSpan)}>
-                    <SortableHeader
-                      as="div"
-                      column={col.sortColumn}
-                      label={col.header}
-                      sortState={sortState}
-                      onSort={onSortChange}
-                    />
-                  </div>
-                );
-              }
-              return (
-                <div
-                  key={col.key}
-                  style={gridSpan(col.colSpan)}
-                  className={HEADER_CLASSES}
-                >
-                  {col.header}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Rows */}
-          <div className="space-y-2">
-            {items.map((item) => {
-              const extra = resolveRowClass(item);
-              const clickable = !!onRowClick;
-              return (
-                <div
-                  key={getItemKey(item)}
-                  className={`grid w-full grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm dark:border-zinc-700 ${extra} ${clickable ? "cursor-pointer" : ""}`}
-                  onClick={
-                    clickable ? () => onRowClick!(item) : undefined
-                  }
-                  role={clickable ? "button" : undefined}
-                  tabIndex={clickable ? 0 : undefined}
-                  onKeyDown={
-                    clickable
-                      ? (e: React.KeyboardEvent) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            onRowClick!(item);
-                          }
-                        }
-                      : undefined
-                  }
-                >
-                  {columns.map((col) => (
-                    <div key={col.key} style={gridSpan(col.colSpan)}>
-                      {col.render(item)}
-                    </div>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </>
-  );
-}
 
 // ── Component ──
 
@@ -355,86 +244,49 @@ export default function GenericViewPage<T, C extends string = string>({
         className={`${SCROLLABLE_CLASSES} space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800`}
       >
         {/* ── All / Flat List View ── */}
-        {currentView === "all" &&
-          renderGrid(
-            items,
-            colsForCompletion,
-            getItemKey,
-            sortState,
-            onSortChange,
-            emptyMessage,
-            emptySubMessage,
-            onRowClick,
-            rowClassName,
-          )}
+        {currentView === "all" && (
+          <GenericDataGrid
+            items={items}
+            columns={colsForCompletion}
+            getItemKey={getItemKey}
+            sortState={sortState}
+            onSortChange={onSortChange}
+            emptyMessage={emptyMessage}
+            emptySubMessage={emptySubMessage}
+            onRowClick={onRowClick}
+            rowClassName={rowClassName}
+          />
+        )}
 
         {/* ── Priority View ── */}
         {currentView === "priority" && priorityGroups && (
-          <>
-            {priorityGroupConfig.priorities.map((priority) => {
-              const group = priorityGroups.find(
-                (g) => g.priority === priority,
-              );
-              if (!group || group.items.length === 0) return null;
-              const colors = priorityGroupConfig.getColors(priority);
-              return (
-                <section
-                  key={priority}
-                  className={`rounded-lg border ${colors.border} ${colors.bg} p-2`}
-                >
-                  <h3 className="mb-2">
-                    {priorityGroupConfig.renderBadge(priority)}
-                  </h3>
-                  {renderGrid(
-                    group.items,
-                    colsForPriority,
-                    getItemKey,
-                    undefined, // no sorting in priority view
-                    undefined,
-                    `No ${priority} items.`,
-                    undefined,
-                    onRowClick,
-                    rowClassName,
-                  )}
-                </section>
-              );
-            })}
-          </>
+          <GenericPriorityList
+            priorities={priorityGroupConfig.priorities}
+            getItems={(p) =>
+              priorityGroups.find((g) => g.priority === p)?.items ?? []
+            }
+            getColors={(p) => priorityGroupConfig.getColors(p)}
+            renderBadge={(p) => priorityGroupConfig.renderBadge(p)}
+            columns={colsForPriority}
+            getItemKey={getItemKey}
+            hideEmpty
+            onRowClick={onRowClick}
+            rowClassName={rowClassName}
+          />
         )}
 
         {/* ── Months View ── */}
         {currentView === "months" && monthGroups && (
-          <>
-            {monthGroups.map((group, index) => {
-              const isCurrentMonth =
-                nowYear !== undefined &&
-                nowMonth !== undefined &&
-                yearFilter?.selectedYear === nowYear &&
-                group.label.startsWith(MONTH_NAMES[nowMonth]);
-              return (
-                <MonthTile
-                  key={group.label}
-                  title={group.label}
-                  defaultExpanded={index === 0}
-                  accent
-                  className="text-sm"
-                  highlight={isCurrentMonth}
-                >
-                  {renderGrid(
-                    group.items,
-                    colsForMonths,
-                    getItemKey,
-                    undefined, // no sorting in month view
-                    undefined,
-                    `No items in ${group.label}.`,
-                    undefined,
-                    onRowClick,
-                    rowClassName,
-                  )}
-                </MonthTile>
-              );
-            })}
-          </>
+          <GenericMonthsList
+            monthGroups={monthGroups}
+            columns={colsForMonths}
+            getItemKey={getItemKey}
+            nowYear={nowYear ?? new Date().getFullYear()}
+            nowMonth={nowMonth ?? new Date().getMonth()}
+            selectedYear={yearFilter?.selectedYear}
+            onRowClick={onRowClick}
+            rowClassName={rowClassName}
+          />
         )}
       </div>
     </BoxContainer>

@@ -3,15 +3,15 @@
 import { type ReactNode, useEffect } from "react";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import ViewToggle from "@/components/common/ViewToggle";
-import MonthTile from "@/components/common/MonthTile";
 import Button from "@/components/common/Button";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
-import { MONTH_NAMES } from "@/lib/constants";
 import { activeByMonths, byPriority } from "@/lib/viewHelpers";
+import type { ColumnDef } from "./GenericViewPage";
+import GenericPriorityList from "./GenericPriorityList";
+import GenericMonthsList from "./GenericMonthsList";
 
 /**
  * Minimum shape for an active item — must have id, priority, and optional due_date.
- * Extend with domain-specific fields via the renderItem callback.
  */
 export interface ActiveItem {
   id: string;
@@ -31,12 +31,23 @@ interface GenericActiveBoxProps<T extends ActiveItem> {
   viewOptions: readonly ViewToggleOption<string>[];
   priorities: readonly string[];
   getPriorityColor: (priority: string) => { border: string; bg: string };
-  renderItem: (item: T) => ReactNode;
   renderPriorityBadge: (priority: string) => ReactNode;
-  /** Optional column headers rendered above item lists (only when the list has items) */
-  renderHeader?: () => ReactNode;
   /** Optional className override for the outer BoxContainer (defaults to "lg:col-span-2") */
   className?: string;
+  /** Subtitle rendered in each GenericMonthRow (used in months view only). */
+  getSubtitle?: (items: T[]) => ReactNode;
+  /** Base href for "View All" navigation (e.g. "/taskmanager/all"). Appended with ?year=X&month=Y. */
+  viewAllBaseHref?: string;
+  /** Column definitions for rendering items as bordered grid boxes. */
+  columns: ColumnDef<T>[];
+  /** Stable unique key for each item. Defaults to `item.id`. */
+  getItemKey?: (item: T) => string;
+  /** Called when a row is clicked (opens the domain modal). */
+  onRowClick?: (item: T) => void;
+  /** Optional per-row action button (e.g. "Complete" for tasks/education). */
+  rowAction?: (item: T) => ReactNode;
+  /** Optional CSS class modifier per item (e.g. priority-colored left border). */
+  getItemClassName?: (item: T) => string;
 }
 
 export default function GenericActiveBox<T extends ActiveItem>({
@@ -51,10 +62,15 @@ export default function GenericActiveBox<T extends ActiveItem>({
   viewOptions,
   priorities,
   getPriorityColor,
-  renderItem,
   renderPriorityBadge,
-  renderHeader,
   className,
+  getSubtitle,
+  viewAllBaseHref,
+  columns,
+  getItemKey = (item) => (item as ActiveItem).id,
+  onRowClick,
+  rowAction,
+  getItemClassName,
 }: GenericActiveBoxProps<T>) {
   const priorityGroups = byPriority(items, [...priorities]);
   const monthGroups = activeByMonths(items, nowYear);
@@ -66,7 +82,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
       document
         .getElementById("current-month-tile")
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100); // small delay to allow DOM paint
+    }, 100);
     return () => clearTimeout(timeout);
   }, [view, isLoading]);
 
@@ -102,54 +118,40 @@ export default function GenericActiveBox<T extends ActiveItem>({
           <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
         )}
 
-        {!isLoading &&
-          view === "priority" &&
-          priorities.map((priority) => {
-            const group = priorityGroups[priority] ?? [];
-            const colors = getPriorityColor(priority);
+        {!isLoading && view === "priority" && (
+          <GenericPriorityList
+            priorities={priorities}
+            getItems={(p) => priorityGroups[p] ?? []}
+            getColors={getPriorityColor}
+            renderBadge={renderPriorityBadge}
+            columns={columns}
+            getItemKey={getItemKey}
+            previewCount={5}
+            viewAllHref={viewAllBaseHref ? `${viewAllBaseHref}?view=priority` : undefined}
+            onRowClick={onRowClick}
+            rowAction={rowAction}
+            getItemClassName={getItemClassName}
+            hideHeaderOnMobile
+          />
+        )}
 
-            return (
-              <section
-                key={priority}
-                className={`rounded-lg border ${colors.border} ${colors.bg} p-2`}
-              >
-                <h3 className="mb-2">{renderPriorityBadge(priority)}</h3>
-                {group.length === 0 && (
-                  <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
-                )}
-                <div className="space-y-2">
-                  {group.length > 0 && renderHeader && renderHeader()}
-                  {group.map((item) => renderItem(item))}
-                </div>
-              </section>
-            );
-          })}
-
-        {!isLoading &&
-          view === "months" &&
-          monthGroups.map((group) => {
-            const isCurrentMonth = MONTH_NAMES[nowMonth] === group.label;
-            return (
-              <MonthTile
-                key={group.label}
-                id={isCurrentMonth ? "current-month-tile" : undefined}
-                title={group.label}
-                defaultExpanded={isCurrentMonth}
-                accent={group.items.length > 0}
-                className="text-sm"
-                highlight={isCurrentMonth}
-              >
-                {group.items.length === 0 ? (
-                  <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
-                ) : (
-                  <div className="space-y-2">
-                    {group.items.length > 0 && renderHeader && renderHeader()}
-                    {group.items.map((item) => renderItem(item))}
-                  </div>
-                )}
-              </MonthTile>
-            );
-          })}
+        {!isLoading && view === "months" && (
+          <GenericMonthsList
+            monthGroups={monthGroups}
+            columns={columns}
+            getItemKey={getItemKey}
+            nowYear={nowYear}
+            nowMonth={nowMonth}
+            previewCount={5}
+            viewAllBaseHref={viewAllBaseHref}
+            getSubtitle={getSubtitle}
+            getDate={(item) => (item as ActiveItem).due_date}
+            onRowClick={onRowClick}
+            rowAction={rowAction}
+            getItemClassName={getItemClassName}
+            hideHeaderOnMobile
+          />
+        )}
       </div>
     </BoxContainer>
   );

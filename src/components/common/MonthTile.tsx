@@ -145,7 +145,7 @@ export default function MonthTile({
       </div>
 
       {/* Body */}
-      {isExpanded && children && (
+      {isExpanded && (children || footerActions) && (
         <div className="border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
           {children}
           {footerActions && (

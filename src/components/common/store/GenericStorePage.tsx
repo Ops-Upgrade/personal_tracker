@@ -70,24 +70,40 @@ const DOMAIN_THEMES = {
     lightBg:
       "bg-sky-50 text-sky-700 hover:bg-sky-100 dark:bg-sky-950/30 dark:text-sky-400 dark:hover:bg-sky-950/50",
     inputFocus: "focus:border-sky-500 focus:ring-sky-500",
+    hoverBorder: "hover:border-sky-500 dark:hover:border-sky-500/50",
+    icon: "text-sky-500",
+    iconLarge: "text-sky-500/50",
+    iconHover: "hover:text-sky-600 dark:hover:text-sky-400",
   },
   education: {
     primaryBtn: "bg-amber-600 hover:bg-amber-500 focus-visible:outline-amber-600",
     lightBg:
       "bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:hover:bg-amber-950/50",
     inputFocus: "focus:border-amber-500 focus:ring-amber-500",
+    hoverBorder: "hover:border-amber-500 dark:hover:border-amber-500/50",
+    icon: "text-amber-500",
+    iconLarge: "text-amber-500/50",
+    iconHover: "hover:text-amber-600 dark:hover:text-amber-400",
   },
   medical: {
     primaryBtn: "bg-rose-600 hover:bg-rose-500 focus-visible:outline-rose-600",
     lightBg:
       "bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-400 dark:hover:bg-rose-950/50",
     inputFocus: "focus:border-rose-500 focus:ring-rose-500",
+    hoverBorder: "hover:border-rose-500 dark:hover:border-rose-500/50",
+    icon: "text-rose-500",
+    iconLarge: "text-rose-500/50",
+    iconHover: "hover:text-rose-600 dark:hover:text-rose-400",
   },
   expense: {
     primaryBtn: "bg-emerald-600 hover:bg-emerald-500 focus-visible:outline-emerald-600",
     lightBg:
       "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50",
     inputFocus: "focus:border-emerald-500 focus:ring-emerald-500",
+    hoverBorder: "hover:border-emerald-500 dark:hover:border-emerald-500/50",
+    icon: "text-emerald-500",
+    iconLarge: "text-emerald-500/50",
+    iconHover: "hover:text-emerald-600 dark:hover:text-emerald-400",
   },
   vault: {
     primaryBtn:
@@ -95,6 +111,10 @@ const DOMAIN_THEMES = {
     lightBg:
       "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800",
     inputFocus: "focus:border-zinc-900 focus:ring-zinc-900 dark:focus:border-zinc-100 dark:focus:ring-zinc-100",
+    hoverBorder: "hover:border-zinc-300 dark:hover:border-zinc-700",
+    icon: "text-zinc-500",
+    iconLarge: "text-zinc-500/50",
+    iconHover: "hover:text-zinc-600 dark:hover:text-zinc-400",
   },
 } as const;
 
@@ -149,6 +169,8 @@ interface GenericDocStoreProps<T> {
 
 interface GenericRecordStoreProps<T extends { id: string }> {
   storeType: "record";
+  /** Domain key for theming (buttons, checkboxes, focus rings). Defaults to "vault". */
+  domain?: DomainTheme;
   title: string;
   description?: string;
   backHref: string;
@@ -175,6 +197,8 @@ interface GenericRecordStoreProps<T extends { id: string }> {
   tileLayout?: "standard" | "body-only";
   /** Optional header actions rendered next to the title. */
   headerActions?: ReactNode;
+  /** When true, hides selection checkboxes and disables bulk selection. */
+  disableSelection?: boolean;
   /** Override the default action-click (which opens the domain modal). */
   onActionClick?: (id: string) => void;
   /** Render prop for a domain-specific modal (e.g., BankModal, PasswordModal). */
@@ -194,7 +218,7 @@ export type GenericStorePageProps<T extends { id: string }> =
 // InlineSecretValue — for record store tile/list values
 // ============================================================
 
-function InlineSecretValue({ value, isSecret }: { value: string; isSecret: boolean }) {
+function InlineSecretValue({ value, isSecret, isCopyable = true }: { value: string; isSecret: boolean; isCopyable?: boolean }) {
   const [revealed, setRevealed] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -233,13 +257,15 @@ function InlineSecretValue({ value, isSecret }: { value: string; isSecret: boole
             {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         )}
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="cursor-pointer flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-300 transition-colors"
-        >
-          {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-        </button>
+        {isCopyable !== false && (
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="cursor-pointer flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-300 transition-colors"
+          >
+            {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -271,6 +297,8 @@ interface DataListViewProps {
   renderListRow: (itemIndex: number) => ReactNode;
   itemCount: number;
   toggleActiveClassName?: string;
+  themeBtnClassName?: string;
+  themeInputFocus?: string;
 }
 
 function DataListView({
@@ -295,6 +323,8 @@ function DataListView({
   renderListRow,
   itemCount,
   toggleActiveClassName,
+  themeBtnClassName,
+  themeInputFocus,
 }: DataListViewProps) {
   const hasSelection = selectionEnabled && selectedCount > 0;
 
@@ -334,7 +364,7 @@ function DataListView({
               {onAdd && (
                 <button
                   onClick={onAdd}
-                  className="cursor-pointer inline-flex items-center justify-center gap-x-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 bg-zinc-900 hover:bg-black dark:bg-zinc-100 dark:text-black dark:hover:bg-white"
+                  className={`cursor-pointer inline-flex items-center justify-center gap-x-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${themeBtnClassName || "bg-zinc-900 hover:bg-black dark:bg-zinc-100 dark:text-black dark:hover:bg-white"}`}
                 >
                   <Plus className="-ml-0.5 h-4 w-4" />
                   {addLabel}
@@ -361,7 +391,7 @@ function DataListView({
                   type="checkbox"
                   checked={itemCount > 0 && selectedCount === itemCount}
                   onChange={(e) => onSelectAll(e.target.checked)}
-                  className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 text-zinc-900 focus:ring-zinc-900 dark:text-zinc-100 dark:focus:ring-zinc-100"
+                  className={`h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 ${themeInputFocus || "text-zinc-900 focus:ring-zinc-900 dark:text-zinc-100 dark:focus:ring-zinc-100"}`}
                 />
                 <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   {selectedCount === itemCount ? "All selected" : `${selectedCount} of ${itemCount} selected`}
@@ -852,26 +882,26 @@ function GenericDocStore<T>({
             checked={isSelected}
             onChange={(e) => { e.stopPropagation(); toggleSelection(doc.id, e.target.checked); }}
             onClick={(e) => e.stopPropagation()}
-            className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"} text-zinc-900 focus:ring-zinc-900 dark:text-zinc-100 dark:focus:ring-zinc-100`}
+            className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"} ${theme.inputFocus}`}
           />
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            {isImage ? <ImageIcon className="h-5 w-5 text-zinc-500" /> : isPdf ? <FileText className="h-5 w-5 text-red-500" /> : <File className="h-5 w-5 text-zinc-400" />}
+            {isImage ? <ImageIcon className={`h-5 w-5 ${theme.icon}`} /> : isPdf ? <FileText className="h-5 w-5 text-red-500" /> : <File className={`h-5 w-5 ${theme.icon}`} />}
           </div>
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {renamingId === doc.id ? (
               <input type="text" value={renameText} onChange={(e) => setRenameText(e.target.value)} onBlur={commitRename} onKeyDown={handleRenameKeyDown}
-                className="min-w-0 flex-1 rounded border px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 dark:bg-zinc-800 dark:text-zinc-100 focus:border-zinc-500 focus:ring-zinc-500"
+                className={`min-w-0 flex-1 rounded border px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 dark:bg-zinc-800 dark:text-zinc-100 ${theme.inputFocus}`}
                 autoFocus onClick={(e) => e.stopPropagation()} />
             ) : (
               <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={doc.fileName}>{doc.fileName}</span>
             )}
             {renamingId !== doc.id && (
               <button onClick={(e) => { e.stopPropagation(); startRename(doc); }}
-                className="shrink-0 p-0.5 rounded text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all hover:text-zinc-600">
+                className={`shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.icon} ${theme.iconHover}`}>
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             )}
-            {(doc.linkedItemName || doc.isLinked) && <Link className="h-4 w-4 shrink-0 text-zinc-500" />}
+            {(doc.linkedItemName || doc.isLinked) && <Link className={`h-4 w-4 shrink-0 ${theme.icon}`} />}
           </div>
         </div>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -913,19 +943,19 @@ function GenericDocStore<T>({
             if (!handled) setModals((prev) => ({ ...prev, edit: d || null }));
           }
         }}
-        className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 cursor-pointer hover:border-zinc-300 dark:hover:border-zinc-700 ${isRemoving ? "opacity-0 scale-95" : "opacity-100 scale-100"}`}
+        className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 cursor-pointer ${theme.hoverBorder} ${isRemoving ? "opacity-0 scale-95" : "opacity-100 scale-100"}`}
       >
         {/* Selection checkbox */}
         <div className={`absolute top-2 left-2 z-10 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={isSelected} onChange={(e) => toggleSelection(doc.id, e.target.checked)}
-            className="h-4 w-4 rounded border-zinc-300 bg-white/80 dark:border-zinc-600 dark:bg-zinc-800/80 text-zinc-900 focus:ring-zinc-900 dark:text-zinc-100 dark:focus:ring-zinc-100" />
+            className={`h-4 w-4 rounded border-zinc-300 bg-white/80 dark:border-zinc-600 dark:bg-zinc-800/80 ${theme.inputFocus}`} />
         </div>
         {/* Thumbnail */}
         <div className="relative flex h-32 w-full items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800 overflow-hidden">
-          {isImage ? <ImageIcon className="h-10 w-10 text-zinc-500/50" /> : isPdf ? <FileText className="h-10 w-10 text-red-500/50" /> : <File className="h-10 w-10 text-zinc-400/50" />}
+          {isImage ? <ImageIcon className={`h-10 w-10 ${theme.iconLarge}`} /> : isPdf ? <FileText className="h-10 w-10 text-red-500/50" /> : <File className={`h-10 w-10 ${theme.iconLarge}`} />}
           {(doc.linkedItemName || doc.isLinked) && (
             <div className="absolute bottom-2 right-2 flex items-center justify-center rounded-full bg-white/90 p-1.5 shadow-sm backdrop-blur-sm dark:bg-zinc-900/90">
-              <Link className="h-4 w-4 text-zinc-500" />
+              <Link className={`h-4 w-4 ${theme.icon}`} />
             </div>
           )}
           {/* Overlay actions */}
@@ -943,13 +973,13 @@ function GenericDocStore<T>({
         <div className="flex flex-col p-3">
           {renamingId === doc.id ? (
             <input type="text" value={renameText} onChange={(e) => setRenameText(e.target.value)} onBlur={commitRename} onKeyDown={handleRenameKeyDown}
-              className="w-full rounded border px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 dark:bg-zinc-800 dark:text-zinc-100 focus:border-zinc-500 focus:ring-zinc-500"
+              className={`w-full rounded border px-1.5 py-0.5 text-sm font-medium text-zinc-900 outline-none focus:ring-1 dark:bg-zinc-800 dark:text-zinc-100 ${theme.inputFocus}`}
               autoFocus onClick={(e) => e.stopPropagation()} />
           ) : (
             <div className="flex items-center gap-1 min-w-0">
               <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={doc.fileName}>{doc.fileName}</span>
               <button onClick={(e) => { e.stopPropagation(); startRename(doc); }}
-                className="shrink-0 p-0.5 rounded text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all hover:text-zinc-600">
+                className={`shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.icon} ${theme.iconHover}`}>
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -977,7 +1007,7 @@ function GenericDocStore<T>({
 
       {error && <ErrorBanner message={error} onRetry={userId ? () => refreshAll() : undefined} />}
 
-      <BoxContainer>
+      <BoxContainer className="flex flex-col h-full w-full space-y-6">
         <DataListView
           viewMode={viewMode} onViewModeChange={setViewMode}
           searchQuery={searchQuery} onSearchChange={setSearchQuery}
@@ -1007,7 +1037,9 @@ function GenericDocStore<T>({
             </BulkActionBar>
           }
           itemCount={filteredDocs.length}
-          toggleActiveClassName="text-zinc-900 dark:text-zinc-100"
+          toggleActiveClassName={theme.lightBg}
+          themeBtnClassName={theme.primaryBtn}
+          themeInputFocus={theme.inputFocus}
           renderListRow={renderDocListRow}
           renderGridTile={renderDocGridTile}
         />
@@ -1107,6 +1139,7 @@ function GenericDocStore<T>({
 // ============================================================
 
 function GenericRecordStore<T extends { id: string }>({
+  domain = "vault",
   title,
   description,
   backHref,
@@ -1122,9 +1155,12 @@ function GenericRecordStore<T extends { id: string }>({
   searchPlaceholder = "Search...",
   tileLayout = "standard",
   headerActions,
+  disableSelection = false,
   onActionClick,
   recordModalSlot,
 }: GenericRecordStoreProps<T>) {
+  const theme = DOMAIN_THEMES[domain] ?? DOMAIN_THEMES.vault;
+
   const [userId, setUserId] = useState<string | null>(null);
   const [data, setData] = useState<T[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -1248,9 +1284,11 @@ function GenericRecordStore<T extends { id: string }>({
     return (
       <div key={item.id} onClick={() => handleActionClick(item.id)}
         className={`group flex items-center gap-4 px-4 py-4 min-h-[72px] transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50 cursor-pointer`}>
-        <input type="checkbox" checked={isSelected} onChange={(e) => { e.stopPropagation(); toggleSelection(item.id, e.target.checked); }}
-          onClick={(e) => e.stopPropagation()}
-          className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"} text-zinc-900 focus:ring-zinc-900 dark:text-zinc-100 dark:focus:ring-zinc-100`} />
+        {!disableSelection && (
+          <input type="checkbox" checked={isSelected} onChange={(e) => { e.stopPropagation(); toggleSelection(item.id, e.target.checked); }}
+            onClick={(e) => e.stopPropagation()}
+            className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"} ${theme.inputFocus}`} />
+        )}
         {tileLayout === "body-only" ? (
           <div className="w-1/3 min-w-[120px] pt-0.5 flex items-start">
             <div className="flex-1 min-w-0 flex items-center gap-1 rounded px-1 py-2 -mx-1 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors cursor-text" onClick={(e) => e.stopPropagation()}>
@@ -1265,7 +1303,7 @@ function GenericRecordStore<T extends { id: string }>({
           {item.values.map((v, idx) => (
             <div key={idx} className="flex items-start gap-2">
               {v.label && <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400 w-24 shrink-0 mt-0.5">{v.label}</span>}
-              <div className="flex-1 min-w-0"><InlineSecretValue value={v.value} isSecret={v.isSecret ?? false} /></div>
+              <div className="flex-1 min-w-0"><InlineSecretValue value={v.value} isSecret={v.isSecret ?? false} isCopyable={v.isCopyable} /></div>
             </div>
           ))}
         </div>
@@ -1282,11 +1320,13 @@ function GenericRecordStore<T extends { id: string }>({
     const isSelected = selectedIds.has(item.id);
     return (
       <div key={item.id} onClick={() => handleActionClick(item.id)}
-        className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 cursor-pointer min-h-[9rem] hover:border-zinc-300 dark:hover:border-zinc-700`}>
+        className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 cursor-pointer min-h-[9rem] ${theme.hoverBorder}`}>
         <div className="flex items-center justify-between gap-2 px-3 py-3 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700/50 dark:bg-zinc-800/50">
           <div className="flex items-center gap-2 min-w-0">
-            <input type="checkbox" checked={isSelected} onChange={(e) => toggleSelection(item.id, e.target.checked)} onClick={(e) => e.stopPropagation()}
-              className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 text-zinc-900 focus:ring-zinc-900 dark:text-zinc-100 dark:focus:ring-zinc-100 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} />
+            {!disableSelection && (
+              <input type="checkbox" checked={isSelected} onChange={(e) => toggleSelection(item.id, e.target.checked)} onClick={(e) => e.stopPropagation()}
+                className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 ${theme.inputFocus} transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} />
+            )}
             <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100" title={tileLayout === "standard" ? item.title : undefined}>
               {tileLayout === "standard" ? item.title : " "}
             </span>
@@ -1307,7 +1347,7 @@ function GenericRecordStore<T extends { id: string }>({
           {item.values.map((v, idx) => (
             <div key={idx} className="flex flex-col overflow-hidden">
               {v.label && <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500 px-1">{v.label}</span>}
-              <InlineSecretValue value={v.value} isSecret={v.isSecret ?? false} />
+              <InlineSecretValue value={v.value} isSecret={v.isSecret ?? false} isCopyable={v.isCopyable} />
             </div>
           ))}
         </div>
@@ -1322,7 +1362,7 @@ function GenericRecordStore<T extends { id: string }>({
       {/* Page Header */}
       <div className="flex flex-col items-start gap-4">
         {backHref && <BackButton href={backHref}>{backLabel}</BackButton>}
-        <div className="flex w-full items-center justify-between">
+        <div className="flex w-full items-end justify-between">
           <div>
             {title && <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{title}</h1>}
             {description && <p className="mt-1 text-sm font-normal text-zinc-500 dark:text-zinc-400">{description}</p>}
@@ -1344,11 +1384,13 @@ function GenericRecordStore<T extends { id: string }>({
           isFilteredEmpty={filtered.length === 0 && items.length > 0}
           emptyMessage={emptyMessage}
           onAdd={userId ? () => setModalRecord(null) : undefined}
-          selectionEnabled selectedCount={selectedCount} totalCount={filtered.length}
+          selectionEnabled={!disableSelection} selectedCount={selectedCount} totalCount={filtered.length}
           onSelectAll={handleSelectAll} onClearSelection={() => handleSelectAll(false)}
           bulkActionBar={bulkActions}
           itemCount={filtered.length}
-          toggleActiveClassName="text-zinc-900 dark:text-zinc-100"
+          toggleActiveClassName={theme.lightBg}
+          themeBtnClassName={theme.primaryBtn}
+          themeInputFocus={theme.inputFocus}
           renderListRow={renderListRow}
           renderGridTile={renderGridTile}
         />
