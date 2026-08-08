@@ -3,30 +3,12 @@
 import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
-import BackButton from "@/components/common/BackButton";
-import Link from "next/link";
-import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useQueryModal } from "@/lib/useQueryModal";
-import {
-  createEducation,
-  deleteEducation,
-  fetchEducations,
-  updateEducation,
-} from "@/api/education";
-import {
-  fetchDocuments,
-  createDocument,
-  updateDocument,
-  deleteDocument,
-} from "@/api/common/documents";
-import {
-  uploadDocumentFile,
-  downloadDocumentFile,
-  deleteDocumentFile,
-} from "@/api/common/documentStorage";
-import ErrorBanner from "@/components/common/ErrorBanner";
-import type { Document, DocumentPlaintext } from "@/types/document";
+import { useEducationActions } from "@/hooks/useEducationActions";
+import { useEducationData } from "@/hooks/useEducationData";
+import GenericDomainPage from "@/components/common/GenericDomainPage";
+import type { DomainPageContext } from "@/components/common/GenericDomainPage";
 import type { Education, EducationViewMode } from "@/types/education";
 import type { Priority } from "@/types/common";
 import ActiveEducationsBox from "./ActiveEducationsBox";
@@ -36,32 +18,30 @@ import { FolderIcon } from "@/components/common/Icons";
 
 /**
  * Education feature shell.
- * Query-param-driven modals (?modal=new-education, ?modal=edit-education-<id>).
- * Uses the global Document store for file attachments instead of the old certificates table.
+ * Query-param-driven modals via useQueryModal ("education" prefix).
+ * Layout shell delegated to GenericDomainPage (dual-column).
  */
 export default function EducationView() {
   const router = useRouter();
-  const [educations, setEducations] = useState<Education[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
 
-  const loadAllData = useCallback(async (uid: string) => {
-    const [eduRows, docRows] = await Promise.all([
-      fetchEducations(uid),
-      fetchDocuments(uid),
-    ]);
-    setEducations(eduRows);
-    setDocuments(docRows);
-  }, []);
+  const { userId, istDate, nowYear, nowMonth, isLoading, error, refreshData, educations, documents } =
+    useEducationData();
 
-  const { userId, istDate, nowYear, nowMonth, isLoading, error, refreshData } =
-    useAuthBootstrap({ loadData: loadAllData });
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    await refreshData(userId);
+  }, [userId, refreshData]);
+
+  const { handleEducationSave: rawHandleEducationSave, handleEducationDelete, handleDownloadDocument } =
+    useEducationActions({ userId, refresh });
 
   const [activeView, setActiveView] = useLocalStorage<EducationViewMode>("educationActiveView", "months");
 
-  // Query-param-driven modal state via shared hook
+  // ── Query-param-driven modal ──
+
   const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(educations, "education");
 
-  // State bridge for quick-complete (overrides URL-derived target with a modified copy)
+  // State bridge for quick-complete
   const [quickCompleteTarget, setQuickCompleteTarget] = useState<Education | null>(null);
 
   const eduModalTarget = quickCompleteTarget ?? modalTarget;
@@ -73,257 +53,109 @@ export default function EducationView() {
     setQuickCompleteTarget(null);
   }, [closeModal]);
 
+  // ── Derived data ──
+
   const activeEducations = useMemo(
     () => educations.filter((e) => !e.is_completed),
-    [educations]
+    [educations],
   );
   const completedEducations = useMemo(
     () => educations.filter((e) => e.is_completed),
-    [educations]
+    [educations],
   );
 
-  // ---- Education CRUD ----
+  // ── CRUD handlers ──
 
-  async function handleEducationSave(
-    draft: {
-      name: string;
-      provider: string;
-      priority: Priority;
-      due_date: string | null;
-      description: string;
-      is_completed: boolean;
+  const handleEducationSave = useCallback(
+    async (
+      draft: {
+        name: string;
+        provider: string;
+        priority: Priority;
+        due_date: string | null;
+        description: string;
+        is_completed: boolean;
+      },
+      existingEducation: Education | null,
+      pendingDoc?: { file: File; label: string },
+      pendingLinkDocId?: string,
+      pendingUnlinkDocIds?: string[],
+      pendingDeleteDocIds?: string[],
+    ) => {
+      const savedEdu = await rawHandleEducationSave(
+        draft,
+        existingEducation,
+        pendingDoc,
+        pendingLinkDocId,
+        pendingUnlinkDocIds,
+        pendingDeleteDocIds,
+      );
+      if (!existingEducation && savedEdu) {
+        openEditEducation(savedEdu);
+      }
     },
-    existingEducation: Education | null,
-    pendingDoc?: { file: File; label: string },
-    pendingLinkDocId?: string,
-    pendingUnlinkDocIds?: string[],
-    pendingDeleteDocIds?: string[],
-  ) {
-    if (!userId) throw new Error("No active session.");
-
-    const freshEdus = await fetchEducations(userId);
-    const freshDocs = await fetchDocuments(userId);
-    const freshEdu = existingEducation ? freshEdus.find(e => e.id === existingEducation.id) : null;
-
-    let currentDocIds = [...(freshEdu?.document_ids ?? [])];
-
-    const nowIso = new Date().toISOString();
-    const completedAt = draft.is_completed
-      ? freshEdu?.completed_at ?? nowIso
-      : null;
-
-    // --- 1. Process unlinks ---
-    if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0 && existingEducation) {
-      for (const docId of pendingUnlinkDocIds) {
-        const doc = freshDocs.find(d => d.id === docId);
-        if (doc) {
-          await updateDocument(userId, docId, {
-            ...doc,
-            linked_id: "",
-            updated_at: nowIso,
-          } as DocumentPlaintext);
-        }
-        currentDocIds = currentDocIds.filter(id => id !== docId);
-      }
-    }
-
-    // --- 2. Process deletions ---
-    if (pendingDeleteDocIds && pendingDeleteDocIds.length > 0) {
-      for (const docId of pendingDeleteDocIds) {
-        const doc = freshDocs.find(d => d.id === docId);
-        if (doc) {
-          currentDocIds = currentDocIds.filter(id => id !== docId);
-          if (doc.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-          }
-          await deleteDocument(docId);
-        }
-      }
-    }
-
-    // --- 3. Save or create the education ---
-    const payload = {
-      ...draft,
-      completed_at: completedAt,
-      document_ids: currentDocIds,
-      updated_at: nowIso,
-    };
-
-    let savedEdu: Education;
-    if (existingEducation) {
-      savedEdu = await updateEducation(userId, existingEducation.id, payload);
-    } else {
-      savedEdu = await createEducation(userId, payload);
-    }
-
-    let needsUpdate = false;
-    const newDocIds = [...currentDocIds];
-
-    // --- 4. Upload new document file ---
-    if (pendingDoc) {
-      const { fileName, iv, mimeType } = await uploadDocumentFile(userId, pendingDoc.file);
-      const doc = await createDocument(userId, {
-        label: pendingDoc.label,
-        file_name: fileName,
-        file_iv: iv,
-        file_mime: mimeType,
-        domain: "education",
-        linked_id: savedEdu.id,
-        updated_at: nowIso,
-      });
-      newDocIds.push(doc.id);
-      needsUpdate = true;
-    }
-
-    // --- 5. Link an existing unlinked document ---
-    if (pendingLinkDocId) {
-      const pdoc = freshDocs.find(d => d.id === pendingLinkDocId);
-      if (pdoc) {
-        await updateDocument(userId, pendingLinkDocId, {
-          ...pdoc,
-          linked_id: savedEdu.id,
-          updated_at: nowIso,
-        } as DocumentPlaintext);
-        if (!newDocIds.includes(pendingLinkDocId)) {
-          newDocIds.push(pendingLinkDocId);
-        }
-        needsUpdate = true;
-      }
-    }
-
-    // --- 6. Update education with final doc IDs if anything changed ---
-    if (needsUpdate) {
-      await updateEducation(userId, savedEdu.id, {
-        ...payload,
-        document_ids: newDocIds,
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    await refreshData(userId);
-
-    if (!existingEducation) {
-      openEditEducation(savedEdu);
-    }
-  }
-
-  async function handleEducationDelete(educationId: string, cascadeMode: 'unlink' | 'cascade') {
-    if (!userId) throw new Error("No active session.");
-
-    const eduDocs = documents.filter(
-      (d) => d.domain === "education" && d.linked_id === educationId
-    );
-
-    if (cascadeMode === 'unlink') {
-      const nowIso = new Date().toISOString();
-      for (const doc of eduDocs) {
-        await updateDocument(userId, doc.id, {
-          ...doc,
-          linked_id: "",
-          updated_at: nowIso,
-        } as DocumentPlaintext);
-      }
-    } else {
-      for (const doc of eduDocs) {
-        if (doc.file_name) {
-          try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-        }
-        await deleteDocument(doc.id);
-      }
-    }
-
-    await deleteEducation(educationId);
-    await refreshData(userId);
-  }
+    [rawHandleEducationSave, openEditEducation],
+  );
 
   function handleQuickComplete(education: Education) {
     setQuickCompleteTarget({ ...education, is_completed: true });
   }
 
-  async function handleDownloadDocument(doc: Document) {
-    if (!userId) throw new Error("No active session.");
-    const blob = await downloadDocumentFile(
-      userId,
-      doc.file_name,
-      doc.file_iv,
-      doc.file_mime
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = doc.label || "document";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
+  // ── Context for GenericDomainPage ──
+
+  const ctx: DomainPageContext = useMemo(
+    () => ({ userId, istDate, nowYear, nowMonth, isLoading, error, refreshData }),
+    [userId, istDate, nowYear, nowMonth, isLoading, error, refreshData],
+  );
+
+  // ── Render ──
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col items-start gap-4">
-        <BackButton href={ROUTES.DASHBOARD} />
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-            Education
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Track courses, certifications, and uploaded documents.
-          </p>
-        </div>
-      </div>
-
-      <section className="grid gap-4 lg:grid-cols-3">
+    <GenericDomainPage
+      ctx={ctx}
+      title="Education"
+      description="Track courses, certifications, and uploaded documents."
+      backHref={ROUTES.DASHBOARD}
+      storeHref={ROUTES.EDUCATION_STORE}
+      storeLabel="Certificate Store"
+      storeIcon={<FolderIcon className="h-5 w-5 text-amber-500" />}
+      completedSlot={
+        <CompletedEducationsBox
+          educations={completedEducations}
+          documents={documents}
+          isLoading={isLoading}
+          onOpenExpanded={() => router.push(ROUTES.EDUCATION_COMPLETED)}
+          onSelectEducation={openEditEducation}
+        />
+      }
+      modalSlot={
+        eduModalTarget && (
+          <EducationModal
+            education={eduModalTarget === "create" ? null : eduModalTarget}
+            defaultDate={eduModalTarget === "create" ? istDate : undefined}
+            documents={documents}
+            userId={userId || ""}
+            onClose={closeEduModal}
+            onSave={handleEducationSave}
+            onDelete={handleEducationDelete}
+            onDownloadDocument={handleDownloadDocument}
+          />
+        )
+      }
+      renderBody={(pageCtx) => (
         <ActiveEducationsBox
           educations={activeEducations}
           documents={documents}
-          isLoading={isLoading}
+          isLoading={pageCtx.isLoading}
           view={activeView}
-          nowYear={nowYear}
-          nowMonth={nowMonth}
+          nowYear={pageCtx.nowYear}
+          nowMonth={pageCtx.nowMonth}
           onViewChange={setActiveView}
           onAdd={openNewEducation}
           onSelectEducation={openEditEducation}
           onMarkComplete={handleQuickComplete}
         />
-
-        <div className="flex flex-col gap-4">
-          <Link
-            href={ROUTES.EDUCATION_STORE}
-            className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
-          >
-            <FolderIcon className="h-5 w-5 text-amber-500" />
-            Certificate Store
-          </Link>
-
-          <CompletedEducationsBox
-            educations={completedEducations}
-            documents={documents}
-            isLoading={isLoading}
-            onOpenExpanded={() => router.push(ROUTES.EDUCATION_COMPLETED)}
-            onSelectEducation={openEditEducation}
-          />
-        </div>
-      </section>
-
-      {error && (
-        <ErrorBanner
-          message={error}
-          onRetry={() => userId && refreshData(userId)}
-        />
       )}
-
-      {eduModalTarget && (
-        <EducationModal
-          education={eduModalTarget === "create" ? null : eduModalTarget}
-          defaultDate={eduModalTarget === "create" ? istDate : undefined}
-          documents={documents}
-          userId={userId || ""}
-          onClose={closeEduModal}
-          onSave={handleEducationSave}
-          onDelete={handleEducationDelete}
-          onDownloadDocument={handleDownloadDocument}
-        />
-      )}
-    </div>
+    />
   );
 }

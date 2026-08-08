@@ -35,7 +35,7 @@ interface EducationModalProps {
   documents: Document[];
   userId: string;
   onClose: () => void;
-  onSave: (draft: EducationDraft, existingEducation: Education | null, pendingDoc?: { file: File; label: string }, pendingLinkDocId?: string, pendingUnlinkDocIds?: string[], pendingDeleteDocIds?: string[]) => Promise<void>;
+  onSave: (draft: EducationDraft, existingEducation: Education | null, pendingDoc?: { file: File; label: string }, pendingLinkDocId?: string, pendingUnlinkDocIds?: string[], pendingDeleteDocIds?: string[]) => Promise<unknown>;
   onDelete: (educationId: string, cascadeMode: 'unlink' | 'cascade') => Promise<void>;
   onDownloadDocument: (document: Document) => Promise<void>;
 }
@@ -457,7 +457,7 @@ export default function EducationModal({
         name: finalName,
         provider: finalProvider,
         priority: finalPriority,
-        dueDate: finalDueDate,
+        dueDate: finalDueDate ?? "",
         description: finalDescription,
         isCompleted: finalIsCompleted,
       });
