@@ -2,74 +2,26 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
-import {
-  fetchMedicalRecords,
-  createMedicalRecord,
-  updateMedicalRecord,
-  deleteMedicalRecord,
-} from "@/api/medical";
-import {
-  fetchDocuments,
-  createDocument,
-  updateDocument,
-  deleteDocument,
-} from "@/api/common/documents";
-import {
-  uploadDocumentFile,
-  deleteDocumentFile,
-} from "@/api/common/documentStorage";
 import { ROUTES } from "@/routes/paths";
-import type { MedicalRecord, MedicalPlaintext } from "@/types/medical";
-import type { Document, DocumentPlaintext } from "@/types/document";
+import type { MedicalRecord } from "@/types/medical";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import type { ColumnDef, MonthGroup } from "@/components/common/GenericViewPage";
-import { PaperClipIcon } from "@/components/common/Icons";
+import type { MonthGroup } from "@/components/common/GenericViewPage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
-import { useTableSort, type SortConfig } from "@/hooks/useTableSort";
-import { byMonth, trunc } from "@/lib/viewHelpers";
+import { useTableSort } from "@/hooks/useTableSort";
+import { byMonth } from "@/lib/viewHelpers";
 import MedicalModal from "@/components/medical/MedicalModal";
-import type { MedicalFileAction } from "@/components/medical/MedicalModal";
-
-// ── Sort helpers ──
-
-type SortColumn = "name" | "clinic" | "date";
-
-const SORT_CONFIGS: SortConfig<SortColumn, MedicalRecord>[] = [
-  { column: "name", extractor: (rec) => rec.name.toLowerCase() },
-  { column: "clinic", extractor: (rec) => (rec.clinic ?? "").toLowerCase() },
-  { column: "date", extractor: (rec) => new Date(rec.date + "T00:00:00").getTime() },
-];
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
+import { useMedicalActions } from "@/hooks/useMedicalActions";
+import { useMedicalData } from "@/hooks/useMedicalData";
+import { MEDICAL_COLUMNS, SORT_CONFIGS } from "@/components/medical/config";
 
 export default function MedicalAllPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [records, setRecords] = useState<MedicalRecord[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
-
-  const loadData = useCallback(async (uid: string) => {
-    const [recRows, docRows] = await Promise.all([
-      fetchMedicalRecords(uid),
-      fetchDocuments(uid),
-    ]);
-    setRecords(recRows);
-    setDocuments(docRows);
-  }, []);
-
-  const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
-    useAuthBootstrap({ loadData });
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData, records, documents } =
+    useMedicalData();
 
   // ── Year / Month filter state from URL params ──
 
@@ -147,241 +99,10 @@ export default function MedicalAllPage() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  async function handleSave(
-    draft: {
-      name: string;
-      clinic: string;
-      date: string;
-      diagnosis_timeline: string;
-    },
-    existingRecord: MedicalRecord | null,
-    fileAction?: MedicalFileAction,
-  ) {
-    if (!userId) throw new Error("No active session.");
-
-    const freshRecords = await fetchMedicalRecords(userId);
-    const freshDocs = await fetchDocuments(userId);
-    const freshRecord = existingRecord
-      ? freshRecords.find((r) => r.id === existingRecord.id)
-      : null;
-
-    const nowIso = new Date().toISOString();
-    let document_ids = [...(freshRecord?.document_ids ?? [])];
-
-    // Process removals
-    if (fileAction?.removeDocIds) {
-      for (const docId of fileAction.removeDocIds) {
-        const doc = freshDocs.find((d) => d.id === docId);
-        if (doc) {
-          if (doc.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-          }
-          try { await deleteDocument(docId); } catch { /* best-effort */ }
-        }
-        document_ids = document_ids.filter((id) => id !== docId);
-      }
-    }
-
-    // Process unlinks
-    if (fileAction?.unlinkDocIds) {
-      for (const docId of fileAction.unlinkDocIds) {
-        const doc = freshDocs.find((d) => d.id === docId);
-        if (doc) {
-          await updateDocument(userId, docId, {
-            ...doc,
-            linked_id: "",
-            updated_at: nowIso,
-          } as DocumentPlaintext);
-        }
-        document_ids = document_ids.filter((id) => id !== docId);
-      }
-    }
-
-    const payload: MedicalPlaintext = {
-      name: draft.name,
-      clinic: draft.clinic,
-      date: draft.date,
-      diagnosis_timeline: draft.diagnosis_timeline,
-      document_ids,
-      updated_at: nowIso,
-    };
-
-    let savedRecord: MedicalRecord;
-    if (existingRecord) {
-      savedRecord = await updateMedicalRecord(userId, existingRecord.id, payload);
-    } else {
-      savedRecord = await createMedicalRecord(userId, payload);
-    }
-
-    // Upload new files
-    if (fileAction?.newFiles) {
-      for (const file of fileAction.newFiles) {
-        const { fileName, iv, mimeType } = await uploadDocumentFile(userId, file);
-        const doc = await createDocument(userId, {
-          label: file.name,
-          file_name: fileName,
-          file_iv: iv,
-          file_mime: mimeType,
-          domain: "medical",
-          linked_id: savedRecord.id,
-          updated_at: nowIso,
-        });
-        document_ids.push(doc.id);
-      }
-    }
-
-    // Link existing standalone document
-    if (fileAction?.linkDocId) {
-      const linkDoc = freshDocs.find((d) => d.id === fileAction.linkDocId);
-      if (linkDoc && !document_ids.includes(fileAction.linkDocId)) {
-        document_ids.push(fileAction.linkDocId);
-      }
-    }
-
-    // Update with final document IDs
-    if (
-      (fileAction?.newFiles && fileAction.newFiles.length > 0) ||
-      fileAction?.linkDocId
-    ) {
-      await updateMedicalRecord(userId, savedRecord.id, {
-        ...payload,
-        document_ids,
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    // Fix linked_id for newly created/linked documents
-    if (!existingRecord) {
-      const allDocs = await fetchDocuments(userId);
-      for (const doc of allDocs) {
-        if (doc.domain === "medical" && doc.linked_id === "" && document_ids.includes(doc.id)) {
-          await updateDocument(userId, doc.id, {
-            ...doc,
-            linked_id: savedRecord.id,
-            updated_at: new Date().toISOString(),
-          } as DocumentPlaintext);
-        }
-      }
-    }
-    if (existingRecord && fileAction?.linkDocId) {
-      const linkDoc = freshDocs.find((d) => d.id === fileAction.linkDocId);
-      if (linkDoc) {
-        await updateDocument(userId, fileAction.linkDocId, {
-          ...linkDoc,
-          linked_id: existingRecord.id,
-          updated_at: new Date().toISOString(),
-        } as DocumentPlaintext);
-      }
-    }
-
-    await refresh();
-  }
-
-  async function handleDelete(recordId: string, cascadeMode: "unlink" | "cascade") {
-    if (!userId) throw new Error("No active session.");
-
-    const record = records.find((r) => r.id === recordId);
-    if (record?.document_ids) {
-      if (cascadeMode === "unlink") {
-        const nowIso = new Date().toISOString();
-        for (const docId of record.document_ids) {
-          const doc = documents.find((d) => d.id === docId);
-          if (doc) {
-            await updateDocument(userId, docId, {
-              ...doc,
-              linked_id: "",
-              updated_at: nowIso,
-            } as DocumentPlaintext);
-          }
-        }
-      } else {
-        for (const docId of record.document_ids) {
-          const doc = documents.find((d) => d.id === docId);
-          if (doc) {
-            if (doc.file_name) {
-              try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-            }
-            try { await deleteDocument(docId); } catch { /* best-effort */ }
-          }
-        }
-      }
-    }
-
-    await deleteMedicalRecord(recordId);
-    await refresh();
-  }
-
-  // ── Column definitions ──
-
-  const medicalColumns: ColumnDef<MedicalRecord, SortColumn>[] = useMemo(
-    () => [
-      {
-        key: "name",
-        header: "Name",
-        colSpan: 3,
-        sortColumn: "name",
-        render: (rec) => (
-          <span className="font-medium text-zinc-800 dark:text-zinc-100">
-            {trunc(rec.name, 24) || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "clinic",
-        header: "Clinic",
-        colSpan: 2,
-        sortColumn: "clinic",
-        render: (rec) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {trunc(rec.clinic, 20) || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "date",
-        header: "Date",
-        colSpan: 2,
-        sortColumn: "date",
-        render: (rec) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {formatDate(rec.date)}
-          </span>
-        ),
-      },
-      {
-        key: "diagnosis",
-        header: "Diagnosis",
-        colSpan: 3,
-        render: (rec) => (
-          <span className="text-zinc-500 dark:text-zinc-400">
-            {trunc(rec.diagnosis_timeline, 28) || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "files",
-        header: "Files",
-        colSpan: 2,
-        render: (rec) => {
-          const count = rec.document_ids?.length ?? 0;
-          return count > 0 ? (
-            <span
-              className="inline-flex items-center justify-center gap-1 text-rose-500"
-              title={`${count} document(s) attached`}
-            >
-              <PaperClipIcon className="h-4 w-4" />
-              <span className="text-zinc-600 dark:text-zinc-300">
-                ({count})
-              </span>
-            </span>
-          ) : (
-            <span className="text-zinc-400">—</span>
-          );
-        },
-      },
-    ],
-    [],
-  );
+  const { handleSave: _handleSave, handleDelete } = useMedicalActions({ userId, refresh });
+  const handleSave = async (...args: Parameters<typeof _handleSave>) => {
+    await _handleSave(...args);
+  };
 
   const emptyMessage =
     selectedMonth === "all"
@@ -404,7 +125,7 @@ export default function MedicalAllPage() {
         {!isLoading && (
           <GenericViewPage
             items={sorted}
-            columns={medicalColumns}
+            columns={MEDICAL_COLUMNS}
             getItemKey={(rec) => rec.id}
             views={STANDARD_VIEWS.ALL_MONTHS}
             activeView={activeView}

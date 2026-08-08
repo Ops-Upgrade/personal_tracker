@@ -1,46 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { ROUTES } from "@/routes/paths";
-import BackButton from "@/components/common/BackButton";
 import Button from "@/components/common/Button";
-import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { useQueryModal } from "@/lib/useQueryModal";
-import {
-  fetchMedicalRecords,
-  createMedicalRecord,
-  updateMedicalRecord,
-  deleteMedicalRecord,
-} from "@/api/medical";
-import {
-  fetchDocuments,
-  createDocument,
-  updateDocument,
-  deleteDocument,
-} from "@/api/common/documents";
-import {
-  uploadDocumentFile,
-  deleteDocumentFile,
-} from "@/api/common/documentStorage";
 import { parseISTDate } from "@/api/serverDate";
-import type { MedicalRecord, MedicalPlaintext } from "@/types/medical";
-import type { Document, DocumentPlaintext } from "@/types/document";
+import type { MedicalRecord } from "@/types/medical";
 import { MONTHS } from "@/types/common";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import { List, LayoutGrid, Table } from "lucide-react";
-import { FolderIcon } from "@/components/common/Icons";
-import ErrorBanner from "@/components/common/ErrorBanner";
-import LoadingSpinner from "@/components/common/LoadingSpinner";
+import { FolderIcon, PaperClipIcon } from "@/components/common/Icons";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
+import GenericDomainPage from "@/components/common/GenericDomainPage";
+import type { DomainPageContext } from "@/components/common/GenericDomainPage";
+import type { ColumnDef } from "@/components/common/GenericViewPage";
 import MedicalModal from "./MedicalModal";
+import { useMedicalActions, type MedicalFileAction } from "@/hooks/useMedicalActions";
+import { useMedicalData } from "@/hooks/useMedicalData";
 import MedicalTable from "./MedicalTable";
-import MedicalMonthRow from "./MedicalMonthRow";
+import GenericMonthRow from "@/components/common/GenericMonthRow";
 import YearDropdown from "@/components/common/YearDropdown";
+import { trunc } from "@/lib/viewHelpers";
 
 type MedicalViewMode = "all" | "single" | "multi";
+
+function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+}
 
 /** SVG icon symbols for the medical view toggle */
 const MEDICAL_VIEW_OPTIONS: readonly ViewToggleOption<MedicalViewMode>[] = [
@@ -53,23 +42,12 @@ const MEDICAL_VIEW_OPTIONS: readonly ViewToggleOption<MedicalViewMode>[] = [
  * Medical Records feature shell.
  * Orchestrates month list, year dropdown, and create/edit medical record modals.
  * "View All" navigates to the dedicated /medical/all route with month/year params.
- * Query-param-driven modals (like ExpenseView).
+ * Query-param-driven modals via useQueryModal ("medical" prefix).
+ * Layout shell delegated to GenericDomainPage (full-width).
  */
 export default function MedicalView() {
-  const [records, setRecords] = useState<MedicalRecord[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
-
-  const loadData = useCallback(async (uid: string) => {
-    const [recRows, docRows] = await Promise.all([
-      fetchMedicalRecords(uid),
-      fetchDocuments(uid),
-    ]);
-    setRecords(recRows);
-    setDocuments(docRows);
-  }, []);
-
-  const { userId, istDate, isLoading, error, refreshData } =
-    useAuthBootstrap({ loadData });
+  const { userId, istDate, isLoading, error, refreshData, records, documents } =
+    useMedicalData();
 
   const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
 
@@ -90,9 +68,8 @@ export default function MedicalView() {
     return () => clearTimeout(timeout);
   }, [isLoading, selectedYear, viewMode]);
 
-  // --- Derived data ---
+  // ── Derived data ──
 
-  // All distinct years from records + current year, sorted descending
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const yearsFromData = new Set(
@@ -102,7 +79,6 @@ export default function MedicalView() {
     return Array.from(yearsFromData).sort((a, b) => b - a);
   }, [records]);
 
-  // Records grouped by month for the selected year
   const recordsByMonth = useMemo(() => {
     return MONTHS.map((monthName, monthIndex) => {
       const filtered = records.filter((r) => {
@@ -113,217 +89,161 @@ export default function MedicalView() {
     });
   }, [records, selectedYear]);
 
-  // Records filtered to the selected year (for table view)
   const recordsForSelectedYear = useMemo(() => {
     return records.filter((r) => new Date(r.date).getFullYear() === selectedYear);
   }, [records, selectedYear]);
 
-  // Total records for the selected year
   const totalRecords = recordsForSelectedYear.length;
 
-  // --- CRUD handlers ---
+  // ── Column definitions for month preview rows ──
 
-  async function handleSave(
-    draft: {
-      name: string;
-      clinic: string;
-      date: string;
-      diagnosis_timeline: string;
-    },
-    existingRecord: MedicalRecord | null,
-    fileAction?: { newFiles: File[]; removeDocIds: string[]; unlinkDocIds?: string[]; linkDocId?: string },
-  ) {
-    if (!userId) throw new Error("No active session.");
+  const medicalColumns: ColumnDef<MedicalRecord>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Name",
+        colSpan: 3,
+        render: (rec) => (
+          <span className="font-medium text-zinc-800 dark:text-zinc-100">
+            {trunc(rec.name, 24) || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "clinic",
+        header: "Clinic",
+        colSpan: 2,
+        render: (rec) => (
+          <span className="text-zinc-600 dark:text-zinc-300">
+            {trunc(rec.clinic, 20) || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "date",
+        header: "Date",
+        colSpan: 2,
+        render: (rec) => (
+          <span className="text-zinc-600 dark:text-zinc-300">
+            {formatShortDate(rec.date)}
+          </span>
+        ),
+      },
+      {
+        key: "diagnosis",
+        header: "Diagnosis",
+        colSpan: 3,
+        render: (rec) => (
+          <span className="text-zinc-500 dark:text-zinc-400">
+            {trunc(rec.diagnosis_timeline, 28) || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "files",
+        header: "Files",
+        colSpan: 2,
+        render: (rec) => {
+          const count = rec.document_ids?.length ?? 0;
+          return count > 0 ? (
+            <span className="inline-flex items-center justify-center gap-1 text-rose-500" title={`${count} document(s) attached`}>
+              <PaperClipIcon className="h-4 w-4" />
+              <span className="text-zinc-600 dark:text-zinc-300">({count})</span>
+            </span>
+          ) : (
+            <span className="text-zinc-400">—</span>
+          );
+        },
+      },
+    ],
+    [],
+  );
 
-    const nowIso = new Date().toISOString();
-    let document_ids = [...(existingRecord?.document_ids ?? [])];
+  // ── CRUD handlers ──
 
-    if (fileAction?.removeDocIds) {
-      for (const docId of fileAction.removeDocIds) {
-        const doc = documents.find((d) => d.id === docId);
-        if (doc) {
-          if (doc.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-          }
-          try { await deleteDocument(docId); } catch { /* best-effort */ }
-        }
-        document_ids = document_ids.filter((id) => id !== docId);
-      }
-    }
-
-    // --- Process unlinks: clear linked_id, remove from parent, keep file ---
-    if (fileAction?.unlinkDocIds) {
-      for (const docId of fileAction.unlinkDocIds) {
-        const doc = documents.find((d) => d.id === docId);
-        if (doc) {
-          await updateDocument(userId, docId, {
-            ...doc,
-            linked_id: "",
-            updated_at: nowIso,
-          } as DocumentPlaintext);
-        }
-        document_ids = document_ids.filter((id) => id !== docId);
-      }
-    }
-
-    if (fileAction?.newFiles) {
-      for (const file of fileAction.newFiles) {
-        const { fileName, iv, mimeType } = await uploadDocumentFile(userId, file);
-        const doc = await createDocument(userId, {
-          label: file.name,
-          file_name: fileName,
-          file_iv: iv,
-          file_mime: mimeType,
-          domain: "medical",
-          linked_id: existingRecord?.id ?? "",
-          updated_at: nowIso,
-        });
-        document_ids.push(doc.id);
-      }
-    }
-
-    // --- Link existing standalone document ---
-    if (fileAction?.linkDocId) {
-      const linkDoc = documents.find((d) => d.id === fileAction.linkDocId);
-      if (linkDoc && !document_ids.includes(fileAction.linkDocId)) {
-        document_ids.push(fileAction.linkDocId);
-      }
-    }
-
-    const payload: MedicalPlaintext = {
-      name: draft.name,
-      clinic: draft.clinic,
-      date: draft.date,
-      diagnosis_timeline: draft.diagnosis_timeline,
-      document_ids,
-      updated_at: nowIso,
-    };
-
-    let savedRecord: MedicalRecord;
-    if (existingRecord) {
-      savedRecord = await updateMedicalRecord(userId, existingRecord.id, payload);
-    } else {
-      savedRecord = await createMedicalRecord(userId, payload);
-    }
-
-    // Update newly created/linked documents with the correct linked_id
-    if (!existingRecord) {
-      const freshDocs = await fetchDocuments(userId);
-      for (const doc of freshDocs) {
-        if (doc.domain === "medical" && doc.linked_id === "" && document_ids.includes(doc.id)) {
-          await updateDocument(userId, doc.id, {
-            ...doc,
-            linked_id: savedRecord.id,
-            updated_at: new Date().toISOString(),
-          } as DocumentPlaintext);
-        }
-      }
-    }
-    // For existing records, update the linked document's linked_id
-    if (existingRecord && fileAction?.linkDocId) {
-      const linkDoc = documents.find((d) => d.id === fileAction.linkDocId);
-      if (linkDoc) {
-        await updateDocument(userId, fileAction.linkDocId, {
-          ...linkDoc,
-          linked_id: existingRecord.id,
-          updated_at: new Date().toISOString(),
-        } as DocumentPlaintext);
-      }
-    }
-
+  const refresh = useCallback(async () => {
+    if (!userId) return;
     await refreshData(userId);
+  }, [userId, refreshData]);
 
-    if (!existingRecord) {
-      openEdit(savedRecord);
-    }
-  }
+  const { handleSave: rawHandleSave, handleDelete: rawHandleDelete } = useMedicalActions({ userId, refresh });
+
+  // Wrapper that transitions to edit mode after creation
+  const handleSave = useCallback(
+    async (
+      draft: { name: string; clinic: string; date: string; diagnosis_timeline: string },
+      existingRecord: MedicalRecord | null,
+      fileAction?: MedicalFileAction,
+    ) => {
+      const savedRecord = await rawHandleSave(draft, existingRecord, fileAction);
+      if (!existingRecord && savedRecord) {
+        openEdit(savedRecord);
+      }
+    },
+    [rawHandleSave, openEdit],
+  );
 
   async function handleDelete(recordId: string, cascadeMode: 'unlink' | 'cascade' = 'cascade') {
-    if (!userId) throw new Error("No active session.");
-
-    const record = records.find((r) => r.id === recordId);
-    if (record?.document_ids) {
-      if (cascadeMode === 'unlink') {
-        const nowIso = new Date().toISOString();
-        for (const docId of record.document_ids) {
-          const doc = documents.find((d) => d.id === docId);
-          if (doc) {
-            await updateDocument(userId, docId, {
-              ...doc,
-              linked_id: "",
-              updated_at: nowIso,
-            } as DocumentPlaintext);
-          }
-        }
-      } else {
-        for (const docId of record.document_ids) {
-          const doc = documents.find((d) => d.id === docId);
-          if (doc) {
-            if (doc.file_name) {
-              try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-            }
-            try { await deleteDocument(docId); } catch { /* best-effort */ }
-          }
-        }
-      }
-    }
-
-    await deleteMedicalRecord(recordId);
-    await refreshData(userId);
+    await rawHandleDelete(recordId, cascadeMode);
   }
 
-  // --- Render ---
+  // ── Context for GenericDomainPage ──
+
+  const ctx: DomainPageContext = useMemo(
+    () => ({
+      userId,
+      istDate,
+      nowYear: new Date().getFullYear(),
+      nowMonth: new Date().getMonth(),
+      isLoading,
+      error,
+      refreshData,
+    }),
+    [userId, istDate, isLoading, error, refreshData],
+  );
+
+  // ── Render ──
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col items-start gap-4 w-full">
-        <BackButton href={ROUTES.DASHBOARD} />
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between w-full">
-          <div>
-            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-              Medical Records
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Track and manage your medical history.
-            </p>
-          {!isLoading && (
-            <p className="mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
-              Total Records:{" "}
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                {totalRecords} record{totalRecords !== 1 ? "s" : ""}
-              </span>
-            </p>
-          )}
-          </div>
-
-          {/* Document Store link */}
-          {!isLoading && (
-            <div className="w-full md:w-auto md:min-w-[200px] lg:w-1/3">
-              <Link
-                href={ROUTES.MEDICAL_STORE}
-                className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
-              >
-                <FolderIcon className="h-5 w-5 text-red-500" />
-                Document Store
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Loading state */}
-      {isLoading && <LoadingSpinner />}
-
-      {/* Error state */}
-      {error && (
-        <ErrorBanner
-          message={error}
-          onRetry={() => userId && refreshData(userId)}
-        />
-      )}
-
-      {/* Table / Month view */}
-      {!isLoading && (
+    <GenericDomainPage
+      ctx={ctx}
+      title="Medical Records"
+      description="Track and manage your medical history."
+      backHref={ROUTES.DASHBOARD}
+      storeHref={ROUTES.MEDICAL_STORE}
+      storeLabel="Document Store"
+      storeIcon={<FolderIcon className="h-5 w-5 text-red-500" />}
+      headerStat={
+        !isLoading ? (
+          <p className="mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
+            Total Records:{" "}
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+              {totalRecords} record{totalRecords !== 1 ? "s" : ""}
+            </span>
+          </p>
+        ) : undefined
+      }
+      modalSlot={
+        modalTarget && userId && (
+          <MedicalModal
+            record={modalTarget === "create" ? null : modalTarget}
+            defaultDate={modalTarget === "create" ? istDate : undefined}
+            attachedDocuments={
+              modalTarget !== "create" && modalTarget
+                ? documents.filter((d) => modalTarget.document_ids?.includes(d.id))
+                : []
+            }
+            standaloneDocuments={documents.filter(
+              (d) => d.domain === "medical" && !d.linked_id,
+            )}
+            userId={userId}
+            onClose={closeModal}
+            onSave={handleSave}
+            onDelete={handleDelete}
+          />
+        )
+      }
+      renderBody={() => (
         <BoxContainer>
           <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -365,14 +285,23 @@ export default function MedicalView() {
                       selectedYear === istParsed.year &&
                       monthIndex === istParsed.month;
                     return (
-                      <MedicalMonthRow
+                      <GenericMonthRow
                         key={`month-${monthName}`}
                         monthName={monthName}
                         monthIndex={monthIndex}
                         year={selectedYear}
-                        records={monthRecords}
+                        items={monthRecords}
                         isCurrentMonth={isCurrentMonth}
-                        onSelectRecord={(record) => openEdit(record)}
+                        getDate={(record) => record.date}
+                        getSubtitle={(items) => {
+                          const count = items.length;
+                          return <>{count} record{count !== 1 ? "s" : ""}</>;
+                        }}
+                        columns={medicalColumns}
+                        getItemKey={(record) => record.id}
+                        previewCount={5}
+                        onRowClick={(record) => openEdit(record)}
+                        viewAllHref={`${ROUTES.MEDICAL_ALL}?year=${selectedYear}&month=${monthIndex}`}
                       />
                     );
                   })}
@@ -389,15 +318,24 @@ export default function MedicalView() {
                         selectedYear === istParsed.year &&
                         monthIndex === istParsed.month;
                       return (
-                        <MedicalMonthRow
+                        <GenericMonthRow
                           key={`month-${monthName}`}
                           monthName={monthName}
                           monthIndex={monthIndex}
                           year={selectedYear}
-                          records={monthRecords}
+                          items={monthRecords}
                           isCurrentMonth={isCurrentMonth}
-                          onSelectRecord={(record) => openEdit(record)}
-                          />
+                          getDate={(record) => record.date}
+                          getSubtitle={(items) => {
+                            const count = items.length;
+                            return <>{count} record{count !== 1 ? "s" : ""}</>;
+                          }}
+                          columns={medicalColumns}
+                          getItemKey={(record) => record.id}
+                          previewCount={5}
+                          onRowClick={(record) => openEdit(record)}
+                          viewAllHref={`${ROUTES.MEDICAL_ALL}?year=${selectedYear}&month=${monthIndex}`}
+                        />
                       );
                     })}
                 </div>
@@ -406,26 +344,6 @@ export default function MedicalView() {
           )}
         </BoxContainer>
       )}
-
-      {/* Medical Modal (create / edit) — query-param-driven */}
-      {modalTarget && userId && (
-        <MedicalModal
-          record={modalTarget === "create" ? null : modalTarget}
-          defaultDate={modalTarget === "create" ? istDate : undefined}
-          attachedDocuments={
-            modalTarget !== "create" && modalTarget
-              ? documents.filter((d) => modalTarget.document_ids?.includes(d.id))
-              : []
-          }
-          standaloneDocuments={documents.filter(
-            (d) => d.domain === "medical" && !d.linked_id,
-          )}
-          userId={userId}
-          onClose={closeModal}
-          onSave={handleSave}
-          onDelete={handleDelete}
-        />
-      )}
-    </div>
+    />
   );
 }
