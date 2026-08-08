@@ -45,7 +45,6 @@ export default function VaultDocumentsPage() {
       documentId: string,
       _parentId: string,
       userId: string,
-      _refreshAll: () => Promise<void>,
     ) => {
       const docs = await fetchDocuments(userId);
       const d = docs.find((x) => x.id === documentId);

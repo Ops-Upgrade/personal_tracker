@@ -20,7 +20,7 @@ export default function BankListView() {
     (b: BankEntry): VaultRecordItem => ({
       id: b.id,
       title: b.bank_name,
-      values: [{ label: "PINs", value: `${b.pins.length} saved` }],
+      values: [{ label: "PINs", value: `${b.pins.length} saved`, isCopyable: false }],
     }),
     [],
   );
@@ -43,6 +43,7 @@ export default function BankListView() {
       itemNamePlural="bank accounts"
       singleDeleteDescription="This will permanently delete this bank entry and all its PINs. This action cannot be undone."
       mapRecordToItem={mapRecordToItem}
+      disableSelection
       emptyMessage="No banks added yet. Add your first bank."
       searchPlaceholder="Search banks..."
       onActionClick={(id) => router.push(ROUTES.VAULT_BANK_DETAIL(id))}

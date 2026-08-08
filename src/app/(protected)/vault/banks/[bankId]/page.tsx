@@ -8,6 +8,7 @@ import { fetchVaultEntriesBySection, updateVaultEntry, deleteVaultEntry } from "
 import GenericStorePage from "@/components/common/store/GenericStorePage";
 import type { BankEntry, VaultRecordItem } from "@/types/vault";
 import BankPinModal from "@/components/vault/banks/BankPinModal";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { BankPinData } from "@/components/vault/banks/BankPinModal";
 
 export default function BankDetailPage({ params }: { params: Promise<{ bankId: string }> }) {
@@ -17,6 +18,7 @@ export default function BankDetailPage({ params }: { params: Promise<{ bankId: s
   const [userId, setUserId] = useState<string | null>(null);
   const [bank, setBank] = useState<BankEntry | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   // Load bank
   useEffect(() => {
@@ -121,43 +123,59 @@ export default function BankDetailPage({ params }: { params: Promise<{ bankId: s
   if (!bank) return null;
 
   return (
-    <GenericStorePage<BankPinData>
-      storeType="record"
-      title={bank.bank_name}
-      backHref={ROUTES.VAULT_BANKS}
-      fetchData={fetchData}
-      onDeleteRecord={onDeleteRecord}
-      onBulkDeleteRecords={onBulkDeleteRecords}
-      itemName="PIN"
-      mapRecordToItem={mapRecordToItem}
-      emptyMessage="No PINs added yet."
-      searchPlaceholder="Search PINs..."
-      headerActions={
-        <button
-          onClick={handleDeleteBank}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
-        >
-          Delete Bank
-        </button>
-      }
-      recordModalSlot={({ record, onSaved, onClose }) => (
-        <BankPinModal
-          pin={record}
-          onClose={onClose}
-          onSave={(pinData) => {
-            handlePinSave(pinData);
-            onSaved(pinData);
+    <>
+      <GenericStorePage<BankPinData>
+        storeType="record"
+        title={bank.bank_name}
+        description="Edit cards and pins for this bank."
+        backHref={ROUTES.VAULT_BANKS}
+        fetchData={fetchData}
+        onDeleteRecord={onDeleteRecord}
+        onBulkDeleteRecords={onBulkDeleteRecords}
+        itemName="PIN"
+        mapRecordToItem={mapRecordToItem}
+        emptyMessage="No PINs added yet."
+        searchPlaceholder="Search PINs..."
+        headerActions={
+          <button
+            onClick={() => setIsConfirmingDelete(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
+          >
+            Delete Bank
+          </button>
+        }
+        recordModalSlot={({ record, onSaved, onClose }) => (
+          <BankPinModal
+            pin={record}
+            onClose={onClose}
+            onSave={(pinData) => {
+              handlePinSave(pinData);
+              onSaved(pinData);
+            }}
+            onDelete={
+              record
+                ? (pinId) => {
+                    onDeleteRecord(pinId);
+                    onClose();
+                  }
+                : undefined
+            }
+          />
+        )}
+      />
+
+      {isConfirmingDelete && (
+        <ConfirmDialog
+          title="Delete Bank?"
+          description="Are you sure you want to permanently delete this bank and all its PINs? This action cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => {
+            setIsConfirmingDelete(false);
+            handleDeleteBank();
           }}
-          onDelete={
-            record
-              ? (pinId) => {
-                  onDeleteRecord(pinId);
-                  onClose();
-                }
-              : undefined
-          }
+          onCancel={() => setIsConfirmingDelete(false)}
         />
       )}
-    />
+    </>
   );
 }
