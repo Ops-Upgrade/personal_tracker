@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
-import { deleteTask, fetchTasks, updateTask } from "@/api/taskmanager";
+import { useTaskData } from "@/hooks/useTaskData";
 import { useLocalStorage } from "@/lib/useLocalStorage";
+import { useTaskActions } from "@/hooks/useTaskActions";
 import { ROUTES } from "@/routes/paths";
 import type { Task } from "@/types/taskmanager";
 import { PRIORITIES } from "@/types/common";
@@ -24,15 +24,7 @@ import {
 import TaskModal from "@/components/taskmanager/TaskModal";
 
 export default function CompletedTasksPage() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-
-  const loadData = useCallback(async (uid: string) => {
-    const rows = await fetchTasks(uid);
-    setTasks(rows);
-  }, []);
-
-  const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
-    useAuthBootstrap({ loadData });
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData, tasks } = useTaskData();
 
   const [view, setView] = useLocalStorage<string>("taskManagerCompletedView", "all");
   const [taskModalTarget, setTaskModalTarget] = useState<Task | null>(null);
@@ -108,49 +100,31 @@ export default function CompletedTasksPage() {
 
   const closeTaskModal = () => setTaskModalTarget(null);
 
-  async function handleTaskSave(
-    draft: {
-      name: string;
-      priority: Task["priority"];
-      due_date: string | null;
-      mode: Task["mode"];
-      description: string;
-      is_completed: boolean;
+  const refresh = useCallback(async () => {
+    if (!userId) return;
+    await refreshData(userId);
+  }, [userId, refreshData]);
+
+  const { handleTaskSave: rawHandleTaskSave, handleTaskDelete, handleToggleComplete } =
+    useTaskActions({ userId, refresh });
+
+  // Void wrapper to match TaskModal's onSave signature (hook returns Promise<Task>)
+  const handleTaskSave = useCallback(
+    async (
+      draft: {
+        name: string;
+        priority: Task["priority"];
+        due_date: string | null;
+        mode: Task["mode"];
+        description: string;
+        is_completed: boolean;
+      },
+      existingTask: Task | null,
+    ) => {
+      await rawHandleTaskSave(draft, existingTask);
     },
-    existingTask: Task | null
-  ) {
-    if (!userId || !existingTask) return;
-    const nowIso = new Date().toISOString();
-    const completedAt = draft.is_completed
-      ? existingTask.completed_at ?? nowIso
-      : null;
-
-    await updateTask(userId, existingTask.id, {
-      ...draft,
-      completed_at: completedAt,
-      updated_at: nowIso,
-    });
-
-    await refreshData(userId);
-  }
-
-  async function handleTaskDelete(taskId: string) {
-    if (!userId) return;
-    await deleteTask(taskId);
-    await refreshData(userId);
-  }
-
-  const handleReopen = async (task: Task) => {
-    if (!userId) return;
-    const nowIso = new Date().toISOString();
-    await updateTask(userId, task.id, {
-      ...task,
-      is_completed: false,
-      completed_at: null,
-      updated_at: nowIso,
-    });
-    await refreshData(userId);
-  };
+    [rawHandleTaskSave],
+  );
 
   // ── Column definitions ──
 
@@ -180,7 +154,7 @@ export default function CompletedTasksPage() {
     <div className="flex justify-end items-center">
       <button
         type="button"
-        onClick={(e) => { e.stopPropagation(); handleReopen(task); }}
+        onClick={(e) => { e.stopPropagation(); handleToggleComplete(task, false); }}
         className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
       >
         Reopen
