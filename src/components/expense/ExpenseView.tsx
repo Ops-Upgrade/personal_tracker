@@ -1,34 +1,32 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { ROUTES } from "@/routes/paths";
-import BackButton from "@/components/common/BackButton";
 import Button from "@/components/common/Button";
-import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { useQueryModal } from "@/lib/useQueryModal";
-import {
-  fetchExpenses,
-} from "@/api/expense";
-import {
-  fetchDocuments,
-} from "@/api/common/documents";
 import { parseISTDate } from "@/api/serverDate";
 import type { Expense, ExpenseViewMode } from "@/types/expense";
-import type { Document } from "@/types/document";
 import { MONTHS } from "@/types/common";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useExpenseActions } from "@/hooks/useExpenseActions";
+import { useExpenseData } from "@/hooks/useExpenseData";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import { List, LayoutGrid } from "lucide-react";
-import { FolderIcon } from "@/components/common/Icons";
-import ErrorBanner from "@/components/common/ErrorBanner";
-import LoadingSpinner from "@/components/common/LoadingSpinner";
+import { FolderIcon, PaperClipIcon } from "@/components/common/Icons";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
+import GenericDomainPage from "@/components/common/GenericDomainPage";
+import type { DomainPageContext } from "@/components/common/GenericDomainPage";
+import type { ColumnDef } from "@/components/common/GenericViewPage";
 import ExpenseModal from "./ExpenseModal";
-import MonthRow from "./MonthRow";
+import GenericMonthRow from "@/components/common/GenericMonthRow";
 import YearDropdown from "@/components/common/YearDropdown";
+import { trunc } from "@/lib/viewHelpers";
+
+function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+}
 
 /** SVG icon symbols for the expense view toggle */
 const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
@@ -36,28 +34,16 @@ const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
   { value: "multi", label: <LayoutGrid className="h-4 w-4" /> },
 ];
 
-
 /**
  * Expense Tracker feature shell.
  * Orchestrates month list, year dropdown, and create/edit expense modals.
  * "View All" navigates to the dedicated /expense/all route with month/year params.
- * Query-param-driven modals (like EducationView).
+ * Query-param-driven modals via useQueryModal ("expense" prefix).
+ * Layout shell delegated to GenericDomainPage (full-width).
  */
 export default function ExpenseView() {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
-
-  const loadData = useCallback(async (uid: string) => {
-    const [expRows, docRows] = await Promise.all([
-      fetchExpenses(uid),
-      fetchDocuments(uid),
-    ]);
-    setExpenses(expRows);
-    setDocuments(docRows);
-  }, []);
-
-  const { userId, istDate, isLoading, error, refreshData } =
-    useAuthBootstrap({ loadData });
+  const { userId, istDate, isLoading, error, refreshData, expenses, documents } =
+    useExpenseData();
 
   const refresh = useCallback(async () => {
     if (!userId) return;
@@ -70,8 +56,7 @@ export default function ExpenseView() {
   // Query-param-driven modal state via shared hook
   const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(expenses, "expense");
 
-  // Wrapper that transitions the URL param from "new-expense" to "edit-expense-<id>"
-  // after creation so the modal switches to edit mode with a real baseline.
+  // Wrapper that transitions from "new-expense" to "edit-expense-<id>" after creation
   const handleExpenseSave = useCallback(
     async (
       draft: { item: string; seller: string; cost: number; date: string; reason: string },
@@ -112,9 +97,8 @@ export default function ExpenseView() {
     return () => clearTimeout(timeout);
   }, [isLoading, selectedYear, viewMode]);
 
-  // --- Derived data ---
+  // ── Derived data ──
 
-  // All distinct years from decrypted data + current year, sorted descending
   const availableYears = useMemo(() => {
     const currentYear = new Date().getFullYear();
     const yearsFromData = new Set(
@@ -124,7 +108,6 @@ export default function ExpenseView() {
     return Array.from(yearsFromData).sort((a, b) => b - a);
   }, [expenses]);
 
-  // Expenses grouped by month for the selected year
   const expensesByMonth = useMemo(() => {
     return MONTHS.map((monthName, monthIndex) => {
       const filtered = expenses.filter((e) => {
@@ -135,65 +118,137 @@ export default function ExpenseView() {
     });
   }, [expenses, selectedYear]);
 
-  // Total for the selected year
   const yearlyTotal = useMemo(() => {
     return expensesByMonth.reduce((acc, month) => {
       return acc + month.expenses.reduce((sum, e) => sum + e.cost, 0);
     }, 0);
   }, [expensesByMonth]);
 
-  // --- Render ---
+  // ── Column definitions for month preview rows ──
+
+  const expenseColumns: ColumnDef<Expense>[] = useMemo(
+    () => [
+      {
+        key: "item",
+        header: "Item",
+        colSpan: 3,
+        render: (exp) => (
+          <span className="font-medium text-zinc-800 dark:text-zinc-100">
+            {trunc(exp.item, 24) || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "seller",
+        header: "Seller",
+        colSpan: 2,
+        render: (exp) => (
+          <span className="text-zinc-600 dark:text-zinc-300">
+            {trunc(exp.seller, 20) || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "cost",
+        header: "Cost",
+        colSpan: 2,
+        render: (exp) => (
+          <span className="text-zinc-700 dark:text-zinc-200">
+            ₹ {exp.cost.toLocaleString("en-IN")}
+          </span>
+        ),
+      },
+      {
+        key: "date",
+        header: "Date",
+        colSpan: 2,
+        render: (exp) => (
+          <span className="text-zinc-600 dark:text-zinc-300">
+            {formatShortDate(exp.date)}
+          </span>
+        ),
+      },
+      {
+        key: "reason",
+        header: "Reason",
+        colSpan: 2,
+        render: (exp) => (
+          <span className="text-zinc-500 dark:text-zinc-400">
+            {trunc(exp.reason, 20) || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "files",
+        header: "Files",
+        colSpan: 1,
+        render: (exp) => {
+          const count = exp.document_ids?.length ?? 0;
+          return count > 0 ? (
+            <span className="inline-flex items-center justify-center gap-1 text-emerald-500" title={`${count} document(s) attached`}>
+              <PaperClipIcon className="h-4 w-4" />
+              <span className="text-zinc-600 dark:text-zinc-300">({count})</span>
+            </span>
+          ) : (
+            <span className="text-zinc-400">—</span>
+          );
+        },
+      },
+    ],
+    [],
+  );
+
+  // ── Context for GenericDomainPage ──
+
+  const ctx: DomainPageContext = useMemo(
+    () => ({
+      userId,
+      istDate,
+      nowYear: new Date().getFullYear(),
+      nowMonth: new Date().getMonth(),
+      isLoading,
+      error,
+      refreshData,
+    }),
+    [userId, istDate, isLoading, error, refreshData],
+  );
+
+  // ── Render ──
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col items-start gap-4 w-full">
-        <BackButton href={ROUTES.DASHBOARD} />
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between w-full">
-          <div>
-            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">
-              Expenses
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Track and manage your spending.
-            </p>
-          {!isLoading && (
-            <p className="mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
-              Total for {selectedYear}:{" "}
-              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                ₹ {yearlyTotal.toLocaleString("en-IN")}
-              </span>
-            </p>
-          )}
-          </div>
-
-          {/* Receipt Store link */}
-          {!isLoading && (
-            <div className="w-full md:w-auto md:min-w-[200px] lg:w-1/3">
-              <Link
-                href={ROUTES.EXPENSE_STORE}
-                className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"
-              >
-                <FolderIcon className="h-5 w-5 text-emerald-500" />
-                Receipt Store
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Loading state */}
-      {isLoading && <LoadingSpinner />}
-
-      {/* Error state */}
-      {error && (
-        <ErrorBanner
-          message={error}
-          onRetry={() => userId && refreshData(userId)}
-        />
-      )}
-
-      {/* Table / Month view */}
-      {!isLoading && (
+    <GenericDomainPage
+      ctx={ctx}
+      title="Expenses"
+      description="Track and manage your spending."
+      backHref={ROUTES.DASHBOARD}
+      storeHref={ROUTES.EXPENSE_STORE}
+      storeLabel="Receipt Store"
+      storeIcon={<FolderIcon className="h-5 w-5 text-emerald-500" />}
+      headerStat={
+        !isLoading ? (
+          <p className="mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
+            Total for {selectedYear}:{" "}
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+              ₹ {yearlyTotal.toLocaleString("en-IN")}
+            </span>
+          </p>
+        ) : undefined
+      }
+      modalSlot={
+        modalTarget && userId && (
+          <ExpenseModal
+            expense={modalTarget === "create" ? null : modalTarget}
+            defaultDate={modalTarget === "create" ? istDate : undefined}
+            documents={documents}
+            userId={userId}
+            onClose={closeModal}
+            onSave={handleExpenseSave}
+            onDelete={handleExpenseDelete}
+            onDownloadDocument={handleDownloadDocument}
+          />
+        )
+      }
+      renderBody={() => (
         <BoxContainer>
           <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
@@ -219,74 +274,76 @@ export default function ExpenseView() {
             </div>
           </header>
           <div className={`${SCROLLABLE_CLASSES} flex flex-col md:flex-row gap-4 items-start`}>
-              {/* Left Column (or Single Column) */}
-              <div className="flex-1 flex flex-col gap-4 w-full">
+            {/* Left Column (or Single Column) */}
+            <div className="flex-1 flex flex-col gap-4 w-full">
+              {expensesByMonth
+                .filter((_, i) => viewMode === "multi" ? i % 2 === 0 : true)
+                .map(({ monthName, monthIndex, expenses: monthExpenses }) => {
+                  const isCurrentMonth =
+                    istParsed !== null &&
+                    selectedYear === istParsed.year &&
+                    monthIndex === istParsed.month;
+                  return (
+                    <GenericMonthRow
+                      key={monthName}
+                      monthName={monthName}
+                      monthIndex={monthIndex}
+                      year={selectedYear}
+                      items={monthExpenses}
+                      isCurrentMonth={isCurrentMonth}
+                      getDate={(expense) => expense.date}
+                      getSubtitle={(items) => {
+                        const total = items.reduce((sum, e) => sum + e.cost, 0);
+                        const count = items.length;
+                        return <>Total Expense: ₹ {total.toLocaleString("en-IN")} · {count} item{count !== 1 ? "s" : ""}</>;
+                      }}
+                      columns={expenseColumns}
+                      getItemKey={(expense) => expense.id}
+                      previewCount={5}
+                      onRowClick={(expense) => openEdit(expense)}
+                      viewAllHref={`${ROUTES.EXPENSE_ALL}?year=${selectedYear}&month=${monthIndex}`}
+                    />
+                  );
+                })}
+            </div>
+
+            {/* Right Column (only visible in multi view) */}
+            {viewMode === "multi" && (
+              <div className="flex-1 flex-col gap-4 w-full hidden md:flex">
                 {expensesByMonth
-                  .filter((_, i) => viewMode === "multi" ? i % 2 === 0 : true)
+                  .filter((_, i) => i % 2 !== 0)
                   .map(({ monthName, monthIndex, expenses: monthExpenses }) => {
                     const isCurrentMonth =
                       istParsed !== null &&
                       selectedYear === istParsed.year &&
                       monthIndex === istParsed.month;
                     return (
-                      <MonthRow
+                      <GenericMonthRow
                         key={monthName}
                         monthName={monthName}
                         monthIndex={monthIndex}
                         year={selectedYear}
-                        expenses={monthExpenses}
+                        items={monthExpenses}
                         isCurrentMonth={isCurrentMonth}
-                        onSelectExpense={(expense) => {
-                          openEdit(expense);
+                        getDate={(expense) => expense.date}
+                        getSubtitle={(items) => {
+                          const total = items.reduce((sum, e) => sum + e.cost, 0);
+                          const count = items.length;
+                          return <>Total Expense: ₹ {total.toLocaleString("en-IN")} · {count} item{count !== 1 ? "s" : ""}</>;
                         }}
+                        columns={expenseColumns}
+                        getItemKey={(expense) => expense.id}
+                        previewCount={5}
+                        onRowClick={(expense) => openEdit(expense)}
+                        viewAllHref={`${ROUTES.EXPENSE_ALL}?year=${selectedYear}&month=${monthIndex}`}
                       />
                     );
                   })}
               </div>
-
-              {/* Right Column (only visible in multi view) */}
-              {viewMode === "multi" && (
-                <div className="flex-1 flex-col gap-4 w-full hidden md:flex">
-                  {expensesByMonth
-                    .filter((_, i) => i % 2 !== 0)
-                    .map(({ monthName, monthIndex, expenses: monthExpenses }) => {
-                      const isCurrentMonth =
-                        istParsed !== null &&
-                        selectedYear === istParsed.year &&
-                        monthIndex === istParsed.month;
-                      return (
-                        <MonthRow
-                          key={monthName}
-                          monthName={monthName}
-                          monthIndex={monthIndex}
-                          year={selectedYear}
-                          expenses={monthExpenses}
-                          isCurrentMonth={isCurrentMonth}
-                          onSelectExpense={(expense) => {
-                            openEdit(expense);
-                          }}
-                        />
-                      );
-                    })}
-                </div>
-              )}
-            </div>
+            )}
+          </div>
         </BoxContainer>
       )}
-
-      {/* Expense Modal (create / edit) — query-param-driven */}
-      {modalTarget && userId && (
-        <ExpenseModal
-          expense={modalTarget === "create" ? null : modalTarget}
-          defaultDate={modalTarget === "create" ? istDate : undefined}
-          documents={documents}
-          userId={userId}
-          onClose={closeModal}
-          onSave={handleExpenseSave}
-          onDelete={handleExpenseDelete}
-          onDownloadDocument={handleDownloadDocument}
-        />
-      )}
-    </div>
+    />
   );
 }

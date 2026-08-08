@@ -2,62 +2,26 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
-import { fetchExpenses } from "@/api/expense";
-import { fetchDocuments } from "@/api/common/documents";
 import { ROUTES } from "@/routes/paths";
 import type { Expense } from "@/types/expense";
-import type { Document } from "@/types/document";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import type { ColumnDef, MonthGroup } from "@/components/common/GenericViewPage";
-import { PaperClipIcon } from "@/components/common/Icons";
+import type { MonthGroup } from "@/components/common/GenericViewPage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
-import { useTableSort, type SortConfig } from "@/hooks/useTableSort";
+import { useTableSort } from "@/hooks/useTableSort";
 import { useExpenseActions } from "@/hooks/useExpenseActions";
-import { byMonth, trunc } from "@/lib/viewHelpers";
+import { useExpenseData } from "@/hooks/useExpenseData";
+import { byMonth } from "@/lib/viewHelpers";
 import ExpenseModal from "@/components/expense/ExpenseModal";
-
-// ── Sort helpers ──
-
-type SortColumn = "item" | "seller" | "cost" | "date" | "reason";
-
-const SORT_CONFIGS: SortConfig<SortColumn, Expense>[] = [
-  { column: "item", extractor: (exp) => exp.item.toLowerCase() },
-  { column: "seller", extractor: (exp) => (exp.seller ?? "").toLowerCase() },
-  { column: "cost", extractor: (exp) => exp.cost },
-  { column: "date", extractor: (exp) => new Date(exp.date + "T00:00:00").getTime() },
-  { column: "reason", extractor: (exp) => exp.reason.replace(/<[^>]*>/g, "").trim().toLowerCase() },
-];
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
+import { EXPENSE_COLUMNS, SORT_CONFIGS } from "@/components/expense/config";
 
 export default function ExpenseAllPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [documents, setDocuments] = useState<Document[]>([]);
-
-  const loadData = useCallback(async (uid: string) => {
-    const [expRows, docRows] = await Promise.all([
-      fetchExpenses(uid),
-      fetchDocuments(uid),
-    ]);
-    setExpenses(expRows);
-    setDocuments(docRows);
-  }, []);
-
-  const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
-    useAuthBootstrap({ loadData });
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData, expenses, documents } =
+    useExpenseData();
 
   // ── Year / Month filter state from URL params ──
 
@@ -138,90 +102,6 @@ export default function ExpenseAllPage() {
   const { handleExpenseSave, handleExpenseDelete, handleDownloadDocument } =
     useExpenseActions({ userId, refresh });
 
-  // ── Column definitions ──
-
-  const expenseColumns: ColumnDef<Expense, SortColumn>[] = useMemo(
-    () => [
-      {
-        key: "item",
-        header: "Item",
-        colSpan: 3,
-        sortColumn: "item",
-        render: (exp) => (
-          <span className="font-medium text-zinc-800 dark:text-zinc-100">
-            {trunc(exp.item, 24) || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "seller",
-        header: "Seller",
-        colSpan: 2,
-        sortColumn: "seller",
-        render: (exp) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {trunc(exp.seller, 20) || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "cost",
-        header: "Cost",
-        colSpan: 2,
-        sortColumn: "cost",
-        render: (exp) => (
-          <span className="text-zinc-700 dark:text-zinc-200">
-            ₹ {exp.cost.toLocaleString("en-IN")}
-          </span>
-        ),
-      },
-      {
-        key: "date",
-        header: "Date",
-        colSpan: 2,
-        sortColumn: "date",
-        render: (exp) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {formatDate(exp.date)}
-          </span>
-        ),
-      },
-      {
-        key: "reason",
-        header: "Reason",
-        colSpan: 2,
-        sortColumn: "reason",
-        render: (exp) => (
-          <span className="text-zinc-500 dark:text-zinc-400">
-            {trunc(exp.reason, 20) || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "files",
-        header: "Files",
-        colSpan: 1,
-        render: (exp) => {
-          const count = exp.document_ids?.length ?? 0;
-          return count > 0 ? (
-            <span
-              className="inline-flex items-center justify-center gap-1 text-emerald-500"
-              title={`${count} document(s) attached`}
-            >
-              <PaperClipIcon className="h-4 w-4" />
-              <span className="text-zinc-600 dark:text-zinc-300">
-                ({count})
-              </span>
-            </span>
-          ) : (
-            <span className="text-zinc-400">—</span>
-          );
-        },
-      },
-    ],
-    [],
-  );
-
   const emptyMessage =
     selectedMonth === "all"
       ? `No expenses recorded in ${selectedYear}.`
@@ -243,7 +123,7 @@ export default function ExpenseAllPage() {
         {!isLoading && (
           <GenericViewPage
             items={sorted}
-            columns={expenseColumns}
+            columns={EXPENSE_COLUMNS}
             getItemKey={(exp) => exp.id}
             views={STANDARD_VIEWS.ALL_MONTHS}
             activeView={activeView}
