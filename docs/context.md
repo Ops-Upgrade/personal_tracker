@@ -8,7 +8,7 @@
 
 Personal tracker app for 1–3 trusted users to track expenses, tasks, and more.
 No public signup — users are pre-created in Supabase dashboard.
-Target deployment: Vercel with custom domain `ops-upgrade.com` and subdomains.
+Target deployment: Vercel with custom domain `personal.ops-upgrade.net`.
 
 ---
 
