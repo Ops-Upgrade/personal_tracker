@@ -1,7 +1,8 @@
 "use client";
 
 import { use, useCallback, useState } from "react";
-import MoviePage from "@/components/media/pages/MoviePage";
+import { Film } from "lucide-react";
+import GenericMediaPage from "@/components/media/pages/GenericMediaPage";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { listCollections } from "@/api/media";
 import type { MediaCollection } from "@/types/media";
@@ -34,12 +35,16 @@ export default function MovieRoute({
   }
 
   return (
-    <MoviePage
+    <GenericMediaPage
       tmdbId={tmdbId}
       userId={userId}
       userName={userName}
       userAvatarUrl={userAvatarUrl}
       collections={collections}
+      mediaType="movie"
+      fallbackIcon={<Film size={48} />}
+      typeLabel="Movie"
+      showWatchedOn
     />
   );
 }
