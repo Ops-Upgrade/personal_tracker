@@ -97,6 +97,7 @@ export interface VaultRecordItem {
     label?: string;
     value: string;
     isSecret?: boolean;
+    isCopyable?: boolean;
   }[];
 }
 

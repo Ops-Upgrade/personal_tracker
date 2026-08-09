@@ -306,7 +306,7 @@ CREATE POLICY "Users can manage their own educations"
 
 ## `public.documents`
 
-Encrypted global document metadata. Each row represents one document file attached to a domain record (expense, education, medical) or uploaded independently to the Global Document Store. File content is stored encrypted in R2 storage; this table stores encrypted metadata (filename, MIME type, IV, linked ID, domain).
+Encrypted global document metadata. Each row represents one document file attached to a domain record (expense, education, medical, taskmanager, vault) or uploaded independently to the Global Document Store. File content is stored encrypted in R2 storage; this table stores encrypted metadata (filename, MIME type, IV, linked ID, domain).
 
 | Column       | Type          | Nullable | Default              | Notes |
 |--------------|---------------|----------|----------------------|-------|
@@ -635,3 +635,4 @@ The `connect-src` CSP directive must allow `https://*.r2.cloudflarestorage.com` 
 | 2026-07-15 | Added `public.media` + `public.media_collections` tables + RLS (Media Tracker feature). |
 | 2026-07-23 | Added `recovery_salt`, `recovery_iv`, `recovery_wrapped_dek` nullable columns to `public.user_keys` (Recovery Key feature). |
 | 2026-07-24 | Added `vault_pin_hash`, `vault_pin_salt`, `vault_pin_set_at`, `vault_failed_attempts`, `vault_last_failed_at`, `vault_locked_out` columns to `public.user_keys`. Added `public.vault_entries` table + RLS + index (Vault feature). Added `vault/` R2 folder. |
+| 2026-08-09 | Updated `public.documents` documentation to formally include `taskmanager` and `vault` as supported domains (aligned with codebase `DocumentDomain` type). |

@@ -51,8 +51,28 @@ export default function SortableHeader<Column extends string = string>({
       <ArrowUpDown className="inline-block h-3 w-3 ml-0.5 opacity-40" />
     );
 
+  const sharedTextClasses =
+    "text-xs font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors cursor-pointer";
+
+  // ── <th> branch: preserve native table-cell display ──
+  if (Component === "th") {
+    const thClassName = [sharedTextClasses, extraClassName]
+      .filter(Boolean)
+      .join(" ");
+
+    return (
+      <th onClick={handleClick} className={thClassName}>
+        <span className="inline-flex items-center gap-0.5">
+          {label}
+          {icon}
+        </span>
+      </th>
+    );
+  }
+
+  // ── <button> / <div> branch: apply flex layout directly ──
   const className = [
-    "inline-flex items-center gap-0.5 text-xs font-semibold text-zinc-500 uppercase tracking-wider hover:text-zinc-700 dark:hover:text-zinc-300 transition-colors cursor-pointer",
+    `inline-flex items-center gap-0.5 ${sharedTextClasses}`,
     extraClassName,
   ]
     .filter(Boolean)

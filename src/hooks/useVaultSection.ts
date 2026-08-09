@@ -20,7 +20,7 @@ export function useVaultSection<T extends { id: string }>(section: VaultSection)
     if (!userId) return;
     try {
       const entries = await fetchVaultEntriesBySection(userId, section);
-      setData(entries as T[]);
+      setData(entries as unknown as T[]);
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to load ${section}`);
     }
