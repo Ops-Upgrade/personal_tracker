@@ -16,6 +16,7 @@ export default function ThemeSwitcher() {
   const isDark = resolvedTheme === "dark";
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 

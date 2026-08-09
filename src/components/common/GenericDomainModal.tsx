@@ -1711,7 +1711,7 @@ export default function GenericDomainModal({
                         onFileSelect={handleFileUpload}
                         onFileClear={() => {}}
                         showEncryptedNotice={false}
-                        disabled={isUploading || isSaving}
+                        disabled={isSaving}
                         multiple={!isStandaloneFile}
                       />
                     </div>
