@@ -126,6 +126,10 @@ interface GenericViewPageProps<T, C extends string = string> {
   /** When provided, a MonthDropdown is rendered in the header next to the year dropdown. */
   monthFilter?: MonthFilterConfig;
 
+  /** When true, hides the view toggle entirely. Used on /all pages that already have
+   *  their own month filter dropdown — prevents a redundant "Switch to Month View" button. */
+  disableMonthToggle?: boolean;
+
   // ── Sorting (for flat / completion view) ──
   /** Current sort state (null / undefined = no active sort). */
   sortState?: SortState<C> | null;
@@ -198,6 +202,7 @@ export default function GenericViewPage<T, C extends string = string>({
   completionColumns,
   monthColumns,
   priorityColumns,
+  disableMonthToggle,
 }: GenericViewPageProps<T, C>) {
   const hasHeaderBar = !!(views || yearFilter);
   const currentView = activeView ?? views?.[0]?.value ?? "all";
@@ -212,7 +217,7 @@ export default function GenericViewPage<T, C extends string = string>({
       {hasHeaderBar && (
         <header className="mb-3 flex items-center justify-between gap-3">
           <div>
-            {views && onViewChange && (
+            {views && onViewChange && !disableMonthToggle && (
               <ViewToggle
                 value={currentView}
                 onChange={onViewChange}
@@ -224,7 +229,6 @@ export default function GenericViewPage<T, C extends string = string>({
           <div className="flex items-center gap-2">
             {monthFilter && (
               <MonthDropdown
-                months={monthFilter.months}
                 selectedMonth={monthFilter.selectedMonth}
                 onChange={monthFilter.onChange}
               />

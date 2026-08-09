@@ -7,6 +7,7 @@ import type { Priority } from "@/types/common";
 import { fetchEducations, createEducation, updateEducation, deleteEducation } from "@/api/education";
 import { fetchDocuments, createDocument, updateDocument, deleteDocument } from "@/api/common/documents";
 import { uploadDocumentFile, downloadDocumentFile, deleteDocumentFile } from "@/api/common/documentStorage";
+import type { FileActions } from "@/components/common/GenericDomainModal";
 
 interface UseEducationActionsParams {
   userId: string | null;
@@ -195,5 +196,38 @@ export function useEducationActions({ userId, refresh }: UseEducationActionsPara
     [userId],
   );
 
-  return { handleEducationSave, handleEducationDelete, handleDownloadDocument };
+  /** Schema-driven save adapter: (formData, fileActions) → handleEducationSave */
+  const createSaveAdapter = useCallback(
+    (existingEducation: Education | null, onSuccess?: (saved: Education) => void) => {
+      return async (formData: Record<string, unknown>, fileActions: FileActions) => {
+        const draft = {
+          name: (formData.name as string) ?? "",
+          provider: (formData.provider as string) ?? "",
+          priority: (formData.priority as Priority) ?? "medium",
+          due_date: (formData.due_date as string) || null,
+          description: (formData.description as string) ?? "",
+          is_completed: Boolean(formData.is_completed),
+        };
+
+        const firstNewFile = fileActions.newFiles[0];
+        const pendingDoc = firstNewFile
+          ? { file: firstNewFile.file, label: firstNewFile.label }
+          : undefined;
+
+        const saved = await handleEducationSave(
+          draft,
+          existingEducation,
+          pendingDoc,
+          fileActions.docsToLink[0] || undefined,
+          fileActions.docsToUnlink.length > 0 ? fileActions.docsToUnlink : undefined,
+          fileActions.docsToDelete.length > 0 ? fileActions.docsToDelete : undefined,
+        );
+
+        onSuccess?.(saved);
+      };
+    },
+    [handleEducationSave],
+  );
+
+  return { handleEducationSave, handleEducationDelete, handleDownloadDocument, createSaveAdapter };
 }

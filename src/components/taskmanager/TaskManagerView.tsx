@@ -9,16 +9,36 @@ import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useQueryModal } from "@/lib/useQueryModal";
 import { useTaskData } from "@/hooks/useTaskData";
 import GenericDomainPage from "@/components/common/GenericDomainPage";
+import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 import type { DomainPageContext } from "@/components/common/GenericDomainPage";
-import type { Note, Task, TaskView } from "@/types/taskmanager";
+import type { Task, TaskView } from "@/types/taskmanager";
 import { useNoteActions } from "@/hooks/useNoteActions";
 import { useTaskActions } from "@/hooks/useTaskActions";
 import { getUnifiedNotes } from "./helpers";
 import ActiveTasksBox from "./ActiveTasksBox";
 import CompletedTasksBox from "./CompletedTasksBox";
-import NoteModal from "./NoteModal";
 import NotesBox from "./NotesBox";
-import TaskModal from "./TaskModal";
+
+const TASK_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Task Name" },
+  { key: "priority", type: "select", label: "Priority", options: [
+    { value: "low", label: "Low" }, { value: "medium", label: "Medium" },
+    { value: "high", label: "High" }, { value: "critical", label: "Critical" },
+  ]},
+  { key: "due_date", type: "date", label: "Due Date" },
+  { key: "mode", type: "select", label: "Mode", options: [
+    { value: "online", label: "Online" }, { value: "offline", label: "Offline" },
+  ]},
+  { key: "description", type: "richtext", label: "Task Description", minHeight: "8rem" },
+  { key: "is_completed", type: "checkbox", label: "Mark complete" },
+];
+
+const TASK_LAYOUT: string[][] = [["name"], ["priority", "due_date", "mode"], ["description"], ["is_completed"]];
+
+const NOTE_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Name", placeholder: "Note title" },
+  { key: "content", type: "richtext", label: "Content", minHeight: "10rem" },
+];
 
 /**
  * Task Manager feature shell.
@@ -53,7 +73,7 @@ export default function TaskManagerView() {
     openCreate: openNewTask,
     openEdit: openEditTask,
     closeModal: closeTaskModal,
-  } = useQueryModal(activeTasks, "task");
+  } = useQueryModal(tasks, "task");
 
   const {
     modalTarget: noteModalTarget,
@@ -69,62 +89,16 @@ export default function TaskManagerView() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleTaskSave: rawHandleTaskSave, handleTaskDelete, handleToggleComplete } =
+  const { createSaveAdapter: createTaskSaveAdapter, handleTaskDelete, handleToggleComplete } =
     useTaskActions({ userId, refresh });
 
-  // Wrapper that transitions from "create-task" to "edit-task-<id>" after creation
-  const handleTaskSave = useCallback(
-    async (
-      draft: {
-        name: string;
-        priority: Task["priority"];
-        due_date: string | null;
-        mode: Task["mode"];
-        description: string;
-        is_completed: boolean;
-      },
-      existingTask: Task | null,
-    ) => {
-      const savedTask = await rawHandleTaskSave(draft, existingTask);
-      if (!existingTask && savedTask) {
-        openEditTask(savedTask);
-      }
-    },
-    [rawHandleTaskSave, openEditTask],
-  );
-
-  const { handleNoteSave: rawHandleNoteSave, handleNoteDelete, handleDownloadDocument } =
+  const { createSaveAdapter: createNoteSaveAdapter, handleNoteDelete, handleDownloadDocument } =
     useNoteActions({
       userId,
       refresh: async () => {
         if (userId) await refreshData(userId);
       },
     });
-
-  // Wrapper that transitions from "new-note" to "edit-note-<id>" after creation
-  const handleNoteSave = useCallback(
-    async (
-      draft: { name: string; content: string },
-      existingNote: Note | null,
-      pendingDoc?: { file: File; label: string },
-      pendingLinkDocId?: string,
-      pendingUnlinkDocIds?: string[],
-      pendingDeleteDocIds?: string[],
-    ) => {
-      const savedNote = await rawHandleNoteSave(
-        draft,
-        existingNote,
-        pendingDoc,
-        pendingLinkDocId,
-        pendingUnlinkDocIds,
-        pendingDeleteDocIds,
-      );
-      if (!existingNote && savedNote) {
-        openEditNote(savedNote);
-      }
-    },
-    [rawHandleNoteSave, openEditNote],
-  );
 
   // ── Context for GenericDomainPage ──
 
@@ -176,24 +150,68 @@ export default function TaskManagerView() {
       modalSlot={
         <>
           {taskModalTarget && (
-            <TaskModal
+            <GenericDomainModal
               key={taskModalTarget === "create" ? "create" : taskModalTarget.id}
-              task={taskModalTarget === "create" ? null : taskModalTarget}
-              defaultDate={taskModalTarget === "create" ? istDate : undefined}
+              mode="record"
+              title={taskModalTarget === "create" ? "Add task" : "Edit task"}
               onClose={closeTaskModal}
-              onSave={handleTaskSave}
-              onDelete={handleTaskDelete}
+              fields={TASK_FIELDS}
+              layout={TASK_LAYOUT}
+              initialData={{
+                name: taskModalTarget === "create" ? "" : taskModalTarget.name,
+                priority: taskModalTarget === "create" ? "medium" : taskModalTarget.priority,
+                due_date: taskModalTarget === "create" ? (istDate ?? "") : (taskModalTarget.due_date ?? ""),
+                mode: taskModalTarget === "create" ? "online" : taskModalTarget.mode,
+                description: taskModalTarget === "create" ? "" : taskModalTarget.description,
+                is_completed: taskModalTarget === "create" ? false : taskModalTarget.is_completed,
+              }}
+              onSave={createTaskSaveAdapter(
+                taskModalTarget === "create" ? null : taskModalTarget,
+                taskModalTarget === "create"
+                  ? (saved) => openEditTask(saved)
+                  : undefined,
+              )}
+              onDelete={
+                taskModalTarget !== "create"
+                  ? async () => { await handleTaskDelete(taskModalTarget.id); }
+                  : undefined
+              }
+              deleteLabel="Delete"
+              maxWidthClassName="max-w-lg"
             />
           )}
           {noteModalTarget && userId && (
-            <NoteModal
+            <GenericDomainModal
               key={noteModalTarget === "create" ? "create" : noteModalTarget.id}
-              note={noteModalTarget === "create" ? null : noteModalTarget}
-              documents={documents}
-              userId={userId}
+              mode="record"
+              title={noteModalTarget === "create" ? "Add note" : "Edit note"}
               onClose={closeNoteModal}
-              onSave={handleNoteSave}
-              onDelete={handleNoteDelete}
+              fields={NOTE_FIELDS}
+              initialData={{
+                name: noteModalTarget === "create" ? "" : noteModalTarget.name,
+                content: noteModalTarget === "create" ? "" : noteModalTarget.content,
+              }}
+              allowFiles
+              userId={userId}
+              attachedDocuments={
+                noteModalTarget !== "create"
+                  ? documents.filter((d) => d.domain === "taskmanager" && d.linked_id === noteModalTarget.id)
+                  : []
+              }
+              standaloneDocuments={documents.filter((d) => d.domain === "taskmanager" && !d.linked_id)}
+              domain="taskmanager"
+              onSave={createNoteSaveAdapter(
+                noteModalTarget === "create" ? null : noteModalTarget,
+                noteModalTarget === "create"
+                  ? (saved) => openEditNote(saved)
+                  : undefined,
+              )}
+              onDeleteWithCascade={
+                noteModalTarget !== "create"
+                  ? async (cascadeMode) => { await handleNoteDelete(noteModalTarget.id, cascadeMode); }
+                  : undefined
+              }
+              deleteLabel="Delete"
               onDownloadDocument={handleDownloadDocument}
             />
           )}

@@ -78,5 +78,30 @@ export function useTaskActions({ userId, refresh }: UseTaskActionsParams) {
     [userId, refresh],
   );
 
-  return { handleTaskSave, handleTaskDelete, handleToggleComplete };
+  /** Schema-driven save adapter: formData → handleTaskSave (tasks have no file support) */
+  const createSaveAdapter = useCallback(
+    (existingTask: Task | null, onSuccess?: (saved: Task) => void) => {
+      return async (formData: Record<string, unknown>) => {
+        const name = (formData.name as string).trim();
+        if (!name) throw new Error("Task name is required.");
+
+        const saved = await handleTaskSave(
+          {
+            name,
+            priority: formData.priority as Task["priority"],
+            due_date: (formData.due_date as string) || null,
+            mode: formData.mode as Task["mode"],
+            description: (formData.description as string).trim(),
+            is_completed: !!formData.is_completed,
+          },
+          existingTask,
+        );
+
+        onSuccess?.(saved);
+      };
+    },
+    [handleTaskSave],
+  );
+
+  return { handleTaskSave, handleTaskDelete, handleToggleComplete, createSaveAdapter };
 }

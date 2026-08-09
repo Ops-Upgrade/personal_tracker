@@ -13,8 +13,9 @@ import { useEducationActions } from "@/hooks/useEducationActions";
 import { useEducationData } from "@/hooks/useEducationData";
 import { useTableSort } from "@/hooks/useTableSort";
 import { byDueMonth } from "@/lib/viewHelpers";
-import EducationModal from "@/components/education/EducationModal";
-import { EDUCATION_COLUMNS, SORT_CONFIGS } from "@/components/education/config";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
+import { normalizeDateForInput } from "@/lib/utils";
+import { EDUCATION_COLUMNS, SORT_CONFIGS, EDUCATION_FIELDS, EDUCATION_LAYOUT } from "@/components/education/config";
 
 export default function EducationAllPage() {
   const router = useRouter();
@@ -104,10 +105,8 @@ export default function EducationAllPage() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleEducationSave: _handleEducationSave, handleEducationDelete, handleDownloadDocument } =
+  const { createSaveAdapter, handleEducationDelete, handleDownloadDocument } =
     useEducationActions({ userId, refresh });
-  const handleEducationSave: typeof _handleEducationSave = (...args) =>
-    _handleEducationSave(...args);
 
   const emptyMessage =
     selectedMonth === "all"
@@ -168,20 +167,41 @@ export default function EducationAllPage() {
             monthGroups={monthGroups}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
+            disableMonthToggle
           />
         )}
       </PageShell>
 
       {modalTarget && userId && (
-        <EducationModal
-          education={modalTarget}
-          defaultDate={istDate}
-          documents={documents}
+        <GenericDomainModal
+          mode="record"
+          title="Edit education"
+          fields={EDUCATION_FIELDS}
+          layout={EDUCATION_LAYOUT}
+          initialData={{
+            name: modalTarget.name,
+            provider: modalTarget.provider,
+            priority: modalTarget.priority,
+            due_date: normalizeDateForInput(modalTarget.due_date, istDate),
+            description: modalTarget.description,
+            is_completed: modalTarget.is_completed,
+          }}
+          allowFiles
           userId={userId}
-          onClose={closeModal}
-          onSave={handleEducationSave}
-          onDelete={handleEducationDelete}
+          attachedDocuments={documents.filter(
+            (d) => d.domain === "education" && d.linked_id === modalTarget.id,
+          )}
+          standaloneDocuments={documents.filter(
+            (d) => d.domain === "education" && !d.linked_id,
+          )}
+          domain="education"
+          onSave={createSaveAdapter(modalTarget)}
+          onDeleteWithCascade={(cascadeMode) =>
+            handleEducationDelete(modalTarget.id, cascadeMode)
+          }
+          deleteLabel="Delete"
           onDownloadDocument={handleDownloadDocument}
+          onClose={closeModal}
         />
       )}
     </>

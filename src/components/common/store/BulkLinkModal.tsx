@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { StoreParentRecord } from "./StoreDocumentModal";
+import type { StoreParentRecord } from "@/components/common/GenericDomainModal";
 
 interface BulkLinkModalProps {
   parentRecords: StoreParentRecord[];

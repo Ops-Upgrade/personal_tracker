@@ -3,10 +3,14 @@
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
-import { fetchVaultEntriesBySection, deleteVaultEntry } from "@/api/vault";
+import { fetchVaultEntriesBySection, deleteVaultEntry, createVaultEntry, updateVaultEntry } from "@/api/vault";
 import GenericStorePage from "@/components/common/store/GenericStorePage";
-import type { BankEntry, VaultRecordItem } from "@/types/vault";
-import BankModal from "./BankModal";
+import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
+import type { BankEntry, BankEntryPlaintext, VaultRecordItem } from "@/types/vault";
+
+const BANK_FIELDS: FieldDef[] = [
+  { key: "bank_name", type: "text", label: "Bank Name", placeholder: "e.g. HDFC Bank" },
+];
 
 export default function BankListView() {
   const router = useRouter();
@@ -47,9 +51,36 @@ export default function BankListView() {
       emptyMessage="No banks added yet. Add your first bank."
       searchPlaceholder="Search banks..."
       onActionClick={(id) => router.push(ROUTES.VAULT_BANK_DETAIL(id))}
-      recordModalSlot={({ record, userId, onSaved, onClose }) => (
-        <BankModal userId={userId} bank={record} onClose={onClose} onSaved={onSaved} />
-      )}
+      recordModalSlot={({ record, userId, onSaved, onClose }) => {
+        const isEditing = !!record;
+        return (
+          <GenericDomainModal
+            mode="record"
+            title={isEditing ? "Edit Bank" : "Add Bank"}
+            onClose={onClose}
+            fields={BANK_FIELDS}
+            initialData={{ bank_name: record?.bank_name ?? "" }}
+            onSave={async (formData) => {
+              const name = (formData.bank_name as string).trim();
+              if (!name) throw new Error("Bank name is required.");
+              const now = new Date().toISOString();
+              const plaintext: BankEntryPlaintext = {
+                section: "banks", bank_name: name, pins: record?.pins ?? [], updated_at: now,
+              };
+              let saved: BankEntry;
+              if (isEditing && record) {
+                saved = await updateVaultEntry(userId, record.id, plaintext) as BankEntry;
+              } else {
+                saved = await createVaultEntry(userId, plaintext) as BankEntry;
+              }
+              onSaved(saved);
+            }}
+            onDelete={isEditing ? async () => { await deleteVaultEntry(record!.id); onClose(); } : undefined}
+            deleteLabel="Delete Bank"
+            maxWidthClassName="max-w-md"
+          />
+        );
+      }}
     />
   );
 }

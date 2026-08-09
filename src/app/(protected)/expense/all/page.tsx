@@ -13,8 +13,9 @@ import { useTableSort } from "@/hooks/useTableSort";
 import { useExpenseActions } from "@/hooks/useExpenseActions";
 import { useExpenseData } from "@/hooks/useExpenseData";
 import { byMonth } from "@/lib/viewHelpers";
-import ExpenseModal from "@/components/expense/ExpenseModal";
-import { EXPENSE_COLUMNS, SORT_CONFIGS } from "@/components/expense/config";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
+import { normalizeDateForInput } from "@/lib/utils";
+import { EXPENSE_COLUMNS, SORT_CONFIGS, EXPENSE_FIELDS } from "@/components/expense/config";
 
 export default function ExpenseAllPage() {
   const router = useRouter();
@@ -99,7 +100,7 @@ export default function ExpenseAllPage() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleExpenseSave, handleExpenseDelete, handleDownloadDocument } =
+  const { createSaveAdapter, handleExpenseDelete, handleDownloadDocument } =
     useExpenseActions({ userId, refresh });
 
   const emptyMessage =
@@ -161,18 +162,37 @@ export default function ExpenseAllPage() {
             monthGroups={monthGroups}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
+            disableMonthToggle
           />
         )}
       </PageShell>
 
       {modalTarget && userId && (
-        <ExpenseModal
-          expense={modalTarget}
-          documents={documents}
-          userId={userId}
+        <GenericDomainModal
+          key={modalTarget.id}
+          mode="record"
+          title="Edit expense"
           onClose={closeModal}
-          onSave={handleExpenseSave}
-          onDelete={handleExpenseDelete}
+          fields={EXPENSE_FIELDS}
+          initialData={{
+            item: modalTarget.item,
+            seller: modalTarget.seller,
+            cost: String(modalTarget.cost),
+            date: normalizeDateForInput(modalTarget.date),
+            reason: modalTarget.reason,
+          }}
+          allowFiles
+          allowLinking={false}
+          userId={userId}
+          attachedDocuments={documents.filter(
+            (d) => d.domain === "expense" && d.linked_id === modalTarget.id,
+          )}
+          domain="expense"
+          onSave={createSaveAdapter(modalTarget)}
+          onDeleteWithCascade={async (cascadeMode) => {
+            await handleExpenseDelete(modalTarget.id, cascadeMode);
+          }}
+          deleteLabel="Delete"
           onDownloadDocument={handleDownloadDocument}
         />
       )}

@@ -35,13 +35,11 @@ import OverlayActionButton from "@/components/common/OverlayActionButton";
 import SearchBar from "@/components/common/SearchBar";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
-import StoreDocumentModal from "./StoreDocumentModal";
-import type { StoreDocumentSaveParams, StoreParentRecord } from "./StoreDocumentModal";
+import GenericDomainModal, { type StoreParentRecord } from "@/components/common/GenericDomainModal";
 import BulkLinkModal from "./BulkLinkModal";
 import { getUniqueFileName } from "@/lib/viewHelpers";
 import { getSession } from "@/api/auth";
 import {
-  fetchDocuments,
   createDocument,
   updateDocument,
   deleteDocument,
@@ -54,6 +52,20 @@ import {
 import { useSelection } from "@/hooks/useSelection";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import type { VaultRecordItem } from "@/types/vault";
+
+// ============================================================
+// Types
+// ============================================================
+
+/** Parameters passed to handleStoreSave from GenericDomainModal's onSave */
+interface StoreDocumentSaveParams {
+  file?: File;
+  label: string;
+  linkedParentId?: string;
+  /** Optional new parent record data when creating inline */
+  newParentRecord?: Record<string, string>;
+  existingDocument?: Document | null;
+}
 
 // ============================================================
 // Constants
@@ -112,9 +124,9 @@ const DOMAIN_THEMES = {
       "bg-zinc-100 text-zinc-900 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800",
     inputFocus: "focus:border-zinc-900 focus:ring-zinc-900 dark:focus:border-zinc-100 dark:focus:ring-zinc-100",
     hoverBorder: "hover:border-zinc-300 dark:hover:border-zinc-700",
-    icon: "text-zinc-500",
-    iconLarge: "text-zinc-500/50",
-    iconHover: "hover:text-zinc-600 dark:hover:text-zinc-400",
+    icon: "text-zinc-900 dark:text-zinc-100",
+    iconLarge: "text-zinc-900/50 dark:text-zinc-100/50",
+    iconHover: "hover:text-black dark:hover:text-white",
   },
 } as const;
 
@@ -432,7 +444,7 @@ export default function GenericStorePage<T extends { id: string }>(
 // GenericDocStore — document store (absorbed GlobalStoreView)
 // ============================================================
 
-function GenericDocStore<T>({
+function GenericDocStore<T extends { id: string }>({
   domain,
   title,
   description,
@@ -684,7 +696,8 @@ function GenericDocStore<T>({
       docId = newDoc.id;
     }
 
-    const freshDocs = await fetchDocuments(userId);
+    const { domainRows: freshRows, documents: freshDocs } = await fetchDomainData(userId);
+    setAllRows(freshRows);
     setAllDocuments(freshDocs);
 
     if (wrappedOnDocumentSaved) {
@@ -694,8 +707,13 @@ function GenericDocStore<T>({
     const updatedDoc = freshDocs.find((d) => d.id === docId);
     if (updatedDoc) {
       if (resolvedLinkedId) {
+        // Find the parent record (use freshRows — not allRows — to include newly created records)
+        const parentRecord = freshRows.find((r) => r.id === resolvedLinkedId);
         setModals({ add: false, edit: null });
         clearHash();
+        if (parentRecord) {
+          setLinkedRecord(parentRecord);
+        }
       } else {
         setModals({ add: false, edit: updatedDoc });
         window.history.replaceState(null, "", window.location.pathname + window.location.search + `#edit-document-${docId}`);
@@ -1112,18 +1130,69 @@ function GenericDocStore<T>({
           onConfirm={() => confirmDeleteWithMode("unlink")} onCancel={() => setDocToDelete(null)} />
       ) : null}
 
-      {/* StoreDocumentModal — Add mode */}
+      {/* GenericDomainModal — Add mode (standalone_file) */}
       {isAddingDocument && userId && (
-        <StoreDocumentModal key="new" document={null} domain={domain} parentRecords={parentRecords} userId={userId}
-          onClose={closeStoreAddModal} onSave={handleStoreSave} onDelete={handleStoreDelete}
-          renderNewRecordForm={renderNewRecordForm} extractNewRecordData={extractNewRecordData} />
+        <GenericDomainModal
+          key="new"
+          mode="standalone_file"
+          title="Add Document"
+          onClose={closeStoreAddModal}
+          userId={userId}
+          attachedDocuments={[]}
+          domain={domain}
+          parentRecords={parentRecords}
+          renderNewRecordForm={renderNewRecordForm}
+          extractNewRecordData={extractNewRecordData}
+          onSave={async (_formData, fileActions) => {
+            const firstNewFile = fileActions.newFiles[0];
+            await handleStoreSave({
+              file: firstNewFile?.file,
+              label: firstNewFile?.label ?? "Document",
+              linkedParentId: fileActions.linkedParentId,
+              newParentRecord: fileActions.newRecordData ?? undefined,
+            });
+          }}
+          onDeleteWithCascade={undefined}
+          deleteLabel="Delete"
+        />
       )}
 
-      {/* StoreDocumentModal — Edit mode */}
+      {/* GenericDomainModal — Edit mode (standalone_file) */}
       {editingDocument && userId && (
-        <StoreDocumentModal key={editingDocument.id} document={editingDocument} domain={domain} parentRecords={parentRecords} userId={userId}
-          onClose={closeStoreEditModal} onSave={handleStoreSave} onDelete={handleStoreDelete}
-          renderNewRecordForm={renderNewRecordForm} extractNewRecordData={extractNewRecordData} />
+        <GenericDomainModal
+          key={editingDocument.id}
+          mode="standalone_file"
+          title="Edit Document"
+          onClose={closeStoreEditModal}
+          userId={userId}
+          attachedDocuments={[editingDocument]}
+          domain={domain}
+          parentRecords={parentRecords}
+          renderNewRecordForm={renderNewRecordForm}
+          extractNewRecordData={extractNewRecordData}
+          onSave={async (_formData, fileActions) => {
+            const firstNewFile = fileActions.newFiles[0];
+            await handleStoreSave({
+              file: firstNewFile?.file,
+              label: firstNewFile?.label ?? editingDocument?.label ?? "Document",
+              linkedParentId: fileActions.linkedParentId,
+              newParentRecord: fileActions.newRecordData ?? undefined,
+              existingDocument: editingDocument,
+            });
+          }}
+          onDeleteWithCascade={
+            editingDocument && handleStoreDelete
+              ? async (cascadeMode) => { await handleStoreDelete(editingDocument, cascadeMode); }
+              : undefined
+          }
+          deleteLabel="Delete"
+          deleteCascadeDescription={
+            editingDocument?.linked_id
+              ? "This document is linked to a record. Deleting it will also unlink it."
+              : undefined
+          }
+          deleteCascadeFilesLabel="Delete associated record"
+        />
       )}
 
       {/* Domain-specific modal (e.g., NoteModal, ExpenseModal) */}

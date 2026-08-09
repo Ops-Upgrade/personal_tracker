@@ -10,22 +10,29 @@ import {
 } from "@/api/taskmanager";
 import { fetchDocuments } from "@/api/common/documents";
 import { InputField } from "@/components/common/FormField";
+import RichTextEditor from "@/components/common/RichTextEditor";
 import type { Note, NotePlaintext } from "@/types/taskmanager";
 import type { Document } from "@/types/document";
 import { useNoteActions } from "@/hooks/useNoteActions";
 import GenericStorePage from "@/components/common/store/GenericStorePage";
-import NoteModal from "@/components/taskmanager/NoteModal";
+import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
+
+const NOTE_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Name", placeholder: "Note title" },
+  { key: "content", type: "richtext", label: "Content", minHeight: "10rem" },
+];
 
 /**
  * Task Manager Document Store.
  * Uses GenericStorePage with notes as parent records.
  *
- * Clicking a linked doc opens NoteModal to edit the parent note.
+ * Clicking a linked doc opens the note editor to edit the parent note.
  * Standalone upload offers inline "create new note" form.
  */
 export default function TaskManagerStorePage() {
   // --- Inline note creation form state ---
   const [newNoteName, setNewNoteName] = useState("");
+  const [newNoteContent, setNewNoteContent] = useState("");
 
   // --- fetchData ---
   const fetchData = useCallback(async (userId: string) => {
@@ -164,15 +171,26 @@ export default function TaskManagerStorePage() {
           disabled={isSaving || disabled}
           placeholder="e.g. Meeting Notes"
         />
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Content
+          </label>
+          <RichTextEditor
+            value={newNoteContent}
+            onChange={setNewNoteContent}
+            disabled={isSaving || disabled}
+            minHeight="6rem"
+          />
+        </div>
       </fieldset>
     ),
-    [newNoteName],
+    [newNoteName, newNoteContent],
   );
 
   const extractNewRecordData = useCallback((): Record<string, string> | null => {
     if (!newNoteName.trim()) return null;
-    return { name: newNoteName.trim() };
-  }, [newNoteName]);
+    return { name: newNoteName.trim(), content: newNoteContent };
+  }, [newNoteName, newNoteContent]);
 
   const handleCreateParentFromStore = useCallback(
     async (
@@ -183,22 +201,23 @@ export default function TaskManagerStorePage() {
       const nowIso = new Date().toISOString();
       const note = await createNote(userId, {
         name: data.name || "",
-        content: "",
+        content: data.content || "",
         document_ids: [],
         updated_at: nowIso,
       });
       await refreshAll();
       setNewNoteName("");
+      setNewNoteContent("");
       return note.id;
     },
     [],
   );
 
-  // --- NoteModal handlers via useNoteActions ---
+  // --- Note handlers via useNoteActions ---
   // We use a ref-like pattern: the modalSlot gets refreshAll from GenericStorePage.
   // useNoteActions takes a `refresh` callback — we'll create it inside the modalSlot closure.
 
-  // --- modalSlot: renders NoteModal for the linked record ---
+  // --- modalSlot: renders the note editor for the linked record ---
   const modalSlot = useCallback(
     ({
       linkedRecord,
@@ -215,7 +234,7 @@ export default function TaskManagerStorePage() {
       onClose: () => void;
     }) => {
       return (
-        <NoteModalWrapper
+        <NoteStoreModal
           note={linkedRecord}
           documents={allDocuments}
           userId={userId}
@@ -249,9 +268,9 @@ export default function TaskManagerStorePage() {
   );
 }
 
-// --- NoteModal wrapper: bridges useNoteActions hook with GenericStorePage's data ---
+// --- Note store modal (hook bridge — calls useNoteActions) ---
 
-function NoteModalWrapper({
+function NoteStoreModal({
   note,
   documents,
   userId,
@@ -264,34 +283,42 @@ function NoteModalWrapper({
   refreshAll: () => Promise<void>;
   onClose: () => void;
 }) {
-  const { handleNoteSave: originalHandleNoteSave, handleNoteDelete, handleDownloadDocument } =
-    useNoteActions({ userId, refresh: refreshAll });
-
-  /** Wraps handleNoteSave to redirect to StoreDocumentModal when files are unlinked. */
-  const handleNoteSave = useCallback(
-    async (
-      ...args: Parameters<typeof originalHandleNoteSave>
-    ) => {
-      await originalHandleNoteSave(...args);
-      // args[4] corresponds to pendingUnlinkDocIds
-      const pendingUnlinkDocIds = args[4];
-      if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0) {
-        onClose();
-        const unlinkedId = pendingUnlinkDocIds[pendingUnlinkDocIds.length - 1];
-        window.location.hash = `#edit-document-${unlinkedId}`;
-      }
-    },
-    [originalHandleNoteSave, onClose],
-  );
+  const refresh = useCallback(async () => { await refreshAll(); }, [refreshAll]);
+  const { createSaveAdapter, handleNoteDelete, handleDownloadDocument } =
+    useNoteActions({ userId, refresh });
 
   return (
-    <NoteModal
-      note={note}
-      documents={documents}
-      userId={userId}
+    <GenericDomainModal
+      mode="record"
+      title="Edit note"
       onClose={onClose}
-      onSave={handleNoteSave}
-      onDelete={handleNoteDelete}
+      fields={NOTE_FIELDS}
+      initialData={{
+        name: note.name ?? "",
+        content: note.content ?? "",
+      }}
+      allowFiles
+      userId={userId}
+      attachedDocuments={documents.filter(
+        (d) => d.domain === "taskmanager" && d.linked_id === note.id,
+      )}
+      standaloneDocuments={documents.filter(
+        (d) => d.domain === "taskmanager" && !d.linked_id,
+      )}
+      domain="taskmanager"
+      onSave={async (formData, fileActions) => {
+        await createSaveAdapter(note)(formData, fileActions);
+        if (fileActions.docsToUnlink.length > 0) {
+          onClose();
+          const unlinkedId =
+            fileActions.docsToUnlink[fileActions.docsToUnlink.length - 1];
+          window.location.hash = `#edit-document-${unlinkedId}`;
+        }
+      }}
+      onDeleteWithCascade={async (cascadeMode) => {
+        await handleNoteDelete(note.id, cascadeMode);
+      }}
+      deleteLabel="Delete"
       onDownloadDocument={handleDownloadDocument}
     />
   );

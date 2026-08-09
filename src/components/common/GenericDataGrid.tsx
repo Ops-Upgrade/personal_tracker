@@ -151,13 +151,12 @@ export default function GenericDataGrid<T, C extends string = string>({
                   key={getItemKey(item) || i}
                   className={`group flex items-center justify-between gap-2 rounded-md border border-zinc-200 px-2 py-1.5 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60 ${extraClass}`}
                 >
-                  <button
-                    type="button"
+                  <div
+                    role={clickable ? "button" : undefined}
+                    tabIndex={clickable ? 0 : undefined}
                     onClick={
                       clickable ? () => onRowClick!(item) : undefined
                     }
-                    className={`grid flex-1 gap-2 text-left text-sm grid-cols-12 ${clickable ? "cursor-pointer" : ""}`}
-                    tabIndex={clickable ? 0 : undefined}
                     onKeyDown={
                       clickable
                         ? (e: React.KeyboardEvent) => {
@@ -168,13 +167,14 @@ export default function GenericDataGrid<T, C extends string = string>({
                           }
                         : undefined
                     }
+                    className={`grid flex-1 gap-2 text-left text-sm grid-cols-12 ${clickable ? "cursor-pointer" : ""}`}
                   >
                     {columns.map((col) => (
                       <div key={col.key} className={getColSpanClass(col.colSpan)}>
                         {col.render(item)}
                       </div>
                     ))}
-                  </button>
+                  </div>
                   {rowAction && rowAction(item)}
                 </div>
               );

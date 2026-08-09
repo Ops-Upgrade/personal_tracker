@@ -6,10 +6,20 @@ import { ROUTES } from "@/routes/paths";
 import { getSession } from "@/api/auth";
 import { fetchVaultEntriesBySection, updateVaultEntry, deleteVaultEntry } from "@/api/vault";
 import GenericStorePage from "@/components/common/store/GenericStorePage";
-import type { BankEntry, VaultRecordItem } from "@/types/vault";
-import BankPinModal from "@/components/vault/banks/BankPinModal";
+import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
-import type { BankPinData } from "@/components/vault/banks/BankPinModal";
+import type { BankEntry, VaultRecordItem } from "@/types/vault";
+
+export interface BankPinData {
+  id: string;
+  name: string;
+  pin: string;
+}
+
+const PIN_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Name", placeholder: "e.g. ATM PIN, MPIN" },
+  { key: "pin", type: "password", label: "PIN", placeholder: "PIN value" },
+];
 
 export default function BankDetailPage({ params }: { params: Promise<{ bankId: string }> }) {
   const { bankId } = use(params);
@@ -144,24 +154,43 @@ export default function BankDetailPage({ params }: { params: Promise<{ bankId: s
             Delete Bank
           </button>
         }
-        recordModalSlot={({ record, onSaved, onClose }) => (
-          <BankPinModal
-            pin={record}
-            onClose={onClose}
-            onSave={(pinData) => {
-              handlePinSave(pinData);
-              onSaved(pinData);
-            }}
-            onDelete={
-              record
-                ? (pinId) => {
-                    onDeleteRecord(pinId);
-                    onClose();
-                  }
-                : undefined
-            }
-          />
-        )}
+        recordModalSlot={({ record, onSaved, onClose }) => {
+          const isEditing = !!record;
+          return (
+            <GenericDomainModal
+              mode="record"
+              title={isEditing ? "Edit PIN" : "Add PIN"}
+              onClose={onClose}
+              fields={PIN_FIELDS}
+              initialData={{
+                name: record?.name ?? "",
+                pin: record?.pin ?? "",
+              }}
+              onSave={async (formData) => {
+                const nm = (formData.name as string).trim();
+                const pv = (formData.pin as string).trim();
+                if (!nm || !pv) throw new Error("Name and PIN are required.");
+                const saved: BankPinData = {
+                  id: record?.id ?? crypto.randomUUID(),
+                  name: nm,
+                  pin: pv,
+                };
+                handlePinSave(saved);
+                onSaved(saved);
+              }}
+              onDelete={
+                isEditing
+                  ? async () => {
+                      onDeleteRecord(record!.id);
+                      onClose();
+                    }
+                  : undefined
+              }
+              deleteLabel="Delete PIN"
+              maxWidthClassName="max-w-md"
+            />
+          );
+        }}
       />
 
       {isConfirmingDelete && (

@@ -1,4 +1,4 @@
-﻿# Global Architecture Refactor Roadmap
+# Global Architecture Refactor Roadmap
 
 This document tracks the architectural refactoring of the application to eliminate duplicated page structure
 and standardize all list-based, store, media, and domain views into composable opt-in generic pages.
@@ -877,12 +877,43 @@ Both `GenericActiveBox` and `GenericViewPage` manually iterated over priority gr
 
 ---
 
-## Stage 6: Generic Modal Shell
+## Stage 6: Generic Modal Shell (Schema-Driven)
 
-**Goal:** Create a unified `GenericDomainModal` shell to eliminate the exact structural duplication across `TaskModal`, `ExpenseModal`, `EducationModal`, and `MedicalModal`.
+**Goal:** Create a unified, fully schema-driven `GenericDomainModal` shell to completely eliminate all individual domain modal files (`TaskModal`, `ExpenseModal`, `EducationModal`, `MedicalModal`, Vault modals, and Store modals).
 
-**Implementation:**
-- Extract the common Dialog overlay, Title header, standard padding, and responsive constraints.
-- Centralize the Action footer (Save/Delete/Cancel buttons) and their loading states.
-- Centralize the Document attachment UI (Paperclip, file list, upload logic).
-- Make it an opt-in wrapper where domains only need to provide their specific inner `<form>` fields as `children`.
+**Architecture:**
+- **Two-Pane Layout:** A flexible flex container split into a Left Pane and a Right Pane. If a domain opts out of the Right Pane, the Left Pane expands/centers (e.g., `max-w-lg`).
+- **100% Schema-Driven Forms:** The generic modal no longer accepts React `children`. Instead, it accepts a `fields` schema (e.g., `[{ key: 'name', type: 'text', label: 'Record Name' }]`) and `initialData`. 
+- **Centralized State Management:** The generic shell completely owns the form state (`formData`), dirty checking (comparing `formData` against `initialData`), and complex file management state (`newFiles`, `markedForDeletion`, `isSaving`, `error`). 
+- **Mode Switcher:** Driven by a fundamental `mode` prop.
+
+**Implementation Details by Mode:**
+
+1. **`mode="record"`**
+   - **Left Side (Record View):** The Generic Modal dynamically renders standard inputs, rich text editors, and date pickers based on the `fields` schema prop.
+   - **Right Side (File View):** Controlled by an `allowFiles={true}` flag.
+     - If true, mounts the multi-file uploader and handles complex file states.
+     - If false, the right side disappears.
+   - **The Hand-off:** On "Save", the Generic Modal packages file changes and passes them to the domain's `onSave` along with the live `formData` object.
+
+2. **`mode="standalone_file"`**
+   - **Right Side (Only One File):** Locks the file uploader to a single file limit.
+   - **Left Side (Link / Create):** Automatically renders the standardized dropdown to "Select Existing Record" and an "Or Create New" toggle.
+   - **The Hand-off:** On "Save", hands the domain 1 file and the ID of the record to link (or the data for the new record to create).
+
+**Domain Opt-In Matrix (Passed directly from Views):**
+- **Task Manager:** `mode="record"`, opts out of files.
+- **Task Manager Notes:** `mode="record"`, opts into files.
+- **Expense / Medical:** `mode="record"`, opts into files.
+- **Education:** `mode="record"`, opts into files.
+- **Store Modals (Education/Vault):** `mode="standalone_file"`. Single file on the right, linking/creation on the left.
+- **Vault Passwords / Banks:** `mode="record"`, opts out of files.
+- **Vault Personal Record:** `mode="record"`, opts into files.
+- **Completed Views:** Use `GenericCompletedModal` directly.
+- **Media:** No global modal usage.
+
+**Strict Enforcement & Clean-up:**
+- **Delete Modals:** You must explicitly DELETE all standalone modal files (`TaskModal.tsx`, `NoteModal.tsx`, `ExpenseModal.tsx`, `EducationModal.tsx`, `MedicalModal.tsx`, `RecordModal.tsx`, `PasswordModal.tsx`, `BankModal.tsx`, `BankPinModal.tsx`, `StoreDocumentModal.tsx`). **Do not leave them as wrappers.**
+- **Update Views:** Update all Domain Views (e.g., `TaskView.tsx`, `MedicalView.tsx`) to directly render `<GenericDomainModal fields={schema} initialData={record} onSave={...} />`.
+- **State Cleanups:** `src/hooks/useModalBaseState.ts`, `src/lib/useModalDocumentState.ts` (Their logic merges completely into the generic shell, delete them).
+- **Delete:** `src/components/common/GlobalActionModal.tsx` (fully replaced by `GenericDomainModal.tsx`).

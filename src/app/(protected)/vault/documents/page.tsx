@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { ROUTES } from "@/routes/paths";
-import { fetchVaultEntries } from "@/api/vault";
+import { fetchVaultEntries, createVaultEntry } from "@/api/vault";
 import { fetchDocuments, updateDocument } from "@/api/common/documents";
+import { InputField } from "@/components/common/FormField";
 import type { DocumentPlaintext } from "@/types/document";
-import type { VaultEntry } from "@/types/vault";
+import type { PersonalRecordPlaintext, VaultEntry } from "@/types/vault";
 import GenericStorePage from "@/components/common/store/GenericStorePage";
 
 /**
@@ -15,6 +16,9 @@ import GenericStorePage from "@/components/common/store/GenericStorePage";
  * Uses GenericStorePage for auth, data loading, and display.
  */
 export default function VaultDocumentsPage() {
+  // --- Inline record creation form state ---
+  const [newRecordName, setNewRecordName] = useState("");
+  const [newRecordValue, setNewRecordValue] = useState("");
   // --- fetchData ---
   const fetchData = useCallback(async (userId: string) => {
     const [entries, docs] = await Promise.all([
@@ -24,20 +28,63 @@ export default function VaultDocumentsPage() {
     return { domainRows: entries, documents: docs };
   }, []);
 
-  // --- deriveParentRecords ---
+  // --- deriveParentRecords (only "records" section — banks/passwords excluded) ---
   const deriveParentRecords = useCallback((rows: VaultEntry[]) => {
-    return rows.map((e) => {
-      let name: string;
-      if (e.section === "banks") {
-        name = (e as { bank_name: string }).bank_name;
-      } else if (e.section === "passwords") {
-        name = (e as { site_name: string }).site_name;
-      } else {
-        name = (e as { name: string }).name;
-      }
-      return { id: e.id, name };
-    });
+    return rows
+      .filter((e) => e.section === "records")
+      .map((e) => ({ id: e.id, name: (e as { name: string }).name }));
   }, []);
+
+  // --- Inline record creation form ---
+
+  const renderNewRecordForm = useCallback(
+    ({ disabled, isSaving }: { disabled: boolean; isSaving: boolean }) => (
+      <fieldset disabled={disabled || isSaving} className="space-y-3">
+        <InputField
+          label="Record Name"
+          value={newRecordName}
+          onChange={setNewRecordName}
+          disabled={isSaving || disabled}
+          placeholder="e.g. Aadhaar Number"
+        />
+        <InputField
+          label="Value"
+          value={newRecordValue}
+          onChange={setNewRecordValue}
+          disabled={isSaving || disabled}
+          placeholder="The reference number or ID"
+        />
+      </fieldset>
+    ),
+    [newRecordName, newRecordValue],
+  );
+
+  const extractNewRecordData = useCallback((): Record<string, string> | null => {
+    if (!newRecordName.trim()) return null;
+    return { name: newRecordName.trim(), value: newRecordValue.trim() };
+  }, [newRecordName, newRecordValue]);
+
+  const handleCreateParentFromStore = useCallback(
+    async (
+      data: Record<string, string>,
+      userId: string,
+      refreshAll: () => Promise<void>,
+    ): Promise<string> => {
+      const nowIso = new Date().toISOString();
+      const plaintext: PersonalRecordPlaintext = {
+        section: "records",
+        name: data.name || "",
+        value: data.value || "",
+        updated_at: nowIso,
+      };
+      const entry = await createVaultEntry(userId, plaintext);
+      await refreshAll();
+      setNewRecordName("");
+      setNewRecordValue("");
+      return entry.id;
+    },
+    [],
+  );
 
   // --- onUnlinkFromParent ---
   const handleUnlinkFromParent = useCallback(
@@ -69,6 +116,9 @@ export default function VaultDocumentsPage() {
         fetchData={fetchData}
         deriveParentRecords={deriveParentRecords}
         onUnlinkFromParent={handleUnlinkFromParent}
+        renderNewRecordForm={renderNewRecordForm}
+        extractNewRecordData={extractNewRecordData}
+        onCreateParentFromStore={handleCreateParentFromStore}
       />
     </div>
   );

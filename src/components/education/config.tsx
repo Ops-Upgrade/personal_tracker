@@ -1,8 +1,34 @@
 import type { Education } from "@/types/education";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
+import type { FieldDef } from "@/components/common/GenericDomainModal";
 import PriorityBadge from "@/components/common/PriorityBadge";
 import { PaperClipIcon } from "@/components/common/Icons";
+import { PRIORITIES } from "@/types/common";
 import { trunc } from "@/lib/viewHelpers";
+
+// ── Form schema for all education modals ──
+
+export const EDUCATION_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Course / Certification Name" },
+  { key: "provider", type: "text", label: "Provider", placeholder: "Institution or platform" },
+  {
+    key: "priority",
+    type: "select",
+    label: "Priority",
+    options: PRIORITIES.map((p) => ({ value: p, label: p[0].toUpperCase() + p.slice(1) })),
+  },
+  { key: "due_date", type: "date", label: "Due Date" },
+  { key: "description", type: "richtext", label: "Description", minHeight: "8rem" },
+  { key: "is_completed", type: "checkbox", label: "Mark as complete (acquired)" },
+];
+
+export const EDUCATION_LAYOUT: string[][] = [
+  ["name"],
+  ["provider"],
+  ["priority", "due_date"],
+  ["description"],
+  ["is_completed"],
+];
 
 // ── Sort column type ──
 

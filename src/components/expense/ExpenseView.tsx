@@ -18,7 +18,9 @@ import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContain
 import GenericDomainPage from "@/components/common/GenericDomainPage";
 import type { DomainPageContext } from "@/components/common/GenericDomainPage";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
-import ExpenseModal from "./ExpenseModal";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
+import { normalizeDateForInput } from "@/lib/utils";
+import { EXPENSE_FIELDS } from "./config";
 import GenericMonthRow from "@/components/common/GenericMonthRow";
 import YearDropdown from "@/components/common/YearDropdown";
 import { trunc } from "@/lib/viewHelpers";
@@ -50,36 +52,11 @@ export default function ExpenseView() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleExpenseSave: rawHandleExpenseSave, handleExpenseDelete, handleDownloadDocument } =
+  const { createSaveAdapter, handleExpenseDelete, handleDownloadDocument } =
     useExpenseActions({ userId, refresh });
 
   // Query-param-driven modal state via shared hook
   const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(expenses, "expense");
-
-  // Wrapper that transitions from "new-expense" to "edit-expense-<id>" after creation
-  const handleExpenseSave = useCallback(
-    async (
-      draft: { item: string; seller: string; cost: number; date: string; reason: string },
-      existingExpense: Expense | null,
-      pendingDoc?: { file: File; label: string },
-      pendingLinkDocId?: string,
-      pendingUnlinkDocIds?: string[],
-      pendingDeleteDocIds?: string[],
-    ) => {
-      const savedExpense = await rawHandleExpenseSave(
-        draft,
-        existingExpense,
-        pendingDoc,
-        pendingLinkDocId,
-        pendingUnlinkDocIds,
-        pendingDeleteDocIds,
-      );
-      if (!existingExpense && savedExpense) {
-        openEdit(savedExpense);
-      }
-    },
-    [rawHandleExpenseSave, openEdit],
-  );
 
   const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
 
@@ -236,14 +213,47 @@ export default function ExpenseView() {
       }
       modalSlot={
         modalTarget && userId && (
-          <ExpenseModal
-            expense={modalTarget === "create" ? null : modalTarget}
-            defaultDate={modalTarget === "create" ? istDate : undefined}
-            documents={documents}
-            userId={userId}
+          <GenericDomainModal
+            key={modalTarget === "create" ? "create" : modalTarget.id}
+            mode="record"
+            title={modalTarget === "create" ? "Add expense" : "Edit expense"}
             onClose={closeModal}
-            onSave={handleExpenseSave}
-            onDelete={handleExpenseDelete}
+            fields={EXPENSE_FIELDS}
+            initialData={{
+              item: modalTarget === "create" ? "" : modalTarget.item,
+              seller: modalTarget === "create" ? "" : modalTarget.seller,
+              cost: modalTarget === "create" ? "" : String(modalTarget.cost),
+              date:
+                modalTarget === "create"
+                  ? (istDate ?? "")
+                  : normalizeDateForInput(modalTarget.date),
+              reason: modalTarget === "create" ? "" : modalTarget.reason,
+            }}
+            allowFiles
+            allowLinking={false}
+            userId={userId}
+            attachedDocuments={
+              modalTarget !== "create" && modalTarget
+                ? documents.filter(
+                    (d) => d.domain === "expense" && d.linked_id === modalTarget.id,
+                  )
+                : []
+            }
+            domain="expense"
+            onSave={createSaveAdapter(
+              modalTarget === "create" ? null : modalTarget,
+              modalTarget === "create"
+                ? (saved) => openEdit(saved)
+                : undefined,
+            )}
+            onDeleteWithCascade={
+              modalTarget !== "create" && modalTarget
+                ? async (cascadeMode) => {
+                    await handleExpenseDelete(modalTarget.id, cascadeMode);
+                  }
+                : undefined
+            }
+            deleteLabel="Delete"
             onDownloadDocument={handleDownloadDocument}
           />
         )

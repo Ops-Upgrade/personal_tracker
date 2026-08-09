@@ -1,14 +1,16 @@
 "use client";
 
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import ViewToggle from "@/components/common/ViewToggle";
 import Button from "@/components/common/Button";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
-import { activeByMonths, byPriority } from "@/lib/viewHelpers";
+import { byPriority } from "@/lib/viewHelpers";
 import type { ColumnDef } from "./GenericViewPage";
 import GenericPriorityList from "./GenericPriorityList";
-import GenericMonthsList from "./GenericMonthsList";
+import GenericMonthRow from "./GenericMonthRow";
+import YearDropdown from "./YearDropdown";
+import { MONTHS } from "@/types/common";
 
 /**
  * Minimum shape for an active item — must have id, priority, and optional due_date.
@@ -72,8 +74,31 @@ export default function GenericActiveBox<T extends ActiveItem>({
   rowAction,
   getItemClassName,
 }: GenericActiveBoxProps<T>) {
-  const priorityGroups = byPriority(items, [...priorities]);
-  const monthGroups = activeByMonths(items, nowYear);
+  const [selectedYear, setSelectedYear] = useState(nowYear);
+
+  // Compute available years from item due_dates (always include current year)
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    years.add(nowYear);
+    for (const item of items) {
+      if (item.due_date) {
+        years.add(new Date(item.due_date + "T00:00:00").getFullYear());
+      }
+    }
+    return Array.from(years).sort((a, b) => b - a);
+  }, [items, nowYear]);
+
+  // Filter items for the selected year
+  const itemsForYear = useMemo(
+    () =>
+      items.filter((item) => {
+        if (!item.due_date) return false;
+        return new Date(item.due_date + "T00:00:00").getFullYear() === selectedYear;
+      }),
+    [items, selectedYear],
+  );
+
+  const priorityGroups = byPriority(itemsForYear, [...priorities]);
 
   // Auto-scroll to the current month tile when switching to months view
   useEffect(() => {
@@ -100,14 +125,23 @@ export default function GenericActiveBox<T extends ActiveItem>({
             ariaLabel={`${title} view toggle`}
           />
         </div>
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={onAdd}
-          disabled={isLoading}
-        >
-          + Add
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="md"
+            onClick={onAdd}
+            disabled={isLoading}
+          >
+            + Add
+          </Button>
+          {view === "months" && (
+            <YearDropdown
+              years={availableYears}
+              selectedYear={selectedYear}
+              onChange={setSelectedYear}
+            />
+          )}
+        </div>
       </header>
 
       <div className={`${SCROLLABLE_CLASSES} space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800`}>
@@ -136,21 +170,39 @@ export default function GenericActiveBox<T extends ActiveItem>({
         )}
 
         {!isLoading && view === "months" && (
-          <GenericMonthsList
-            monthGroups={monthGroups}
-            columns={columns}
-            getItemKey={getItemKey}
-            nowYear={nowYear}
-            nowMonth={nowMonth}
-            previewCount={5}
-            viewAllBaseHref={viewAllBaseHref}
-            getSubtitle={getSubtitle}
-            getDate={(item) => (item as ActiveItem).due_date}
-            onRowClick={onRowClick}
-            rowAction={rowAction}
-            getItemClassName={getItemClassName}
-            hideHeaderOnMobile
-          />
+          <div className="flex flex-col gap-4">
+            {MONTHS.map((monthName, monthIndex) => {
+              const monthItems = itemsForYear.filter((item) => {
+                if (!item.due_date) return false;
+                return new Date(item.due_date + "T00:00:00").getMonth() === monthIndex;
+              });
+              const isCurrentMonth =
+                selectedYear === nowYear && monthIndex === nowMonth;
+              return (
+                <GenericMonthRow
+                  key={monthName}
+                  monthName={monthName}
+                  monthIndex={monthIndex}
+                  year={selectedYear}
+                  items={monthItems}
+                  isCurrentMonth={isCurrentMonth}
+                  getSubtitle={getSubtitle ?? (() => null)}
+                  getDate={(item) => (item as ActiveItem).due_date}
+                  viewAllHref={
+                    viewAllBaseHref
+                      ? `${viewAllBaseHref}?year=${selectedYear}&month=${monthIndex}`
+                      : "#"
+                  }
+                  columns={columns}
+                  getItemKey={getItemKey}
+                  previewCount={5}
+                  onRowClick={onRowClick}
+                  rowAction={rowAction}
+                  getItemClassName={getItemClassName}
+                />
+              );
+            })}
+          </div>
         )}
       </div>
     </BoxContainer>

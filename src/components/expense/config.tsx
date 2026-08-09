@@ -1,7 +1,18 @@
 import type { Expense } from "@/types/expense";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
+import type { FieldDef } from "@/components/common/GenericDomainModal";
 import { PaperClipIcon } from "@/components/common/Icons";
 import { trunc } from "@/lib/viewHelpers";
+
+// ── Modal form fields ──
+
+export const EXPENSE_FIELDS: FieldDef[] = [
+  { key: "item", type: "text", label: "Item" },
+  { key: "seller", type: "text", label: "Seller / Merchant" },
+  { key: "cost", type: "number", label: "Cost", min: 0, step: "any" },
+  { key: "date", type: "date", label: "Date" },
+  { key: "reason", type: "richtext", label: "Reason", minHeight: "8rem" },
+];
 
 // ── Sort column type ──
 

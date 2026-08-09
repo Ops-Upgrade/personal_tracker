@@ -11,10 +11,18 @@ import type { MonthGroup } from "@/components/common/GenericViewPage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useTableSort } from "@/hooks/useTableSort";
 import { byMonth } from "@/lib/viewHelpers";
-import MedicalModal from "@/components/medical/MedicalModal";
+import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 import { useMedicalActions } from "@/hooks/useMedicalActions";
 import { useMedicalData } from "@/hooks/useMedicalData";
 import { MEDICAL_COLUMNS, SORT_CONFIGS } from "@/components/medical/config";
+
+/** Schema for the medical record edit modal */
+const MEDICAL_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Name" },
+  { key: "clinic", type: "text", label: "Clinic / Doctor" },
+  { key: "date", type: "date", label: "Date" },
+  { key: "diagnosis_timeline", type: "richtext", label: "Diagnosis Timeline", minHeight: "8rem" },
+];
 
 export default function MedicalAllPage() {
   const router = useRouter();
@@ -99,10 +107,7 @@ export default function MedicalAllPage() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleSave: _handleSave, handleDelete } = useMedicalActions({ userId, refresh });
-  const handleSave = async (...args: Parameters<typeof _handleSave>) => {
-    await _handleSave(...args);
-  };
+  const { createSaveAdapter, handleDelete } = useMedicalActions({ userId, refresh });
 
   const emptyMessage =
     selectedMonth === "all"
@@ -163,23 +168,37 @@ export default function MedicalAllPage() {
             monthGroups={monthGroups}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
+            disableMonthToggle
           />
         )}
       </PageShell>
 
       {modalTarget && userId && (
-        <MedicalModal
-          record={modalTarget}
-          attachedDocuments={documents.filter((d) =>
-            modalTarget.document_ids?.includes(d.id),
-          )}
-          standaloneDocuments={documents.filter(
-            (d) => d.domain === "medical" && !d.linked_id,
-          )}
-          userId={userId}
+        <GenericDomainModal
+          key={modalTarget.id}
+          mode="record"
+          title="Edit medical record"
           onClose={closeModal}
-          onSave={handleSave}
-          onDelete={handleDelete}
+          fields={MEDICAL_FIELDS}
+          initialData={{
+            name: modalTarget.name,
+            clinic: modalTarget.clinic,
+            date: modalTarget.date,
+            diagnosis_timeline: modalTarget.diagnosis_timeline,
+          }}
+          allowFiles
+          allowLinking={false}
+          userId={userId}
+          attachedDocuments={documents.filter(
+            (d) => d.domain === "medical" && d.linked_id === modalTarget.id,
+          )}
+          standaloneDocuments={[]}
+          domain="medical"
+          onSave={createSaveAdapter(modalTarget)}
+          onDelete={async () => {
+            await handleDelete(modalTarget.id);
+          }}
+          deleteLabel="Delete"
         />
       )}
     </>

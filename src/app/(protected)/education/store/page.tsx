@@ -10,21 +10,17 @@ import {
 } from "@/api/education";
 import {
   fetchDocuments,
-  createDocument,
-  updateDocument,
-  deleteDocument,
 } from "@/api/common/documents";
-import {
-  uploadDocumentFile,
-  downloadDocumentFile,
-  deleteDocumentFile,
-} from "@/api/common/documentStorage";
-import { InputField, TextareaField, SelectField } from "@/components/common/FormField";
+import { InputField, SelectField } from "@/components/common/FormField";
+import RichTextEditor from "@/components/common/RichTextEditor";
 import type { Education, EducationPlaintext } from "@/types/education";
-import type { Document, DocumentPlaintext } from "@/types/document";
+import type { Document } from "@/types/document";
 import { PRIORITIES, type Priority } from "@/types/common";
+import { useEducationActions } from "@/hooks/useEducationActions";
 import GenericStorePage from "@/components/common/store/GenericStorePage";
-import EducationModal from "@/components/education/EducationModal";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
+import { normalizeDateForInput } from "@/lib/utils";
+import { EDUCATION_FIELDS, EDUCATION_LAYOUT } from "@/components/education/config";
 
 /**
  * Education Document Store.
@@ -198,13 +194,17 @@ export default function EducationStorePage() {
             disabled={isSaving || disabled}
           />
         </div>
-        <TextareaField
-          label="Description"
-          value={newEduDescription}
-          onChange={setNewEduDescription}
-          disabled={isSaving || disabled}
-          rows={2}
-        />
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+            Description
+          </label>
+          <RichTextEditor
+            value={newEduDescription}
+            onChange={setNewEduDescription}
+            disabled={isSaving || disabled}
+            minHeight="6rem"
+          />
+        </div>
       </fieldset>
     ),
     [newEduName, newEduProvider, newEduPriority, newEduDueDate, newEduDescription],
@@ -266,7 +266,7 @@ export default function EducationStorePage() {
       refreshAll: () => Promise<void>;
       onClose: () => void;
     }) => (
-      <EducationModalWrapper
+      <EducationStoreModal
         education={linkedRecord}
         documents={allDocuments}
         userId={userId}
@@ -298,9 +298,9 @@ export default function EducationStorePage() {
   );
 }
 
-// --- EducationModal wrapper with inline save/delete/download handlers ---
+// --- Education store modal (hook bridge — calls useEducationActions) ---
 
-function EducationModalWrapper({
+function EducationStoreModal({
   education,
   documents,
   userId,
@@ -313,189 +313,49 @@ function EducationModalWrapper({
   refreshAll: () => Promise<void>;
   onClose: () => void;
 }) {
-  const handleEducationSave = useCallback(
-    async (
-      draft: {
-        name: string;
-        provider: string;
-        priority: Priority;
-        due_date: string | null;
-        description: string;
-        is_completed: boolean;
-      },
-      existingEducation: Education | null,
-      pendingDoc?: { file: File; label: string },
-      pendingLinkDocId?: string,
-      pendingUnlinkDocIds?: string[],
-      pendingDeleteDocIds?: string[],
-    ) => {
-      if (!userId) throw new Error("No active session.");
-      const freshEdus = await fetchEducations(userId);
-      const freshDocs = await fetchDocuments(userId);
-      const freshEdu = existingEducation
-        ? freshEdus.find((e) => e.id === existingEducation.id)
-        : null;
-      let currentDocIds = [...(freshEdu?.document_ids ?? [])];
-      const nowIso = new Date().toISOString();
-      const completedAt = draft.is_completed ? freshEdu?.completed_at ?? nowIso : null;
-
-      if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0 && existingEducation) {
-        for (const docId of pendingUnlinkDocIds) {
-          const doc = freshDocs.find((d) => d.id === docId);
-          if (doc) {
-            await updateDocument(userId, docId, {
-              ...doc,
-              linked_id: "",
-              updated_at: nowIso,
-            } as DocumentPlaintext);
-          }
-          currentDocIds = currentDocIds.filter((id) => id !== docId);
-        }
-      }
-
-      if (pendingDeleteDocIds && pendingDeleteDocIds.length > 0) {
-        for (const docId of pendingDeleteDocIds) {
-          const doc = freshDocs.find((d) => d.id === docId);
-          if (doc) {
-            currentDocIds = currentDocIds.filter((id) => id !== docId);
-            if (doc.file_name) {
-              try {
-                await deleteDocumentFile(userId, doc.file_name);
-              } catch {
-                /* best-effort */
-              }
-            }
-            await deleteDocument(docId);
-          }
-        }
-      }
-
-      const payload = {
-        ...draft,
-        completed_at: completedAt,
-        document_ids: currentDocIds,
-        updated_at: nowIso,
-      };
-      let savedEdu: Education;
-      if (existingEducation) {
-        savedEdu = await updateEducation(userId, existingEducation.id, payload);
-      } else {
-        savedEdu = await createEducation(userId, payload);
-      }
-
-      let needsUpdate = false;
-      const newDocIds = [...currentDocIds];
-
-      if (pendingDoc) {
-        const { fileName, iv, mimeType } = await uploadDocumentFile(userId, pendingDoc.file);
-        const doc = await createDocument(userId, {
-          label: pendingDoc.label,
-          file_name: fileName,
-          file_iv: iv,
-          file_mime: mimeType,
-          domain: "education",
-          linked_id: savedEdu.id,
-          updated_at: nowIso,
-        });
-        newDocIds.push(doc.id);
-        needsUpdate = true;
-      }
-
-      if (pendingLinkDocId) {
-        const pdoc = freshDocs.find((d) => d.id === pendingLinkDocId);
-        if (pdoc) {
-          await updateDocument(userId, pendingLinkDocId, {
-            ...pdoc,
-            linked_id: savedEdu.id,
-            updated_at: nowIso,
-          } as DocumentPlaintext);
-          if (!newDocIds.includes(pendingLinkDocId)) newDocIds.push(pendingLinkDocId);
-          needsUpdate = true;
-        }
-      }
-
-      if (needsUpdate) {
-        await updateEducation(userId, savedEdu.id, {
-          ...payload,
-          document_ids: newDocIds,
-          updated_at: new Date().toISOString(),
-        });
-      }
-
-      await refreshAll();
-
-      if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0) {
-        onClose();
-        const unlinkedId = pendingUnlinkDocIds[pendingUnlinkDocIds.length - 1];
-        window.location.hash = `#edit-document-${unlinkedId}`;
-      }
-    },
-    [userId, refreshAll, onClose],
-  );
-
-  const handleEducationDelete = useCallback(
-    async (educationId: string, cascadeMode: "unlink" | "cascade") => {
-      if (!userId) throw new Error("No active session.");
-      const eduDocs = documents.filter(
-        (d) => d.domain === "education" && d.linked_id === educationId,
-      );
-      const nowIso = new Date().toISOString();
-      if (cascadeMode === "unlink") {
-        for (const doc of eduDocs) {
-          await updateDocument(userId, doc.id, {
-            ...doc,
-            linked_id: "",
-            updated_at: nowIso,
-          } as DocumentPlaintext);
-        }
-      } else {
-        for (const doc of eduDocs) {
-          if (doc.file_name) {
-            try {
-              await deleteDocumentFile(userId, doc.file_name);
-            } catch {
-              /* best-effort */
-            }
-          }
-          await deleteDocument(doc.id);
-        }
-      }
-      await deleteEducation(educationId);
-      await refreshAll();
-    },
-    [userId, documents, refreshAll],
-  );
-
-  const handleDownloadDocument = useCallback(
-    async (doc: Document) => {
-      if (!userId) throw new Error("No active session.");
-      const blob = await downloadDocumentFile(
-        userId,
-        doc.file_name,
-        doc.file_iv,
-        doc.file_mime,
-      );
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = doc.label || "document";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    },
-    [userId],
-  );
+  const refresh = useCallback(async () => { await refreshAll(); }, [refreshAll]);
+  const { createSaveAdapter, handleEducationDelete, handleDownloadDocument } =
+    useEducationActions({ userId, refresh });
 
   return (
-    <EducationModal
-      education={education}
-      documents={documents}
+    <GenericDomainModal
+      mode="record"
+      title="Edit education"
+      fields={EDUCATION_FIELDS}
+      layout={EDUCATION_LAYOUT}
+      initialData={{
+        name: education.name,
+        provider: education.provider,
+        priority: education.priority,
+        due_date: normalizeDateForInput(education.due_date),
+        description: education.description,
+        is_completed: education.is_completed,
+      }}
+      allowFiles
       userId={userId}
-      onClose={onClose}
-      onSave={handleEducationSave}
-      onDelete={handleEducationDelete}
+      attachedDocuments={documents.filter(
+        (d) => d.domain === "education" && d.linked_id === education.id,
+      )}
+      standaloneDocuments={documents.filter(
+        (d) => d.domain === "education" && !d.linked_id,
+      )}
+      domain="education"
+      onSave={async (formData, fileActions) => {
+        await createSaveAdapter(education)(formData, fileActions);
+        // After unlinking, navigate to the unlinked document in the store
+        if (fileActions.docsToUnlink.length > 0) {
+          onClose();
+          const unlinkedId =
+            fileActions.docsToUnlink[fileActions.docsToUnlink.length - 1];
+          window.location.hash = `#edit-document-${unlinkedId}`;
+        }
+      }}
+      onDeleteWithCascade={async (cascadeMode) => {
+        await handleEducationDelete(education.id, cascadeMode);
+      }}
+      deleteLabel="Delete"
       onDownloadDocument={handleDownloadDocument}
+      onClose={onClose}
     />
   );
 }

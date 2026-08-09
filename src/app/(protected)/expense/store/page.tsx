@@ -12,13 +12,15 @@ import { useExpenseActions } from "@/hooks/useExpenseActions";
 import type { Expense, ExpensePlaintext } from "@/types/expense";
 import type { Document } from "@/types/document";
 import GenericStorePage from "@/components/common/store/GenericStorePage";
-import ExpenseModal from "@/components/expense/ExpenseModal";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
+import { normalizeDateForInput } from "@/lib/utils";
+import { EXPENSE_FIELDS } from "@/components/expense/config";
 
 /**
  * Expense Receipt Store.
  * Uses GenericStorePage with expenses as parent records.
  *
- * Clicking a linked doc opens ExpenseModal to edit the parent expense.
+ * Clicking a linked doc opens GenericDomainModal to edit the parent expense.
  * Standalone uploads and link/unlink are disabled — receipts are permanently
  * attached to their parent expense.
  */
@@ -122,7 +124,7 @@ export default function ExpenseStorePage() {
       refreshAll: () => Promise<void>;
       onClose: () => void;
     }) => (
-      <ExpenseModalWrapper
+      <ExpenseStoreModal
         expense={linkedRecord}
         documents={allDocuments}
         userId={userId}
@@ -151,9 +153,9 @@ export default function ExpenseStorePage() {
   );
 }
 
-// --- ExpenseModal wrapper: bridges useExpenseActions hook with GenericStorePage's data ---
+// --- Expense store modal (hook bridge — calls useExpenseActions) ---
 
-function ExpenseModalWrapper({
+function ExpenseStoreModal({
   expense,
   documents,
   userId,
@@ -166,17 +168,34 @@ function ExpenseModalWrapper({
   refreshAll: () => Promise<void>;
   onClose: () => void;
 }) {
-  const { handleExpenseSave, handleExpenseDelete, handleDownloadDocument } =
+  const { createSaveAdapter, handleExpenseDelete, handleDownloadDocument } =
     useExpenseActions({ userId, refresh: refreshAll });
 
   return (
-    <ExpenseModal
-      expense={expense}
-      documents={documents}
-      userId={userId}
+    <GenericDomainModal
+      mode="record"
+      title="Edit expense"
       onClose={onClose}
-      onSave={handleExpenseSave}
-      onDelete={handleExpenseDelete}
+      fields={EXPENSE_FIELDS}
+      initialData={{
+        item: expense.item,
+        seller: expense.seller,
+        cost: String(expense.cost),
+        date: normalizeDateForInput(expense.date),
+        reason: expense.reason,
+      }}
+      allowFiles
+      allowLinking={false}
+      userId={userId}
+      attachedDocuments={documents.filter(
+        (d) => d.domain === "expense" && d.linked_id === expense.id,
+      )}
+      domain="expense"
+      onSave={createSaveAdapter(expense)}
+      onDeleteWithCascade={async (cascadeMode) => {
+        await handleExpenseDelete(expense.id, cascadeMode);
+      }}
+      deleteLabel="Delete"
       onDownloadDocument={handleDownloadDocument}
     />
   );

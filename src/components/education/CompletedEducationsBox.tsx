@@ -55,15 +55,15 @@ export default function CompletedEducationsBox({
         return (
           <div
             key={edu.id}
-            className="grid grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-sm dark:border-zinc-700"
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); onSelectEducation(edu); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectEducation(edu); } }}
+            className="grid grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-sm cursor-pointer dark:border-zinc-700"
           >
-            <button
-              type="button"
-              onClick={() => onSelectEducation(edu)}
-              className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white"
-            >
+            <span className="col-span-4 font-semibold text-zinc-800 dark:text-zinc-100">
               {trunc(edu.name, 24)}
-            </button>
+            </span>
             <div className="col-span-3 text-zinc-600 dark:text-zinc-300">
               {trunc(edu.provider, 20)}
             </div>

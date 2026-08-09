@@ -21,7 +21,47 @@ import {
   getPriorityColor,
   trunc,
 } from "@/components/taskmanager/helpers";
-import TaskModal from "@/components/taskmanager/TaskModal";
+import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
+
+const TASK_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Task Name" },
+  {
+    key: "priority",
+    type: "select",
+    label: "Priority",
+    options: [
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" },
+      { value: "critical", label: "Critical" },
+    ],
+  },
+  { key: "due_date", type: "date", label: "Due Date" },
+  {
+    key: "mode",
+    type: "select",
+    label: "Mode",
+    options: [
+      { value: "online", label: "Online" },
+      { value: "offline", label: "Offline" },
+    ],
+  },
+  {
+    key: "description",
+    type: "richtext",
+    label: "Task Description",
+    minHeight: "8rem",
+  },
+  { key: "is_completed", type: "checkbox", label: "Mark complete" },
+];
+
+// Every field must appear in the layout (GenericDomainModal only renders listed rows).
+const TASK_LAYOUT: string[][] = [
+  ["name"],
+  ["priority", "due_date", "mode"],
+  ["description"],
+  ["is_completed"],
+];
 
 export default function CompletedTasksPage() {
   const { userId, nowYear, nowMonth, isLoading, error, refreshData, tasks } = useTaskData();
@@ -105,26 +145,8 @@ export default function CompletedTasksPage() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleTaskSave: rawHandleTaskSave, handleTaskDelete, handleToggleComplete } =
+  const { createSaveAdapter, handleTaskDelete, handleToggleComplete } =
     useTaskActions({ userId, refresh });
-
-  // Void wrapper to match TaskModal's onSave signature (hook returns Promise<Task>)
-  const handleTaskSave = useCallback(
-    async (
-      draft: {
-        name: string;
-        priority: Task["priority"];
-        due_date: string | null;
-        mode: Task["mode"];
-        description: string;
-        is_completed: boolean;
-      },
-      existingTask: Task | null,
-    ) => {
-      await rawHandleTaskSave(draft, existingTask);
-    },
-    [rawHandleTaskSave],
-  );
 
   // ── Column definitions ──
 
@@ -152,13 +174,15 @@ export default function CompletedTasksPage() {
 
   const renderReopenAction = (task: Task) => (
     <div className="flex justify-end items-center">
-      <button
-        type="button"
-        onClick={(e) => { e.stopPropagation(); handleToggleComplete(task, false); }}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleComplete(task, false); }}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleToggleComplete(task, false); } }}
         className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
       >
         Reopen
-      </button>
+      </div>
     </div>
   );
 
@@ -243,12 +267,25 @@ export default function CompletedTasksPage() {
       )}
 
       {taskModalTarget && (
-        <TaskModal
+        <GenericDomainModal
           key={taskModalTarget.id}
-          task={taskModalTarget}
+          mode="record"
+          title="Edit task"
           onClose={closeTaskModal}
-          onSave={handleTaskSave}
-          onDelete={handleTaskDelete}
+          fields={TASK_FIELDS}
+          layout={TASK_LAYOUT}
+          initialData={{
+            name: taskModalTarget.name,
+            priority: taskModalTarget.priority,
+            due_date: taskModalTarget.due_date ?? "",
+            mode: taskModalTarget.mode,
+            description: taskModalTarget.description,
+            is_completed: taskModalTarget.is_completed,
+          }}
+          onSave={createSaveAdapter(taskModalTarget)}
+          onDelete={() => handleTaskDelete(taskModalTarget.id)}
+          deleteLabel="Delete"
+          maxWidthClassName="max-w-lg"
         />
       )}
     </PageShell>

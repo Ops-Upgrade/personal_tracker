@@ -10,10 +10,12 @@ import { useEducationData } from "@/hooks/useEducationData";
 import GenericDomainPage from "@/components/common/GenericDomainPage";
 import type { DomainPageContext } from "@/components/common/GenericDomainPage";
 import type { Education, EducationViewMode } from "@/types/education";
-import type { Priority } from "@/types/common";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
+import { docsForEducation } from "./helpers";
+import { normalizeDateForInput } from "@/lib/utils";
+import { EDUCATION_FIELDS, EDUCATION_LAYOUT } from "./config";
 import ActiveEducationsBox from "./ActiveEducationsBox";
 import CompletedEducationsBox from "./CompletedEducationsBox";
-import EducationModal from "./EducationModal";
 import { FolderIcon } from "@/components/common/Icons";
 
 /**
@@ -32,7 +34,7 @@ export default function EducationView() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleEducationSave: rawHandleEducationSave, handleEducationDelete, handleDownloadDocument } =
+  const { createSaveAdapter, handleEducationDelete, handleDownloadDocument } =
     useEducationActions({ userId, refresh });
 
   const [activeView, setActiveView] = useLocalStorage<EducationViewMode>("educationActiveView", "months");
@@ -65,37 +67,6 @@ export default function EducationView() {
   );
 
   // ── CRUD handlers ──
-
-  const handleEducationSave = useCallback(
-    async (
-      draft: {
-        name: string;
-        provider: string;
-        priority: Priority;
-        due_date: string | null;
-        description: string;
-        is_completed: boolean;
-      },
-      existingEducation: Education | null,
-      pendingDoc?: { file: File; label: string },
-      pendingLinkDocId?: string,
-      pendingUnlinkDocIds?: string[],
-      pendingDeleteDocIds?: string[],
-    ) => {
-      const savedEdu = await rawHandleEducationSave(
-        draft,
-        existingEducation,
-        pendingDoc,
-        pendingLinkDocId,
-        pendingUnlinkDocIds,
-        pendingDeleteDocIds,
-      );
-      if (!existingEducation && savedEdu) {
-        openEditEducation(savedEdu);
-      }
-    },
-    [rawHandleEducationSave, openEditEducation],
-  );
 
   function handleQuickComplete(education: Education) {
     setQuickCompleteTarget({ ...education, is_completed: true });
@@ -130,15 +101,56 @@ export default function EducationView() {
       }
       modalSlot={
         eduModalTarget && (
-          <EducationModal
-            education={eduModalTarget === "create" ? null : eduModalTarget}
-            defaultDate={eduModalTarget === "create" ? istDate : undefined}
-            documents={documents}
+          <GenericDomainModal
+            mode="record"
+            title={eduModalTarget === "create" ? "Add education" : "Edit education"}
+            fields={EDUCATION_FIELDS}
+            layout={EDUCATION_LAYOUT}
+            initialData={
+              eduModalTarget === "create"
+                ? {
+                    name: "",
+                    provider: "",
+                    priority: "medium",
+                    due_date: istDate,
+                    description: "",
+                    is_completed: false,
+                  }
+                : {
+                    name: eduModalTarget.name,
+                    provider: eduModalTarget.provider,
+                    priority: eduModalTarget.priority,
+                    due_date: normalizeDateForInput(eduModalTarget.due_date),
+                    description: eduModalTarget.description,
+                    is_completed: eduModalTarget.is_completed,
+                  }
+            }
+            allowFiles
             userId={userId || ""}
-            onClose={closeEduModal}
-            onSave={handleEducationSave}
-            onDelete={handleEducationDelete}
+            attachedDocuments={
+              eduModalTarget !== "create"
+                ? docsForEducation(eduModalTarget.id, documents)
+                : []
+            }
+            standaloneDocuments={documents.filter(
+              (d) => d.domain === "education" && !d.linked_id,
+            )}
+            domain="education"
+            onSave={createSaveAdapter(
+              eduModalTarget === "create" ? null : eduModalTarget,
+              eduModalTarget === "create"
+                ? (saved) => openEditEducation(saved)
+                : undefined,
+            )}
+            onDeleteWithCascade={
+              eduModalTarget !== "create"
+                ? (cascadeMode) =>
+                    handleEducationDelete(eduModalTarget.id, cascadeMode)
+                : undefined
+            }
+            deleteLabel="Delete"
             onDownloadDocument={handleDownloadDocument}
+            onClose={closeEduModal}
           />
         )
       }

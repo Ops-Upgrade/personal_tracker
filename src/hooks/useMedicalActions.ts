@@ -2,28 +2,20 @@
 
 import { useCallback } from "react";
 import type { MedicalRecord, MedicalPlaintext } from "@/types/medical";
-import type { DocumentPlaintext } from "@/types/document";
+import type { Document, DocumentPlaintext } from "@/types/document";
 import { fetchMedicalRecords, createMedicalRecord, updateMedicalRecord, deleteMedicalRecord } from "@/api/medical";
 import { fetchDocuments, createDocument, updateDocument, deleteDocument } from "@/api/common/documents";
-import { uploadDocumentFile, deleteDocumentFile } from "@/api/common/documentStorage";
+import { uploadDocumentFile, downloadDocumentFile, deleteDocumentFile } from "@/api/common/documentStorage";
+import type { FileActions } from "@/components/common/GenericDomainModal";
 
 interface UseMedicalActionsParams {
   userId: string | null;
   refresh: () => Promise<void>;
 }
 
-export interface MedicalFileAction {
-  newFiles: File[];
-  removeDocIds: string[];
-  unlinkDocIds?: string[];
-  linkDocId?: string;
-}
-
 /**
  * Shared hook for Medical Record CRUD + document linking operations.
- * Consolidates ~150 lines of duplicated handleSave/handleDelete from
- * MedicalView and medical/all pages.
- * Pattern matches useExpenseActions.ts and useEducationActions.ts.
+ * Matches the exact flat-param pattern of useExpenseActions and useEducationActions.
  */
 export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) {
   const handleSave = useCallback(
@@ -35,7 +27,10 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
         diagnosis_timeline: string;
       },
       existingRecord: MedicalRecord | null,
-      fileAction?: MedicalFileAction,
+      pendingDoc?: { file: File; label: string },
+      pendingLinkDocId?: string,
+      pendingUnlinkDocIds?: string[],
+      pendingDeleteDocIds?: string[],
     ) => {
       if (!userId) throw new Error("No active session.");
 
@@ -45,26 +40,12 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
         ? freshRecords.find((r) => r.id === existingRecord.id)
         : null;
 
+      let currentDocIds = [...(freshRecord?.document_ids ?? [])];
       const nowIso = new Date().toISOString();
-      let document_ids = [...(freshRecord?.document_ids ?? [])];
-
-      // Process removals
-      if (fileAction?.removeDocIds) {
-        for (const docId of fileAction.removeDocIds) {
-          const doc = freshDocs.find((d) => d.id === docId);
-          if (doc) {
-            if (doc.file_name) {
-              try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-            }
-            try { await deleteDocument(docId); } catch { /* best-effort */ }
-          }
-          document_ids = document_ids.filter((id) => id !== docId);
-        }
-      }
 
       // Process unlinks
-      if (fileAction?.unlinkDocIds) {
-        for (const docId of fileAction.unlinkDocIds) {
+      if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0 && existingRecord) {
+        for (const docId of pendingUnlinkDocIds) {
           const doc = freshDocs.find((d) => d.id === docId);
           if (doc) {
             await updateDocument(userId, docId, {
@@ -73,7 +54,21 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
               updated_at: nowIso,
             } as DocumentPlaintext);
           }
-          document_ids = document_ids.filter((id) => id !== docId);
+          currentDocIds = currentDocIds.filter((id) => id !== docId);
+        }
+      }
+
+      // Process deletions
+      if (pendingDeleteDocIds && pendingDeleteDocIds.length > 0) {
+        for (const docId of pendingDeleteDocIds) {
+          const doc = freshDocs.find((d) => d.id === docId);
+          if (doc) {
+            currentDocIds = currentDocIds.filter((id) => id !== docId);
+            if (doc.file_name) {
+              try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+            }
+            await deleteDocument(docId);
+          }
         }
       }
 
@@ -82,7 +77,7 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
         clinic: draft.clinic,
         date: draft.date,
         diagnosis_timeline: draft.diagnosis_timeline,
-        document_ids,
+        document_ids: currentDocIds,
         updated_at: nowIso,
       };
 
@@ -93,48 +88,47 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
         savedRecord = await createMedicalRecord(userId, payload);
       }
 
-      // Upload new files
-      if (fileAction?.newFiles) {
-        for (const file of fileAction.newFiles) {
-          const { fileName, iv, mimeType } = await uploadDocumentFile(userId, file);
-          const doc = await createDocument(userId, {
-            label: file.name,
-            file_name: fileName,
-            file_iv: iv,
-            file_mime: mimeType,
-            domain: "medical",
+      // Handle new file upload
+      let needsUpdate = false;
+      const newDocIds = [...currentDocIds];
+
+      if (pendingDoc) {
+        const { fileName, iv, mimeType } = await uploadDocumentFile(
+          userId,
+          pendingDoc.file,
+        );
+        const doc = await createDocument(userId, {
+          label: pendingDoc.label,
+          file_name: fileName,
+          file_iv: iv,
+          file_mime: mimeType,
+          domain: "medical",
+          linked_id: savedRecord.id,
+          updated_at: nowIso,
+        });
+        newDocIds.push(doc.id);
+        needsUpdate = true;
+      }
+
+      // Handle linking existing document
+      if (pendingLinkDocId) {
+        const pdoc = freshDocs.find((d) => d.id === pendingLinkDocId);
+        if (pdoc) {
+          await updateDocument(userId, pendingLinkDocId, {
+            ...pdoc,
             linked_id: savedRecord.id,
             updated_at: nowIso,
-          });
-          document_ids.push(doc.id);
+          } as DocumentPlaintext);
+          if (!newDocIds.includes(pendingLinkDocId)) newDocIds.push(pendingLinkDocId);
+          needsUpdate = true;
         }
       }
 
-      // Link existing standalone document
-      if (fileAction?.linkDocId) {
-        const linkDoc = freshDocs.find((d) => d.id === fileAction.linkDocId);
-        if (linkDoc && !document_ids.includes(fileAction.linkDocId)) {
-          document_ids.push(fileAction.linkDocId);
-        }
-      }
-
-      // Update with final document IDs
-      if (
-        (fileAction?.newFiles && fileAction.newFiles.length > 0) ||
-        fileAction?.linkDocId
-      ) {
-        await updateMedicalRecord(userId, savedRecord.id, {
-          ...payload,
-          document_ids,
-          updated_at: new Date().toISOString(),
-        });
-      }
-
-      // Fix linked_id for newly created/linked documents
+      // Fix linked_id for newly created/linked documents (only for new records)
       if (!existingRecord) {
         const allDocs = await fetchDocuments(userId);
         for (const doc of allDocs) {
-          if (doc.domain === "medical" && doc.linked_id === "" && document_ids.includes(doc.id)) {
+          if (doc.domain === "medical" && doc.linked_id === "" && newDocIds.includes(doc.id)) {
             await updateDocument(userId, doc.id, {
               ...doc,
               linked_id: savedRecord.id,
@@ -143,15 +137,13 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
           }
         }
       }
-      if (existingRecord && fileAction?.linkDocId) {
-        const linkDoc = freshDocs.find((d) => d.id === fileAction.linkDocId);
-        if (linkDoc) {
-          await updateDocument(userId, fileAction.linkDocId, {
-            ...linkDoc,
-            linked_id: existingRecord.id,
-            updated_at: new Date().toISOString(),
-          } as DocumentPlaintext);
-        }
+
+      if (needsUpdate) {
+        await updateMedicalRecord(userId, savedRecord.id, {
+          ...payload,
+          document_ids: newDocIds,
+          updated_at: new Date().toISOString(),
+        });
       }
 
       await refresh();
@@ -161,7 +153,7 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
   );
 
   const handleDelete = useCallback(
-    async (recordId: string, cascadeMode: "unlink" | "cascade" = "cascade") => {
+    async (recordId: string) => {
       if (!userId) throw new Error("No active session.");
 
       const allDocs = await fetchDocuments(userId);
@@ -169,22 +161,12 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
         (d) => d.domain === "medical" && d.linked_id === recordId,
       );
 
-      if (cascadeMode === "unlink") {
-        const nowIso = new Date().toISOString();
-        for (const doc of recordDocs) {
-          await updateDocument(userId, doc.id, {
-            ...doc,
-            linked_id: "",
-            updated_at: nowIso,
-          } as DocumentPlaintext);
+      // Always cascade-delete attached documents
+      for (const doc of recordDocs) {
+        if (doc.file_name) {
+          try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
         }
-      } else {
-        for (const doc of recordDocs) {
-          if (doc.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
-          }
-          try { await deleteDocument(doc.id); } catch { /* best-effort */ }
-        }
+        try { await deleteDocument(doc.id); } catch { /* best-effort */ }
       }
 
       await deleteMedicalRecord(recordId);
@@ -193,5 +175,60 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
     [userId, refresh],
   );
 
-  return { handleSave, handleDelete };
+  const handleDownloadDocument = useCallback(
+    async (doc: Document) => {
+      if (!userId) throw new Error("No active session.");
+      const blob = await downloadDocumentFile(
+        userId,
+        doc.file_name,
+        doc.file_iv,
+        doc.file_mime,
+      );
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.label || "document";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    },
+    [userId],
+  );
+
+  /** Schema-driven save adapter: (formData, fileActions) → handleSave */
+  const createSaveAdapter = useCallback(
+    (existingRecord: MedicalRecord | null, onSuccess?: (saved: MedicalRecord) => void) => {
+      return async (formData: Record<string, unknown>, fileActions: FileActions) => {
+        const name = (formData.name as string).trim();
+        if (!name) throw new Error("Record name is required.");
+        const date = (formData.date as string) || "";
+        if (!date) throw new Error("Date is required.");
+
+        const firstNewFile = fileActions.newFiles[0];
+        const pendingDoc = firstNewFile
+          ? { file: firstNewFile.file, label: firstNewFile.label }
+          : undefined;
+
+        const saved = await handleSave(
+          {
+            name,
+            clinic: (formData.clinic as string).trim(),
+            date,
+            diagnosis_timeline: (formData.diagnosis_timeline as string).trim(),
+          },
+          existingRecord,
+          pendingDoc,
+          fileActions.docsToLink[0] || undefined,
+          fileActions.docsToUnlink.length > 0 ? fileActions.docsToUnlink : undefined,
+          fileActions.docsToDelete.length > 0 ? fileActions.docsToDelete : undefined,
+        );
+
+        onSuccess?.(saved);
+      };
+    },
+    [handleSave],
+  );
+
+  return { handleSave, handleDelete, handleDownloadDocument, createSaveAdapter };
 }

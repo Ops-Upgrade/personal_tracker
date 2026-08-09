@@ -26,7 +26,12 @@ import {
 } from "@/components/taskmanager/helpers";
 import { trunc } from "@/lib/viewHelpers";
 import { formatShortDate } from "@/lib/format";
-import NoteModal from "@/components/taskmanager/NoteModal";
+import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
+
+const NOTE_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Name", placeholder: "Note title" },
+  { key: "content", type: "richtext", label: "Content", minHeight: "10rem" },
+];
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, "").trim();
@@ -63,7 +68,7 @@ export default function NotesPage() {
     if (userId) refreshData(userId);
   };
 
-  const { handleNoteSave, handleNoteDelete, handleDownloadDocument } =
+  const { createSaveAdapter, handleNoteDelete, handleDownloadDocument } =
     useNoteActions({
       userId,
       refresh: async () => {
@@ -177,13 +182,31 @@ export default function NotesPage() {
       )}
 
       {noteModalTarget && userId && (
-        <NoteModal
-          note={noteModalTarget}
-          documents={documents}
-          userId={userId}
+        <GenericDomainModal
+          mode="record"
+          title="Edit note"
           onClose={closeNoteModal}
-          onSave={handleNoteSave}
-          onDelete={handleNoteDelete}
+          fields={NOTE_FIELDS}
+          initialData={{
+            name: noteModalTarget.name ?? "",
+            content: noteModalTarget.content ?? "",
+          }}
+          allowFiles
+          userId={userId}
+          attachedDocuments={documents.filter(
+            (d) =>
+              d.domain === "taskmanager" &&
+              d.linked_id === noteModalTarget.id,
+          )}
+          standaloneDocuments={documents.filter(
+            (d) => d.domain === "taskmanager" && !d.linked_id,
+          )}
+          domain="taskmanager"
+          onSave={createSaveAdapter(noteModalTarget)}
+          onDeleteWithCascade={async (cascadeMode) => {
+            await handleNoteDelete(noteModalTarget.id, cascadeMode);
+          }}
+          deleteLabel="Delete"
           onDownloadDocument={handleDownloadDocument}
         />
       )}

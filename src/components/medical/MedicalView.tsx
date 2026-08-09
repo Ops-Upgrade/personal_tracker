@@ -16,8 +16,8 @@ import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContain
 import GenericDomainPage from "@/components/common/GenericDomainPage";
 import type { DomainPageContext } from "@/components/common/GenericDomainPage";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
-import MedicalModal from "./MedicalModal";
-import { useMedicalActions, type MedicalFileAction } from "@/hooks/useMedicalActions";
+import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
+import { useMedicalActions } from "@/hooks/useMedicalActions";
 import { useMedicalData } from "@/hooks/useMedicalData";
 import MedicalTable from "./MedicalTable";
 import GenericMonthRow from "@/components/common/GenericMonthRow";
@@ -36,6 +36,14 @@ const MEDICAL_VIEW_OPTIONS: readonly ViewToggleOption<MedicalViewMode>[] = [
   { value: "all", label: <Table className="h-4 w-4" /> },
   { value: "single", label: <List className="h-4 w-4" /> },
   { value: "multi", label: <LayoutGrid className="h-4 w-4" />, hideOnMobile: true },
+];
+
+/** Schema for the medical record create/edit modal */
+const MEDICAL_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Name" },
+  { key: "clinic", type: "text", label: "Clinic / Doctor" },
+  { key: "date", type: "date", label: "Date" },
+  { key: "diagnosis_timeline", type: "richtext", label: "Diagnosis Timeline", minHeight: "8rem" },
 ];
 
 /**
@@ -166,26 +174,7 @@ export default function MedicalView() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleSave: rawHandleSave, handleDelete: rawHandleDelete } = useMedicalActions({ userId, refresh });
-
-  // Wrapper that transitions to edit mode after creation
-  const handleSave = useCallback(
-    async (
-      draft: { name: string; clinic: string; date: string; diagnosis_timeline: string },
-      existingRecord: MedicalRecord | null,
-      fileAction?: MedicalFileAction,
-    ) => {
-      const savedRecord = await rawHandleSave(draft, existingRecord, fileAction);
-      if (!existingRecord && savedRecord) {
-        openEdit(savedRecord);
-      }
-    },
-    [rawHandleSave, openEdit],
-  );
-
-  async function handleDelete(recordId: string, cascadeMode: 'unlink' | 'cascade' = 'cascade') {
-    await rawHandleDelete(recordId, cascadeMode);
-  }
+  const { createSaveAdapter, handleDelete } = useMedicalActions({ userId, refresh });
 
   // ── Context for GenericDomainPage ──
 
@@ -225,21 +214,54 @@ export default function MedicalView() {
       }
       modalSlot={
         modalTarget && userId && (
-          <MedicalModal
-            record={modalTarget === "create" ? null : modalTarget}
-            defaultDate={modalTarget === "create" ? istDate : undefined}
+          <GenericDomainModal
+            key={modalTarget === "create" ? "create" : modalTarget.id}
+            mode="record"
+            title={
+              modalTarget === "create"
+                ? "Add medical record"
+                : "Edit medical record"
+            }
+            onClose={closeModal}
+            fields={MEDICAL_FIELDS}
+            initialData={{
+              name: modalTarget === "create" ? "" : modalTarget.name,
+              clinic: modalTarget === "create" ? "" : modalTarget.clinic,
+              date:
+                modalTarget === "create"
+                  ? (istDate ?? "")
+                  : modalTarget.date,
+              diagnosis_timeline:
+                modalTarget === "create"
+                  ? ""
+                  : modalTarget.diagnosis_timeline,
+            }}
+            allowFiles
+            allowLinking={false}
+            userId={userId}
             attachedDocuments={
-              modalTarget !== "create" && modalTarget
-                ? documents.filter((d) => modalTarget.document_ids?.includes(d.id))
+              modalTarget !== "create"
+                ? documents.filter(
+                    (d) => d.domain === "medical" && d.linked_id === modalTarget.id,
+                  )
                 : []
             }
-            standaloneDocuments={documents.filter(
-              (d) => d.domain === "medical" && !d.linked_id,
+            standaloneDocuments={[]}
+            domain="medical"
+            onSave={createSaveAdapter(
+              modalTarget === "create" ? null : modalTarget,
+              modalTarget === "create"
+                ? (saved) => openEdit(saved)
+                : undefined,
             )}
-            userId={userId}
-            onClose={closeModal}
-            onSave={handleSave}
-            onDelete={handleDelete}
+            onDelete={
+              modalTarget !== "create"
+                ? async () => {
+                    await handleDelete(modalTarget.id);
+                  }
+                : undefined
+            }
+            deleteLabel="Delete"
           />
         )
       }

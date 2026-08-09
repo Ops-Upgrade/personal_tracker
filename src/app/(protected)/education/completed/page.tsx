@@ -21,7 +21,9 @@ import {
   byPriority,
   sortByCompletedDesc,
 } from "@/lib/viewHelpers";
-import EducationModal from "@/components/education/EducationModal";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
+import { normalizeDateForInput } from "@/lib/utils";
+import { EDUCATION_FIELDS, EDUCATION_LAYOUT } from "@/components/education/config";
 
 // ── Sort helpers ──
 
@@ -220,10 +222,8 @@ export default function CompletedEducationsPage() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleEducationSave: _handleEducationSave, handleEducationDelete, handleDownloadDocument } =
+  const { createSaveAdapter, handleEducationDelete, handleDownloadDocument } =
     useEducationActions({ userId, refresh });
-  const handleEducationSave: typeof _handleEducationSave = (...args) =>
-    _handleEducationSave(...args);
 
   return (
     <>
@@ -262,14 +262,35 @@ export default function CompletedEducationsPage() {
       </PageShell>
 
       {eduModalTarget && (
-        <EducationModal
-          education={eduModalTarget}
-          documents={documents}
+        <GenericDomainModal
+          mode="record"
+          title="Edit education"
+          fields={EDUCATION_FIELDS}
+          layout={EDUCATION_LAYOUT}
+          initialData={{
+            name: eduModalTarget.name,
+            provider: eduModalTarget.provider,
+            priority: eduModalTarget.priority,
+            due_date: normalizeDateForInput(eduModalTarget.due_date),
+            description: eduModalTarget.description,
+            is_completed: eduModalTarget.is_completed,
+          }}
+          allowFiles
           userId={userId || ""}
-          onClose={closeEduModal}
-          onSave={handleEducationSave}
-          onDelete={handleEducationDelete}
+          attachedDocuments={documents.filter(
+            (d) => d.domain === "education" && d.linked_id === eduModalTarget.id,
+          )}
+          standaloneDocuments={documents.filter(
+            (d) => d.domain === "education" && !d.linked_id,
+          )}
+          domain="education"
+          onSave={createSaveAdapter(eduModalTarget)}
+          onDeleteWithCascade={(cascadeMode) =>
+            handleEducationDelete(eduModalTarget.id, cascadeMode)
+          }
+          deleteLabel="Delete"
           onDownloadDocument={handleDownloadDocument}
+          onClose={closeEduModal}
         />
       )}
     </>

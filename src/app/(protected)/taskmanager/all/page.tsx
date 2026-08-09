@@ -14,13 +14,53 @@ import { useTableSort } from "@/hooks/useTableSort";
 import { useTaskActions } from "@/hooks/useTaskActions";
 import { byDueMonth } from "@/lib/viewHelpers";
 import { TASK_COLUMNS, SORT_CONFIGS } from "@/components/taskmanager/config";
-import TaskModal from "@/components/taskmanager/TaskModal";
+import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
+
+const TASK_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Task Name" },
+  {
+    key: "priority",
+    type: "select",
+    label: "Priority",
+    options: [
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" },
+      { value: "critical", label: "Critical" },
+    ],
+  },
+  { key: "due_date", type: "date", label: "Due Date" },
+  {
+    key: "mode",
+    type: "select",
+    label: "Mode",
+    options: [
+      { value: "online", label: "Online" },
+      { value: "offline", label: "Offline" },
+    ],
+  },
+  {
+    key: "description",
+    type: "richtext",
+    label: "Task Description",
+    minHeight: "8rem",
+  },
+  { key: "is_completed", type: "checkbox", label: "Mark complete" },
+];
+
+// Every field must appear in the layout (GenericDomainModal only renders listed rows).
+const TASK_LAYOUT: string[][] = [
+  ["name"],
+  ["priority", "due_date", "mode"],
+  ["description"],
+  ["is_completed"],
+];
 
 export default function TaskManagerAllPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const { userId, istDate, nowYear, nowMonth, isLoading, error, refreshData, tasks } = useTaskData();
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData, tasks } = useTaskData();
 
   // ── Year / Month filter state from URL params ──
 
@@ -103,26 +143,8 @@ export default function TaskManagerAllPage() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { handleTaskSave: rawHandleTaskSave, handleTaskDelete } =
+  const { createSaveAdapter, handleTaskDelete } =
     useTaskActions({ userId, refresh });
-
-  // Void wrapper to match TaskModal's onSave signature (hook returns Promise<Task>)
-  const handleTaskSave = useCallback(
-    async (
-      draft: {
-        name: string;
-        priority: Task["priority"];
-        due_date: string | null;
-        mode: Task["mode"];
-        description: string;
-        is_completed: boolean;
-      },
-      existingTask: Task | null,
-    ) => {
-      await rawHandleTaskSave(draft, existingTask);
-    },
-    [rawHandleTaskSave],
-  );
 
   const emptyMessage =
     selectedMonth === "all"
@@ -183,18 +205,31 @@ export default function TaskManagerAllPage() {
             monthGroups={monthGroups}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
+            disableMonthToggle
           />
         )}
       </PageShell>
 
       {modalTarget && userId && (
-        <TaskModal
+        <GenericDomainModal
           key={modalTarget.id}
-          task={modalTarget}
-          defaultDate={istDate}
+          mode="record"
+          title="Edit task"
           onClose={closeModal}
-          onSave={handleTaskSave}
-          onDelete={handleTaskDelete}
+          fields={TASK_FIELDS}
+          layout={TASK_LAYOUT}
+          initialData={{
+            name: modalTarget.name,
+            priority: modalTarget.priority,
+            due_date: modalTarget.due_date ?? "",
+            mode: modalTarget.mode,
+            description: modalTarget.description,
+            is_completed: modalTarget.is_completed,
+          }}
+          onSave={createSaveAdapter(modalTarget)}
+          onDelete={() => handleTaskDelete(modalTarget.id)}
+          deleteLabel="Delete"
+          maxWidthClassName="max-w-lg"
         />
       )}
     </>
