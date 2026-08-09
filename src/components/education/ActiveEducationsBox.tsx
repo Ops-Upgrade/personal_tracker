@@ -1,15 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { Education, EducationViewMode } from "@/types/education";
 import type { Document } from "@/types/document";
 import { PRIORITIES } from "@/types/common";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import GenericActiveBox from "@/components/common/GenericActiveBox";
+import type { ColumnDef } from "@/components/common/GenericViewPage";
 import Button from "@/components/common/Button";
 import PriorityBadge from "@/components/common/PriorityBadge";
 import { getPriorityColor } from "@/lib/priorityColors";
 import { PaperClipIcon } from "@/components/common/Icons";
+import { ROUTES } from "@/routes/paths";
 import { trunc } from "./helpers";
 
 const EDUCATION_VIEW_OPTIONS: readonly ViewToggleOption<EducationViewMode>[] = [
@@ -56,6 +58,101 @@ export default function ActiveEducationsBox({
     return map;
   }, [documents]);
 
+  // ── Column definitions (view-dependent for priority/due-date column) ──
+
+  const educationColumns: ColumnDef<Education>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Program Name",
+        colSpan: 3,
+        render: (edu) => (
+          <span className="font-semibold text-zinc-800 dark:text-zinc-100">
+            {trunc(edu.name, 34)}
+          </span>
+        ),
+      },
+      {
+        key: "provider",
+        header: "Provider",
+        colSpan: 3,
+        render: (edu) => (
+          <span className="text-zinc-600 dark:text-zinc-300">
+            {trunc(edu.provider, 24)}
+          </span>
+        ),
+      },
+      {
+        key: view === "priority" ? "due_date" : "priority",
+        header: view === "priority" ? "Due Date" : "Priority",
+        colSpan: 2,
+        render: (edu) =>
+          view === "priority" ? (
+            <span className="text-zinc-600 dark:text-zinc-300">
+              {dueDisplay(edu.due_date)}
+            </span>
+          ) : edu.priority ? (
+            <PriorityBadge priority={edu.priority} />
+          ) : (
+            <span className="text-zinc-400">—</span>
+          ),
+      },
+      {
+        key: "description",
+        header: "Description",
+        colSpan: 2,
+        render: (edu) => (
+          <span className="text-zinc-700 dark:text-zinc-200">
+            {trunc(edu.description, 38)}
+          </span>
+        ),
+      },
+      {
+        key: "files",
+        header: "Files",
+        colSpan: 2,
+        render: (edu) => {
+          const count = docCountsByEdu.get(edu.id) ?? 0;
+          return count > 0 ? (
+            <span className="inline-flex items-center gap-1 text-amber-500" title={`${count} document(s) attached`}>
+              <PaperClipIcon className="h-4 w-4" />
+              <span className="text-zinc-600 dark:text-zinc-300">({count})</span>
+            </span>
+          ) : (
+            <span className="text-zinc-400 dark:text-zinc-600">—</span>
+          );
+        },
+      },
+    ],
+    [view, docCountsByEdu],
+  );
+
+  const getItemClassName = useCallback(
+    (edu: Education) => {
+      const colors = edu.priority
+        ? getPriorityColor(edu.priority)
+        : { border: "border-zinc-200" };
+      return `border-l-[3px] ${colors.border}`;
+    },
+    [],
+  );
+
+  const rowAction = useCallback(
+    (edu: Education) => (
+      <Button variant="success" size="sm" onClick={() => onMarkComplete(edu)}>
+        Complete
+      </Button>
+    ),
+    [onMarkComplete],
+  );
+
+  const getSubtitle = useCallback(
+    (items: Education[]) => (
+      <>{items.length} education{items.length !== 1 ? "s" : ""}</>
+    ),
+    [],
+  );
+
   return (
     <GenericActiveBox
       items={educations}
@@ -70,74 +167,12 @@ export default function ActiveEducationsBox({
       priorities={PRIORITIES}
       getPriorityColor={(p) => getPriorityColor(p as "low" | "medium" | "high" | "critical")}
       renderPriorityBadge={(p) => <PriorityBadge priority={p as "low" | "medium" | "high" | "critical"} />}
-      renderHeader={() => (
-        <div className="hidden sm:flex items-center justify-between gap-2 px-2 pb-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-          <div className="grid flex-1 gap-2 sm:grid-cols-12 pl-[3px]">
-            <div className="col-span-3">Program Name</div>
-            <div className="col-span-3">Provider</div>
-            <div className="col-span-2">{view === "priority" ? "Due Date" : "Priority"}</div>
-            <div className="col-span-2">Description</div>
-            <div className="col-span-2 text-center">Files</div>
-          </div>
-          <div className="w-[85px]" />
-        </div>
-      )}
-      renderItem={(edu) => {
-        const colors = edu.priority ? getPriorityColor(edu.priority) : { border: "border-zinc-200", bg: "" };
-        const docCount = docCountsByEdu.get(edu.id) ?? 0;
-        return (
-          <div
-            key={edu.id}
-            className={`group flex items-center justify-between gap-2 rounded-md border border-zinc-200 px-2 py-1.5 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60 border-l-[3px] ${colors.border}`}
-          >
-            <button
-              type="button"
-              onClick={() => onSelectEducation(edu)}
-              className="grid flex-1 cursor-pointer gap-2 text-left text-sm sm:grid-cols-12"
-            >
-              <span className="font-semibold text-zinc-800 dark:text-zinc-100 sm:col-span-3">
-                {trunc(edu.name, 34)}
-              </span>
-              <span className="text-zinc-600 dark:text-zinc-300 sm:col-span-3">
-                <span className="mr-1 inline sm:hidden">Provider:</span>
-                {trunc(edu.provider, 24)}
-              </span>
-              {view === "priority" ? (
-                <span className="text-zinc-600 dark:text-zinc-300 sm:col-span-2">
-                  <span className="mr-1 inline sm:hidden">Due:</span>
-                  {dueDisplay(edu.due_date)}
-                </span>
-              ) : (
-                <span className="text-zinc-600 dark:text-zinc-300 sm:col-span-2">
-                  <span className="mr-1 inline sm:hidden">Priority:</span>
-                  {edu.priority ? <PriorityBadge priority={edu.priority} /> : "-"}
-                </span>
-              )}
-              <span className="text-zinc-700 dark:text-zinc-200 sm:col-span-2">
-                <span className="mr-1 inline sm:hidden">Desc:</span>
-                {trunc(edu.description, 38)}
-              </span>
-              <span className="sm:col-span-2 flex items-center justify-center">
-                {docCount > 0 ? (
-                  <span className="inline-flex items-center gap-1 text-amber-500" title={`${docCount} document(s) attached`}>
-                    <PaperClipIcon className="h-4 w-4" />
-                    <span className="text-zinc-600 dark:text-zinc-300">({docCount})</span>
-                  </span>
-                ) : (
-                  <span className="text-zinc-400 dark:text-zinc-600">—</span>
-                )}
-              </span>
-            </button>
-            <Button
-              variant="success"
-              size="sm"
-              onClick={() => onMarkComplete(edu)}
-            >
-              Complete
-            </Button>
-          </div>
-        );
-      }}
+      columns={educationColumns}
+      onRowClick={onSelectEducation}
+      rowAction={rowAction}
+      getItemClassName={getItemClassName}
+      getSubtitle={getSubtitle}
+      viewAllBaseHref={ROUTES.EDUCATION_ALL}
     />
   );
 }

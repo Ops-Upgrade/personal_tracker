@@ -1,124 +1,77 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { ROUTES } from "@/routes/paths";
-import { getSession } from "@/api/auth";
 import {
   fetchExpenses,
   updateExpense,
   deleteExpense,
 } from "@/api/expense";
-import {
-  fetchDocuments,
-} from "@/api/common/documents";
+import { fetchDocuments } from "@/api/common/documents";
+import { useExpenseActions } from "@/hooks/useExpenseActions";
 import type { Expense, ExpensePlaintext } from "@/types/expense";
 import type { Document } from "@/types/document";
-import { useExpenseActions } from "@/hooks/useExpenseActions";
-import GlobalStoreView from "@/components/common/store/GlobalStoreView";
-import ExpenseModal from "@/components/expense/ExpenseModal";
+import GenericStorePage from "@/components/common/store/GenericStorePage";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
+import { normalizeDateForInput } from "@/lib/utils";
+import { EXPENSE_FIELDS } from "@/components/expense/config";
 
 /**
  * Expense Receipt Store.
- * Uses GlobalStoreView with expenses as parent records.
+ * Uses GenericStorePage with expenses as parent records.
  *
- * View-and-manage hub for receipts uploaded directly to expenses.
- * Standalone uploads and link/unlink operations are disabled —
- * receipts are permanently attached to their parent expense.
- * Clicking a linked doc opens ExpenseModal to edit the parent expense.
+ * Clicking a linked doc opens GenericDomainModal to edit the parent expense.
+ * Standalone uploads and link/unlink are disabled — receipts are permanently
+ * attached to their parent expense.
  */
 export default function ExpenseStorePage() {
-  const [userId, setUserId] = useState<string | null>(null);
-  const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
-  const [parentRecords, setParentRecords] = useState<{ id: string; name: string }[]>([]);
-  const [allDocuments, setAllDocuments] = useState<Document[]>([]);
-
-  // Inline modal state: linked document → open ExpenseModal for parent record
-  const [linkedRecord, setLinkedRecord] = useState<Expense | null>(null);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-
-  // --- Auth + data loading ---
-  useEffect(() => {
-    const init = async () => {
-      const session = await getSession();
-      if (session?.user.id) setUserId(session.user.id);
-    };
-    init();
-  }, []);
-
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    const load = async () => {
-      const [exps, docs] = await Promise.all([
-        fetchExpenses(userId),
-        fetchDocuments(userId),
-      ]);
-      if (!cancelled) {
-        setAllExpenses(exps);
-        setAllDocuments(docs);
-        setParentRecords(
-          exps.map((e) => ({
-            id: e.id,
-            name: `${e.item}${e.seller ? ` — ${e.seller}` : ""} (₹${e.cost.toLocaleString("en-IN")})`,
-          }))
-        );
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [userId]);
-
-  const refreshAll = useCallback(async () => {
-    if (!userId) return;
+  // --- fetchData ---
+  const fetchData = useCallback(async (userId: string) => {
     const [exps, docs] = await Promise.all([
       fetchExpenses(userId),
       fetchDocuments(userId),
     ]);
-    setAllExpenses(exps);
-    setAllDocuments(docs);
-    setParentRecords(
-      exps.map((e) => ({
+    return { domainRows: exps, documents: docs };
+  }, []);
+
+  // --- deriveParentRecords ---
+  const deriveParentRecords = useCallback(
+    (rows: Expense[]) =>
+      rows.map((e) => ({
         id: e.id,
         name: `${e.item}${e.seller ? ` — ${e.seller}` : ""} (₹${e.cost.toLocaleString("en-IN")})`,
-      }))
-    );
-    setRefreshTrigger((prev) => prev + 1);
-  }, [userId]);
-
-  // --- Action click: linked doc → open ExpenseModal inline for parent ---
-  const handleActionClick = useCallback(
-    (docId: string) => {
-      const doc = allDocuments.find((d) => d.id === docId);
-      if (!doc?.linked_id) return false;
-      const record = allExpenses.find((e) => e.id === doc.linked_id);
-      if (record) {
-        setLinkedRecord(record);
-        return true; // Handled
-      }
-      return false; // Not handled
-    },
-    [allDocuments, allExpenses],
+      })),
+    [],
   );
 
-  const closeLinkedRecord = useCallback(() => {
-    setLinkedRecord(null);
-    refreshAll();
-  }, [refreshAll]);
+  // --- onLinkedRecordClick ---
+  const onLinkedRecordClick = useCallback(
+    (docId: string, allDocuments: Document[], allRows: Expense[]) => {
+      const doc = allDocuments.find((d) => d.id === docId);
+      if (!doc?.linked_id) return null;
+      return allRows.find((e) => e.id === doc.linked_id) ?? null;
+    },
+    [],
+  );
 
-  // --- Parent CRUD handlers ---
+  // --- Handlers ---
+
   const handleDeleteParent = useCallback(
-    async (parentId: string) => {
-      if (!userId) return;
+    async (parentId: string, _userId: string, refreshAll: () => Promise<void>) => {
       await deleteExpense(parentId);
       await refreshAll();
     },
-    [userId, refreshAll],
+    [],
   );
 
-  // --- onDocumentSaved: sync parent expense document_ids after store-modal save ---
   const handleDocumentSaved = useCallback(
-    async (documentId: string, newLinkedId: string, oldLinkedId: string) => {
-      if (!userId) return;
+    async (
+      documentId: string,
+      newLinkedId: string,
+      oldLinkedId: string,
+      userId: string,
+      refreshAll: () => Promise<void>,
+    ) => {
       if (oldLinkedId === newLinkedId) {
         await refreshAll();
         return;
@@ -126,7 +79,6 @@ export default function ExpenseStorePage() {
 
       const exps = await fetchExpenses(userId);
 
-      // Remove from old parent
       if (oldLinkedId) {
         const oldExp = exps.find((e) => e.id === oldLinkedId);
         if (oldExp) {
@@ -139,7 +91,6 @@ export default function ExpenseStorePage() {
         }
       }
 
-      // Add to new parent
       if (newLinkedId) {
         const newExp = exps.find((e) => e.id === newLinkedId);
         if (newExp) {
@@ -149,47 +100,103 @@ export default function ExpenseStorePage() {
             document_ids: merged,
             updated_at: new Date().toISOString(),
           } as ExpensePlaintext);
-          setLinkedRecord(newExp);
         }
       }
 
       await refreshAll();
     },
-    [userId, refreshAll],
+    [],
   );
 
-  const { handleExpenseSave, handleExpenseDelete, handleDownloadDocument } =
+  // --- modalSlot ---
+  const modalSlot = useCallback(
+    ({
+      linkedRecord,
+      allDocuments,
+      userId,
+      refreshAll,
+      onClose,
+    }: {
+      linkedRecord: Expense;
+      allRows: Expense[];
+      allDocuments: Document[];
+      userId: string;
+      refreshAll: () => Promise<void>;
+      onClose: () => void;
+    }) => (
+      <ExpenseStoreModal
+        expense={linkedRecord}
+        documents={allDocuments}
+        userId={userId}
+        refreshAll={refreshAll}
+        onClose={onClose}
+      />
+    ),
+    [],
+  );
+
+  return (
+    <GenericStorePage
+      domain="expense"
+      title="Receipt Store"
+      description="View all uploaded receipts across all your expenses."
+      backHref={ROUTES.EXPENSE}
+      fetchData={fetchData}
+      deriveParentRecords={deriveParentRecords}
+      onLinkedRecordClick={onLinkedRecordClick}
+      modalSlot={modalSlot}
+      onDeleteParentRecord={handleDeleteParent}
+      onDocumentSaved={handleDocumentSaved}
+      hideParentRecordsList
+      disableAdd
+    />
+  );
+}
+
+// --- Expense store modal (hook bridge — calls useExpenseActions) ---
+
+function ExpenseStoreModal({
+  expense,
+  documents,
+  userId,
+  refreshAll,
+  onClose,
+}: {
+  expense: Expense;
+  documents: Document[];
+  userId: string;
+  refreshAll: () => Promise<void>;
+  onClose: () => void;
+}) {
+  const { createSaveAdapter, handleExpenseDelete, handleDownloadDocument } =
     useExpenseActions({ userId, refresh: refreshAll });
 
   return (
-    <>
-      <GlobalStoreView
-        domain="expense"
-        title="Receipt Store"
-        description="View all uploaded receipts across all your expenses."
-        backHref={ROUTES.EXPENSE}
-        backLabel="← Back to Expenses"
-        parentRecords={parentRecords}
-        onDeleteParentRecord={handleDeleteParent}
-        onActionClick={handleActionClick}
-        hideParentRecordsList={true}
-        onDocumentSaved={handleDocumentSaved}
-        refreshTrigger={refreshTrigger}
-        disableAdd={true}
-      />
-
-      {/* ExpenseModal for linked record editing */}
-      {linkedRecord && userId && (
-        <ExpenseModal
-          expense={linkedRecord}
-          documents={allDocuments}
-          userId={userId}
-          onClose={closeLinkedRecord}
-          onSave={handleExpenseSave}
-          onDelete={handleExpenseDelete}
-          onDownloadDocument={handleDownloadDocument}
-        />
+    <GenericDomainModal
+      mode="record"
+      title="Edit expense"
+      onClose={onClose}
+      fields={EXPENSE_FIELDS}
+      initialData={{
+        item: expense.item,
+        seller: expense.seller,
+        cost: String(expense.cost),
+        date: normalizeDateForInput(expense.date),
+        reason: expense.reason,
+      }}
+      allowFiles
+      allowLinking={false}
+      userId={userId}
+      attachedDocuments={documents.filter(
+        (d) => d.domain === "expense" && d.linked_id === expense.id,
       )}
-    </>
+      domain="expense"
+      onSave={createSaveAdapter(expense)}
+      onDeleteWithCascade={async (cascadeMode) => {
+        await handleExpenseDelete(expense.id, cascadeMode);
+      }}
+      deleteLabel="Delete"
+      onDownloadDocument={handleDownloadDocument}
+    />
   );
 }

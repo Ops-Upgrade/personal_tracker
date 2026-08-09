@@ -20,6 +20,11 @@ interface HasPriority {
   priority: string;
 }
 
+/** Minimum shape for date-based month grouping */
+interface HasDate {
+  date: string;
+}
+
 /** Minimum shape for media status grouping */
 interface HasStatus {
   status: string;
@@ -244,6 +249,93 @@ export function groupByStatus<T extends HasStatus>(
         (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99)
     );
 }
+// ---- Month grouping (by date field) ----
+
+/**
+ * Group items by their `date` field into month-year buckets.
+ * For expense and medical records that use a plain `date` field
+ * rather than `completed_at` or `due_date`.
+ *
+ * Returns groups sorted by most recent first.
+ */
+export function byMonth<T extends HasDate>(
+  items: T[],
+  selectedYear: number,
+): Array<{ label: string; items: T[]; sortKey: number }> {
+  // Pre-fill all 12 months so empty months always appear in the calendar grid
+  const monthMap = new Map<number, { items: T[]; sortKey: number }>();
+  for (let i = 0; i < 12; i++) {
+    monthMap.set(i, { items: [], sortKey: i });
+  }
+
+  for (const item of items) {
+    const d = new Date(item.date + "T00:00:00");
+    if (d.getFullYear() !== selectedYear) continue;
+    const monthIndex = d.getMonth();
+    monthMap.get(monthIndex)!.items.push(item);
+  }
+
+  return Array.from(monthMap.entries())
+    .map(([monthIndex, value]) => ({
+      label: MONTH_YEAR_FORMATTER.format(new Date(selectedYear, monthIndex)),
+      items: value.items.sort(
+        (a, b) => new Date(b.date + "T00:00:00").getTime() - new Date(a.date + "T00:00:00").getTime(),
+      ),
+      sortKey: monthIndex,
+    }))
+    .sort((a, b) => b.sortKey - a.sortKey);
+}
+
+// ---- Month grouping (by due_date field) ----
+
+/** Minimum shape for due-date-based month grouping */
+interface HasDueDateForMonth {
+  due_date: string | null;
+}
+
+/**
+ * Group items by their `due_date` field into month-year buckets.
+ * For task and education records that use `due_date` instead of a plain `date`.
+ * Items with null `due_date` are excluded.
+ *
+ * Returns groups sorted by most recent first.
+ */
+export function byDueMonth<T extends HasDueDateForMonth>(
+  items: T[],
+  selectedYear: number,
+): Array<{ label: string; items: T[]; sortKey: number }> {
+  // Pre-fill all 12 months so empty months always appear in the calendar grid
+  const monthMap = new Map<number, { items: T[]; sortKey: number }>();
+  for (let i = 0; i < 12; i++) {
+    monthMap.set(i, { items: [], sortKey: i });
+  }
+
+  for (const item of items) {
+    if (!item.due_date) continue;
+    const d = new Date(item.due_date + "T00:00:00");
+    if (d.getFullYear() !== selectedYear) continue;
+    const monthIndex = d.getMonth();
+    monthMap.get(monthIndex)!.items.push(item);
+  }
+
+  return Array.from(monthMap.entries())
+    .map(([monthIndex, value]) => ({
+      label: MONTH_YEAR_FORMATTER.format(new Date(selectedYear, monthIndex)),
+      items: value.items.sort(
+        (a, b) => {
+          const aDate = (a as HasDueDateForMonth).due_date;
+          const bDate = (b as HasDueDateForMonth).due_date;
+          if (!aDate && !bDate) return 0;
+          if (!aDate) return 1;
+          if (!bDate) return -1;
+          return new Date(bDate + "T00:00:00").getTime() - new Date(aDate + "T00:00:00").getTime();
+        },
+      ),
+      sortKey: monthIndex,
+    }))
+    .sort((a, b) => b.sortKey - a.sortKey);
+}
+
 /**
  * Returns a unique file name by appending (1), (2), ... if the desired name
  * already exists in the provided set of taken names.

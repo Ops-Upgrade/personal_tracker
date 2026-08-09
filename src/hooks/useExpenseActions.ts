@@ -6,6 +6,7 @@ import type { Document, DocumentPlaintext } from "@/types/document";
 import { fetchExpenses, createExpense, updateExpense, deleteExpense } from "@/api/expense";
 import { fetchDocuments, createDocument, updateDocument, deleteDocument } from "@/api/common/documents";
 import { uploadDocumentFile, downloadDocumentFile, deleteDocumentFile } from "@/api/common/documentStorage";
+import type { FileActions } from "@/components/common/GenericDomainModal";
 
 interface UseExpenseActionsParams {
   userId: string | null;
@@ -187,5 +188,42 @@ export function useExpenseActions({ userId, refresh }: UseExpenseActionsParams) 
     [userId],
   );
 
-  return { handleExpenseSave, handleExpenseDelete, handleDownloadDocument };
+  /** Schema-driven save adapter: (formData, fileActions) → handleExpenseSave */
+  const createSaveAdapter = useCallback(
+    (existingExpense: Expense | null, onSuccess?: (saved: Expense) => void) => {
+      return async (formData: Record<string, unknown>, fileActions: FileActions) => {
+        const item = (formData.item as string).trim();
+        if (!item) throw new Error("Item name is required.");
+        const cost = parseFloat(formData.cost as string);
+        if (isNaN(cost) || cost < 0) throw new Error("Please enter a valid cost.");
+        const date = (formData.date as string) || "";
+        if (!date) throw new Error("Date is required.");
+
+        const firstNewFile = fileActions.newFiles[0];
+        const pendingDoc = firstNewFile
+          ? { file: firstNewFile.file, label: firstNewFile.label }
+          : undefined;
+
+        const saved = await handleExpenseSave(
+          {
+            item,
+            seller: (formData.seller as string).trim(),
+            cost,
+            date,
+            reason: (formData.reason as string).trim(),
+          },
+          existingExpense,
+          pendingDoc,
+          fileActions.docsToLink[0] || undefined,
+          fileActions.docsToUnlink.length > 0 ? fileActions.docsToUnlink : undefined,
+          fileActions.docsToDelete.length > 0 ? fileActions.docsToDelete : undefined,
+        );
+
+        onSuccess?.(saved);
+      };
+    },
+    [handleExpenseSave],
+  );
+
+  return { handleExpenseSave, handleExpenseDelete, handleDownloadDocument, createSaveAdapter };
 }

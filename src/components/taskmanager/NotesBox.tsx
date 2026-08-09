@@ -50,7 +50,8 @@ export default function NotesBox({
         <button
           key={item.id}
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             if (item.type === "note") {
               onSelectNote(item);
             } else {
