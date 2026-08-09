@@ -36,6 +36,7 @@ Target deployment: Vercel with custom domain `ops-upgrade.com` and subdomains.
 
 ## Project Structure
 
+```
 src/
 ├── app/                        # Next.js App Router pages
 │   ├── (auth)/login/           # Public login page
@@ -43,26 +44,10 @@ src/
 │   │   ├── layout.tsx          # Session check + Navbar + CryptoProvider
 │   │   ├── dashboard/          # Landing page after login
 │   │   ├── taskmanager/        # Task manager feature page
-│   │   │   ├── all/            # Generic View All page for tasks
-│   │   │   ├── completed/
-│   │   │   ├── notes/
-│   │   │   └── store/
 │   │   ├── expense/            # Expense tracker feature page
-│   │   │   ├── all/            # Generic View All page for expenses
-│   │   │   └── store/
 │   │   ├── education/          # Education manager feature page
-│   │   │   ├── all/            # Generic View All page for educations
-│   │   │   ├── completed/
-│   │   │   └── store/
 │   │   ├── medical/            # Medical records feature page
-│   │   │   ├── all/            # Generic View All page for medical records
 │   │   │   └── store/          # Medical Document Store sub-page
-│   │   ├── vault/              # Vault feature pages
-│   │   │   ├── records/        # Personal Records
-│   │   │   ├── passwords/      # Password Manager
-│   │   │   ├── banks/          # Bank Manager
-│   │   │   │   └── [bankId]/   # Generic Store Page for Bank detail
-│   │   │   └── documents/      # Document Vault store
 │   │   └── settings/
 │   │       └── change-password/ # Change password page
 │   ├── api/auth/callback/      # Supabase auth callback endpoint
@@ -98,17 +83,12 @@ src/
 │   │   ├── collections.ts      # encrypted CRUD for media_collections table
 │   │   ├── tmdb.ts             # client wrappers for TMDB proxy routes
 │   │   └── index.ts            # media sub-barrel
-│   ├── vault/
-│   │   ├── vaultPin.ts         # Server Actions: verify/set/reset vault PIN
-│   │   ├── vaultEntries.ts     # encrypted CRUD for vault_entries table
-│   │   ├── vaultDocumentStorage.ts  # encrypted file upload/download for vault docs
-│   │   └── index.ts            # vault sub-barrel
 │   ├── serverDate.ts           # getServerDateIST() — IST date from Supabase RPC
 │   └── index.ts                # Barrel export
 ├── components/                 # Reusable UI
 │   ├── auth/                   # LoginForm, ChangePasswordForm
 │   ├── layout/                 # Navbar, ThemeProvider
-│   ├── common/                 # Shared primitives and generic pages
+│   ├── common/                 # Shared primitives
 │   │   ├── Button.tsx          # Variant-based button (primary/secondary/danger/ghost)
 │   │   ├── BoxContainer.tsx    # Standardized scrollable box wrapper
 │   │   ├── ThemeSwitcher.tsx   # Light/Dark/System theme toggle
@@ -117,39 +97,21 @@ src/
 │   │   ├── TileView.tsx        # Tile grid view for generic document store
 │   │   ├── ViewToggle.tsx      # Toggle between list/tile views
 │   │   ├── RichTextEditor.tsx  # Tiptap-powered global rich text area
-│   │   ├── GenericViewPage.tsx # Generic "View All" page (sortable data grids)
-│   │   ├── GenericDomainPage.tsx # Generic domain shell (header, layout, loading state)
-│   │   ├── GenericDomainModal.tsx # Schema-driven modal replacing all domain modals
-│   │   ├── GenericDataGrid.tsx # Generic data grid component
-│   │   ├── GenericMonthRow.tsx # 5-item preview row for month-grouped data
 │   │   └── store/              # Global Document Store components
-│   │       ├── GenericStorePage.tsx # Generic wrapper for document/record stores
 │   │       ├── GlobalStoreView.tsx
-│   │       └── BulkLinkModal.tsx
+│   │       └── StoreDocumentModal.tsx
 │   ├── taskmanager/            # Task manager feature components + helpers
-│   │   └── TaskManagerView.tsx
 │   ├── expense/                # Expense tracker feature components
-│   │   └── ExpenseView.tsx
 │   ├── education/              # Education manager feature components
 │   │   ├── EducationView.tsx   # Main controller for education page
 │   │   ├── ActiveEducationsBox.tsx
 │   │   ├── CompletedEducationsBox.tsx
 │   │   ├── CompletedEducationsModal.tsx
+│   │   ├── EducationModal.tsx  # Create/edit education + document attachment
 │   │   └── helpers.ts
 │   ├── medical/                # Medical Records feature components
-│   │   └── MedicalView.tsx     # Main controller for medical records
-│   ├── vault/                  # Vault feature components
-│   │   ├── VaultProvider.tsx    # Context + state machine + grace timer
-│   │   ├── VaultLockScreen.tsx  # Numpad PIN entry
-│   │   ├── VaultPinSetup.tsx    # First-time PIN setup
-│   │   ├── VaultPinReset.tsx    # Forgot PIN → reset via password
-│   │   ├── VaultHeader.tsx      # Lock button + grace countdown
-│   │   ├── VaultHome.tsx        # 2×2 section tile grid
-│   │   ├── SecretField.tsx      # Masked value with reveal toggle + copy
-│   │   ├── records/             # Personal Records section
-│   │   ├── passwords/           # Password Manager section
-│   │   ├── banks/               # Bank Manager section
-│   │   └── documents/           # Document Vault section
+│   │   ├── MedicalView.tsx     # Main controller for medical records
+│   │   └── MedicalModal.tsx    # Create/edit medical record + document attachment
 │   └── media/                  # Media Tracker feature components
 │       ├── MediaView.tsx       # Main orchestrator (tabs, data, CRUD)
 │       ├── CollectionFilterBar.tsx # Filter bar for DefaultView
@@ -163,8 +125,8 @@ src/
 │       │   ├── CollectionView.tsx # Grid of color-coded collections
 │       │   └── DiscoverView.tsx # Untracked TMDB search/trending browser
 │       └── pages/
-│           ├── GenericMediaPage.tsx # Generic detail page for Movie/TV
-│           ├── TvSeriesPageWrapper.tsx # TV-specific wrapper for GenericMediaPage
+│           ├── MoviePage.tsx   # Movie details, form, collections, remove
+│           ├── TvSeriesPage.tsx # TV details, season selector, episode matrix
 │           ├── EpisodePage.tsx  # Single episode details, form, comments
 │           └── CollectionDetailPage.tsx # Views all media for a collection
 ├── lib/                        # Core utilities
@@ -282,14 +244,13 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-07-12 | Migrated file storage from Supabase Storage to Cloudflare R2. Added `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`, R2 client singleton (`src/lib/r2/`), presigned-URL API routes (`src/app/api/storage/`), rewrote `encryptedFileStorage.ts` to use R2 via API routes. Removed all `supabase.storage` SDK calls. Updated CSP, docs, and UI text. |
 | 2026-07-13 | Medical Records, Global Document Store & Rich Text Editor completed: Extracted Store out of Education into reusable `documents` table + global components. Tiptap Rich Text Editor integrated into Task, Expense, Education, and new Medical domains. Built `/medical` feature route with `MedicalModal` and `MedicalView`. |
 | 2026-07-15 | Media Tracker feature completed: `/media` route, `media` + `media_collections` tables (HLD documented in schema.md), 4 TMDB proxy routes (`/api/tmdb/*`), encrypted CRUD API layer (`src/api/media/`), 12 UI components (MediaView orchestrator, DefaultView with Watching/Unwatched/Watched lanes, CollectionView, DiscoverView with TMDB search, MoviePage, TvSeriesPage with episode matrix, EpisodePage, CollectionDetailPage, MediaCard with inline status/rating, CollectionModal with color picker, CollectionFilterBar, TmdbAttribution), dashboard tile integration (violet), `next.config.ts` TMDB image domain + CSP update, StarRating common component. |
-| 2026-07-24 | Vault feature completed: `/vault` route with PIN-protected access, server-side Argon2id PIN hashing with brute-force protection (10 attempts / 10-min sliding window, permanent DB-persisted lockout), 4 sub-sections (Personal Records, Password Manager, Bank Manager, Document Vault), `vault_entries` encrypted table + RLS, vault storage bucket folder, 2×2 gray-themed dashboard tile replacing Analytics placeholder, 30-second navigation-away grace period. |
-| 2026-08-09 | Global Architecture Refactor: Eliminated structural duplication by standardizing list views, store views, main domain shells, media details, and modals into generic composable components (`GenericViewPage`, `GenericStorePage`, `GenericDomainPage`, `GenericMediaPage`, `GenericDomainModal`). Replaced domain-specific modals and duplicate list pages. Added `/all` query-param-driven routes for Task Manager, Education, Expense, and Medical domains. |
 
 ---
 
 ## What's Not Built Yet
 
 - Cross-subdomain deployment (config-only change when ready)
+- Analytics page
 - Phase 10: manual testing of crypto flows
 
 ---

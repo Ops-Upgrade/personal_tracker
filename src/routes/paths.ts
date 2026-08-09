@@ -11,18 +11,14 @@ export const ROUTES = {
   TASK_MANAGER_COMPLETED: "/taskmanager/completed",
   TASK_MANAGER_NOTES: "/taskmanager/notes",
   TASK_MANAGER_STORE: "/taskmanager/store",
-  TASK_MANAGER_ALL: "/taskmanager/all",
   PROFILE: "/settings/profile",
   EXPENSE: "/expense",
   EXPENSE_STORE: "/expense/store",
-  EXPENSE_ALL: "/expense/all",
   EDUCATION: "/education",
   EDUCATION_COMPLETED: "/education/completed",
   EDUCATION_STORE: "/education/store",
-  EDUCATION_ALL: "/education/all",
   MEDICAL: "/medical",
   MEDICAL_STORE: "/medical/store",
-  MEDICAL_ALL: "/medical/all",
   MEDIA: "/media",
   MEDIA_COLLECTION: (id: string) => `/media/collection/${id}`,
   MEDIA_MOVIE: (tmdbId: number) => `/media/movie/${tmdbId}`,
@@ -32,12 +28,6 @@ export const ROUTES = {
     type === "movie"
       ? (`/media/movie/${tmdbId}` as const)
       : (`/media/tv/${tmdbId}` as const),
-  VAULT: "/vault",
-  VAULT_RECORDS: "/vault/records",
-  VAULT_PASSWORDS: "/vault/passwords",
-  VAULT_BANKS: "/vault/banks",
-  VAULT_BANK_DETAIL: (id: string) => `/vault/banks/${id}`,
-  VAULT_DOCUMENTS: "/vault/documents",
 } as const;
 
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];

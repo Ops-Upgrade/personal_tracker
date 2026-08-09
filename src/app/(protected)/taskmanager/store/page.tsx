@@ -1,82 +1,114 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ROUTES } from "@/routes/paths";
+import { getSession } from "@/api/auth";
 import {
   fetchNotes,
   updateNote,
   deleteNote,
   createNote,
 } from "@/api/taskmanager";
-import { fetchDocuments } from "@/api/common/documents";
+import {
+  fetchDocuments,
+} from "@/api/common/documents";
 import { InputField } from "@/components/common/FormField";
-import RichTextEditor from "@/components/common/RichTextEditor";
 import type { Note, NotePlaintext } from "@/types/taskmanager";
 import type { Document } from "@/types/document";
 import { useNoteActions } from "@/hooks/useNoteActions";
-import GenericStorePage from "@/components/common/store/GenericStorePage";
-import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
-
-const NOTE_FIELDS: FieldDef[] = [
-  { key: "name", type: "text", label: "Name", placeholder: "Note title" },
-  { key: "content", type: "richtext", label: "Content", minHeight: "10rem" },
-];
+import GlobalStoreView from "@/components/common/store/GlobalStoreView";
+import NoteModal from "@/components/taskmanager/NoteModal";
 
 /**
  * Task Manager Document Store.
- * Uses GenericStorePage with notes as parent records.
+ * Uses GlobalStoreView with notes as parent records.
  *
- * Clicking a linked doc opens the note editor to edit the parent note.
- * Standalone upload offers inline "create new note" form.
+ * Maintains parity with EducationStorePage:
+ * - Clicking a linked doc opens NoteModal to edit the parent note
+ * - Standalone upload offers inline "create new note" form
  */
 export default function TaskManagerStorePage() {
-  // --- Inline note creation form state ---
-  const [newNoteName, setNewNoteName] = useState("");
-  const [newNoteContent, setNewNoteContent] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [allNotes, setAllNotes] = useState<Note[]>([]);
+  const [parentRecords, setParentRecords] = useState<{ id: string; name: string }[]>([]);
+  const [allDocuments, setAllDocuments] = useState<Document[]>([]);
 
-  // --- fetchData ---
-  const fetchData = useCallback(async (userId: string) => {
+  // Inline modal state: linked document → open NoteModal for parent note
+  const [linkedRecord, setLinkedRecord] = useState<Note | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // --- Auth + data loading ---
+  useEffect(() => {
+    const init = async () => {
+      const session = await getSession();
+      if (session?.user.id) setUserId(session.user.id);
+    };
+    init();
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    const load = async () => {
+      const [notes, docs] = await Promise.all([
+        fetchNotes(userId),
+        fetchDocuments(userId),
+      ]);
+      if (!cancelled) {
+        setAllNotes(notes);
+        setAllDocuments(docs);
+        setParentRecords(notes.map((n) => ({ id: n.id, name: n.name?.trim() || "Untitled Note" })));
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  const refreshAll = useCallback(async () => {
+    if (!userId) return;
     const [notes, docs] = await Promise.all([
       fetchNotes(userId),
       fetchDocuments(userId),
     ]);
-    return { domainRows: notes, documents: docs };
-  }, []);
+    setAllNotes(notes);
+    setAllDocuments(docs);
+    setParentRecords(notes.map((n) => ({ id: n.id, name: n.name?.trim() || "Untitled Note" })));
+    setRefreshTrigger((prev) => prev + 1);
+  }, [userId]);
 
-  // --- deriveParentRecords ---
-  const deriveParentRecords = useCallback(
-    (rows: Note[]) =>
-      rows.map((n) => ({ id: n.id, name: n.name?.trim() || "Untitled Note" })),
-    [],
-  );
-
-  // --- onLinkedRecordClick ---
-  const onLinkedRecordClick = useCallback(
-    (docId: string, allDocuments: Document[], allRows: Note[]) => {
+  // --- Action click: linked doc → open NoteModal inline for parent ---
+  const handleActionClick = useCallback(
+    (docId: string) => {
       const doc = allDocuments.find((d) => d.id === docId);
-      if (!doc?.linked_id) return null;
-      return allRows.find((n) => n.id === doc.linked_id) ?? null;
+      if (!doc?.linked_id) return false;
+      const record = allNotes.find((n) => n.id === doc.linked_id);
+      if (record) {
+        setLinkedRecord(record);
+        return true; // Handled
+      }
+      return false; // Not handled
     },
-    [],
+    [allDocuments, allNotes],
   );
 
-  // --- Parent CRUD handlers (GenericStorePage injects userId + refreshAll) ---
+  const closeLinkedRecord = useCallback(() => {
+    setLinkedRecord(null);
+    refreshAll();
+  }, [refreshAll]);
 
+  // --- Parent CRUD handlers ---
   const handleDeleteParent = useCallback(
-    async (parentId: string, _userId: string, refreshAll: () => Promise<void>) => {
+    async (parentId: string) => {
+      if (!userId) return;
       await deleteNote(parentId);
       await refreshAll();
     },
-    [],
+    [userId, refreshAll],
   );
 
   const handleUnlinkFromParent = useCallback(
-    async (
-      documentId: string,
-      parentId: string,
-      userId: string,
-      refreshAll: () => Promise<void>,
-    ) => {
+    async (documentId: string, parentId: string) => {
+      if (!userId) return;
       const notes = await fetchNotes(userId);
       const note = notes.find((n) => n.id === parentId);
       if (note) {
@@ -89,16 +121,12 @@ export default function TaskManagerStorePage() {
       }
       await refreshAll();
     },
-    [],
+    [userId, refreshAll],
   );
 
   const handleBulkLinkToParent = useCallback(
-    async (
-      documentIds: string[],
-      parentId: string,
-      userId: string,
-      refreshAll: () => Promise<void>,
-    ) => {
+    async (documentIds: string[], parentId: string) => {
+      if (!userId) return;
       const notes = await fetchNotes(userId);
       const note = notes.find((n) => n.id === parentId);
       if (note) {
@@ -111,17 +139,13 @@ export default function TaskManagerStorePage() {
       }
       await refreshAll();
     },
-    [],
+    [userId, refreshAll],
   );
 
+  // --- onDocumentSaved: sync parent note document_ids after store-modal save ---
   const handleDocumentSaved = useCallback(
-    async (
-      documentId: string,
-      newLinkedId: string,
-      oldLinkedId: string,
-      userId: string,
-      refreshAll: () => Promise<void>,
-    ) => {
+    async (documentId: string, newLinkedId: string, oldLinkedId: string) => {
+      if (!userId) return;
       if (oldLinkedId === newLinkedId) {
         await refreshAll();
         return;
@@ -152,15 +176,18 @@ export default function TaskManagerStorePage() {
             document_ids: merged,
             updated_at: new Date().toISOString(),
           } as NotePlaintext);
+          setLinkedRecord(newNote);
         }
       }
 
       await refreshAll();
     },
-    [],
+    [userId, refreshAll],
   );
 
-  // --- Inline record creation ---
+  // --- Inline note creation form state ---
+  const [newNoteName, setNewNoteName] = useState("");
+
   const renderNewRecordForm = useCallback(
     ({ disabled, isSaving }: { disabled: boolean; isSaving: boolean }) => (
       <fieldset disabled={disabled || isSaving} className="space-y-3">
@@ -171,155 +198,84 @@ export default function TaskManagerStorePage() {
           disabled={isSaving || disabled}
           placeholder="e.g. Meeting Notes"
         />
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
-            Content
-          </label>
-          <RichTextEditor
-            value={newNoteContent}
-            onChange={setNewNoteContent}
-            disabled={isSaving || disabled}
-            minHeight="6rem"
-          />
-        </div>
       </fieldset>
     ),
-    [newNoteName, newNoteContent],
+    [newNoteName],
   );
 
   const extractNewRecordData = useCallback((): Record<string, string> | null => {
     if (!newNoteName.trim()) return null;
-    return { name: newNoteName.trim(), content: newNoteContent };
-  }, [newNoteName, newNoteContent]);
+    return { name: newNoteName.trim() };
+  }, [newNoteName]);
 
-  const handleCreateParentFromStore = useCallback(
-    async (
-      data: Record<string, string>,
-      userId: string,
-      refreshAll: () => Promise<void>,
-    ): Promise<string> => {
+  const onCreateParentFromStore = useCallback(
+    async (data: Record<string, string>): Promise<string> => {
+      if (!userId) throw new Error("No active session.");
       const nowIso = new Date().toISOString();
       const note = await createNote(userId, {
         name: data.name || "",
-        content: data.content || "",
+        content: "",
         document_ids: [],
         updated_at: nowIso,
       });
       await refreshAll();
       setNewNoteName("");
-      setNewNoteContent("");
       return note.id;
     },
-    [],
+    [userId, refreshAll],
   );
 
-  // --- Note handlers via useNoteActions ---
-  // We use a ref-like pattern: the modalSlot gets refreshAll from GenericStorePage.
-  // useNoteActions takes a `refresh` callback — we'll create it inside the modalSlot closure.
+  const { handleNoteSave: originalHandleNoteSave, handleNoteDelete, handleDownloadDocument } =
+    useNoteActions({ userId, refresh: refreshAll });
 
-  // --- modalSlot: renders the note editor for the linked record ---
-  const modalSlot = useCallback(
-    ({
-      linkedRecord,
-      allDocuments,
-      userId,
-      refreshAll,
-      onClose,
-    }: {
-      linkedRecord: Note;
-      allRows: Note[];
-      allDocuments: Document[];
-      userId: string;
-      refreshAll: () => Promise<void>;
-      onClose: () => void;
-    }) => {
-      return (
-        <NoteStoreModal
+  /** Wraps handleNoteSave to redirect to StoreDocumentModal when files are unlinked from the Store page. */
+  const handleNoteSave = useCallback(
+    async (...args: Parameters<typeof originalHandleNoteSave>) => {
+      await originalHandleNoteSave(...args);
+      // args[4] corresponds to pendingUnlinkDocIds
+      const pendingUnlinkDocIds = args[4];
+      if (pendingUnlinkDocIds && pendingUnlinkDocIds.length > 0) {
+        closeLinkedRecord();
+        const unlinkedId = pendingUnlinkDocIds[pendingUnlinkDocIds.length - 1];
+        window.location.hash = `#edit-document-${unlinkedId}`;
+      }
+    },
+    [originalHandleNoteSave, closeLinkedRecord],
+  );
+
+  return (
+    <>
+      <GlobalStoreView
+        domain="taskmanager"
+        title="Note Store"
+        description="View all uploaded files across all your notes."
+        backHref={ROUTES.TASK_MANAGER}
+        backLabel="← Back to Task Manager"
+        parentRecords={parentRecords}
+        onDeleteParentRecord={handleDeleteParent}
+        onUnlinkFromParent={handleUnlinkFromParent}
+        onBulkLinkToParent={handleBulkLinkToParent}
+        onActionClick={handleActionClick}
+        renderNewRecordForm={renderNewRecordForm}
+        extractNewRecordData={extractNewRecordData}
+        onCreateParentFromStore={onCreateParentFromStore}
+        hideParentRecordsList={true}
+        onDocumentSaved={handleDocumentSaved}
+        refreshTrigger={refreshTrigger}
+      />
+
+      {/* NoteModal for linked record editing */}
+      {linkedRecord && userId && (
+        <NoteModal
           note={linkedRecord}
           documents={allDocuments}
           userId={userId}
-          refreshAll={refreshAll}
-          onClose={onClose}
+          onClose={closeLinkedRecord}
+          onSave={handleNoteSave}
+          onDelete={handleNoteDelete}
+          onDownloadDocument={handleDownloadDocument}
         />
-      );
-    },
-    [],
-  );
-
-  return (
-    <GenericStorePage
-      domain="taskmanager"
-      title="Note Store"
-      description="View all uploaded files across all your notes."
-      backHref={ROUTES.TASK_MANAGER}
-      fetchData={fetchData}
-      deriveParentRecords={deriveParentRecords}
-      onLinkedRecordClick={onLinkedRecordClick}
-      modalSlot={modalSlot}
-      onDeleteParentRecord={handleDeleteParent}
-      onUnlinkFromParent={handleUnlinkFromParent}
-      onBulkLinkToParent={handleBulkLinkToParent}
-      onDocumentSaved={handleDocumentSaved}
-      renderNewRecordForm={renderNewRecordForm}
-      extractNewRecordData={extractNewRecordData}
-      onCreateParentFromStore={handleCreateParentFromStore}
-      hideParentRecordsList
-    />
-  );
-}
-
-// --- Note store modal (hook bridge — calls useNoteActions) ---
-
-function NoteStoreModal({
-  note,
-  documents,
-  userId,
-  refreshAll,
-  onClose,
-}: {
-  note: Note;
-  documents: Document[];
-  userId: string;
-  refreshAll: () => Promise<void>;
-  onClose: () => void;
-}) {
-  const refresh = useCallback(async () => { await refreshAll(); }, [refreshAll]);
-  const { createSaveAdapter, handleNoteDelete, handleDownloadDocument } =
-    useNoteActions({ userId, refresh });
-
-  return (
-    <GenericDomainModal
-      mode="record"
-      title="Edit note"
-      onClose={onClose}
-      fields={NOTE_FIELDS}
-      initialData={{
-        name: note.name ?? "",
-        content: note.content ?? "",
-      }}
-      allowFiles
-      userId={userId}
-      attachedDocuments={documents.filter(
-        (d) => d.domain === "taskmanager" && d.linked_id === note.id,
       )}
-      standaloneDocuments={documents.filter(
-        (d) => d.domain === "taskmanager" && !d.linked_id,
-      )}
-      domain="taskmanager"
-      onSave={async (formData, fileActions) => {
-        await createSaveAdapter(note)(formData, fileActions);
-        if (fileActions.docsToUnlink.length > 0) {
-          onClose();
-          const unlinkedId =
-            fileActions.docsToUnlink[fileActions.docsToUnlink.length - 1];
-          window.location.hash = `#edit-document-${unlinkedId}`;
-        }
-      }}
-      onDeleteWithCascade={async (cascadeMode) => {
-        await handleNoteDelete(note.id, cascadeMode);
-      }}
-      deleteLabel="Delete"
-      onDownloadDocument={handleDownloadDocument}
-    />
+    </>
   );
 }

@@ -20,7 +20,6 @@ Update this file whenever you add or change tables, columns, indexes, or policie
 | `public` | `medical_records` | Encrypted medical records blobs (medical tracker feature). |
 | `public` | `media`        | Encrypted media/movie/TV tracking blobs (media tracker feature). |
 | `public` | `media_collections` | Encrypted collection grouping blobs (media tracker feature). |
-| `public` | `vault_entries`  | Encrypted vault entry blobs — personal records, passwords, banks. |
 
 ---
 
@@ -39,12 +38,6 @@ Stores one row per authenticated user: salt + IV + password-wrapped data encrypt
 | `recovery_iv`          | `TEXT`      | YES    | —         | Base64 IV used when wrapping DEK with recovery KEK |
 | `recovery_wrapped_dek` | `TEXT`      | YES    | —         | Base64 ciphertext of DEK wrapped by recovery KEK |
 | `updated_at`  | `TIMESTAMPTZ` | YES    | `now()`   | Last update time |
-| `vault_pin_hash`        | `TEXT`      | YES    | —         | Argon2id hash of the 4-digit vault PIN |
-| `vault_pin_salt`        | `TEXT`      | YES    | —         | Base64 salt for vault PIN hashing |
-| `vault_pin_set_at`      | `TIMESTAMPTZ` | YES  | —         | When the vault PIN was created |
-| `vault_failed_attempts`  | `INT`       | NO     | 0         | Consecutive wrong PIN attempts within the 10-min sliding window |
-| `vault_last_failed_at`   | `TIMESTAMPTZ` | YES  | —         | Timestamp of the most recent failed PIN attempt |
-| `vault_locked_out`      | `BOOL`      | NO     | false     | Permanent lockout flag set at attempt 10 (cleared only by PIN reset) |
 
 ### DDL (source of truth)
 
@@ -64,20 +57,6 @@ CREATE TABLE public.user_keys (
 COMMENT ON TABLE public.user_keys IS
   'Stores per-user encrypted Data Encryption Keys. The wrapped_dek can only be decrypted client-side with the users password-derived KEK. Recovery columns hold a second wrapped copy of the DEK protected by a recovery phrase.';
 ```
-
-### Vault PIN migration (for existing deployments)
-
-```sql
-ALTER TABLE public.user_keys
-  ADD COLUMN vault_pin_hash        TEXT,
-  ADD COLUMN vault_pin_salt        TEXT,
-  ADD COLUMN vault_pin_set_at      TIMESTAMPTZ,
-  ADD COLUMN vault_failed_attempts INT          NOT NULL DEFAULT 0,
-  ADD COLUMN vault_last_failed_at  TIMESTAMPTZ,
-  ADD COLUMN vault_locked_out      BOOL         NOT NULL DEFAULT FALSE;
-```
-
-No RLS changes needed — the existing `auth.uid() = user_id` FOR ALL policy already covers new columns.
 
 ### Recovery key migration (for existing deployments)
 
@@ -306,7 +285,7 @@ CREATE POLICY "Users can manage their own educations"
 
 ## `public.documents`
 
-Encrypted global document metadata. Each row represents one document file attached to a domain record (expense, education, medical, taskmanager, vault) or uploaded independently to the Global Document Store. File content is stored encrypted in R2 storage; this table stores encrypted metadata (filename, MIME type, IV, linked ID, domain).
+Encrypted global document metadata. Each row represents one document file attached to a domain record (expense, education, medical) or uploaded independently to the Global Document Store. File content is stored encrypted in R2 storage; this table stores encrypted metadata (filename, MIME type, IV, linked ID, domain).
 
 | Column       | Type          | Nullable | Default              | Notes |
 |--------------|---------------|----------|----------------------|-------|
@@ -484,59 +463,6 @@ CREATE POLICY "Users can manage their own media_collections"
 
 ---
 
-## `public.vault_entries`
-
-Encrypted vault entry data. Each row stores one vault entry (personal record, password credential, or bank) as an opaque AES-GCM ciphertext blob. The `section` column is stored in plaintext to enable efficient section-scoped queries; all business fields live inside the encrypted `data` JSON.
-
-| Column       | Type          | Nullable | Default              | Notes |
-|--------------|---------------|----------|----------------------|-------|
-| `id`         | `UUID`        | NO       | `gen_random_uuid()`  | PK |
-| `user_id`    | `UUID`        | NO       | —                    | FK → `auth.users(id) ON DELETE CASCADE` |
-| `section`    | `TEXT`        | NO       | —                    | `'records'` \| `'passwords'` \| `'banks'` |
-| `iv`         | `TEXT`        | NO       | —                    | Per-record AES-GCM IV (Base64) |
-| `data`       | `TEXT`        | NO       | —                    | Base64 ciphertext (encrypted JSON blob) |
-| `created_at` | `TIMESTAMPTZ` | YES      | `now()`              | Row creation timestamp |
-| `updated_at` | `TIMESTAMPTZ` | YES      | `now()`              | Last update timestamp |
-
-### DDL (source of truth)
-
-```sql
-CREATE TABLE public.vault_entries (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-    section     TEXT NOT NULL,
-    iv          TEXT NOT NULL,
-    data        TEXT NOT NULL,
-    created_at  TIMESTAMPTZ DEFAULT now(),
-    updated_at  TIMESTAMPTZ DEFAULT now()
-);
-
-ALTER TABLE public.vault_entries ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users manage their own vault entries"
-    ON public.vault_entries FOR ALL
-    USING (auth.uid() = user_id)
-    WITH CHECK (auth.uid() = user_id);
-
-CREATE INDEX vault_entries_user_section_idx
-    ON public.vault_entries(user_id, section);
-```
-
-### Row Level Security
-
-- **RLS:** `ENABLE ROW LEVEL SECURITY` on `public.vault_entries`.
-
-| Policy name | Command | `USING` | `WITH CHECK` |
-|-------------|---------|---------|----------------|
-| `Users manage their own vault entries` | `ALL` | `auth.uid() = user_id` | `auth.uid() = user_id` |
-
-### Indexes
-
-- Primary key on `id` (implicit unique index).
-- `vault_entries_user_section_idx` on `(user_id, section)` for efficient section-scoped queries.
-
----
-
 ## Encrypted blob convention
 
 All encrypted feature tables follow the same shape: `id`, `user_id`, `iv`, `data`, `created_at`. The `iv` + `data` columns hold the per-record AES-GCM payload. No plaintext columns. See [`PLAN-crypto.md`](./plans/PLAN-crypto.md) Phase 7 for the encrypt/decrypt patterns.
@@ -569,12 +495,9 @@ personal-tracker/
 ├── expenses/
 │   └── {userId}/
 │       └── {uuid}.enc         # Encrypted invoice files
-├── certificates/
-│   └── {userId}/
-│       └── {uuid}.enc         # Encrypted certificate files
-└── vault/
+└── certificates/
     └── {userId}/
-        └── {uuid}.enc         # Encrypted vault document files
+        └── {uuid}.enc         # Encrypted certificate files
 ```
 
 User isolation is guaranteed by path: every object key includes the authenticated `userId` in the second path segment, validated server-side before any operation.
@@ -634,5 +557,3 @@ The `connect-src` CSP directive must allow `https://*.r2.cloudflarestorage.com` 
 | 2026-07-13 | Renamed `public.certificates` to `public.documents` for Global Document Store. Added `public.medical_records` table + RLS (Medical Records feature). |
 | 2026-07-15 | Added `public.media` + `public.media_collections` tables + RLS (Media Tracker feature). |
 | 2026-07-23 | Added `recovery_salt`, `recovery_iv`, `recovery_wrapped_dek` nullable columns to `public.user_keys` (Recovery Key feature). |
-| 2026-07-24 | Added `vault_pin_hash`, `vault_pin_salt`, `vault_pin_set_at`, `vault_failed_attempts`, `vault_last_failed_at`, `vault_locked_out` columns to `public.user_keys`. Added `public.vault_entries` table + RLS + index (Vault feature). Added `vault/` R2 folder. |
-| 2026-08-09 | Updated `public.documents` documentation to formally include `taskmanager` and `vault` as supported domains (aligned with codebase `DocumentDomain` type). |

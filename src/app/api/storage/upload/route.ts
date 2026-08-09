@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Validate folder is one of the allowed feature folders
-  const allowedFolders = ["expenses", "certificates", "documents", "vault"];
+  const allowedFolders = ["expenses", "certificates", "documents"];
   if (!allowedFolders.includes(folder)) {
     return NextResponse.json({ error: "Invalid folder" }, { status: 400 });
   }
