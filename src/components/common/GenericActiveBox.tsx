@@ -1,19 +1,17 @@
 "use client";
 
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect } from "react";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import ViewToggle from "@/components/common/ViewToggle";
+import MonthTile from "@/components/common/MonthTile";
 import Button from "@/components/common/Button";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
-import { byPriority } from "@/lib/viewHelpers";
-import type { ColumnDef } from "./GenericViewPage";
-import GenericPriorityList from "./GenericPriorityList";
-import GenericMonthRow from "./GenericMonthRow";
-import YearDropdown from "./YearDropdown";
-import { MONTHS } from "@/types/common";
+import { MONTH_NAMES } from "@/lib/constants";
+import { activeByMonths, byPriority } from "@/lib/viewHelpers";
 
 /**
  * Minimum shape for an active item — must have id, priority, and optional due_date.
+ * Extend with domain-specific fields via the renderItem callback.
  */
 export interface ActiveItem {
   id: string;
@@ -33,23 +31,12 @@ interface GenericActiveBoxProps<T extends ActiveItem> {
   viewOptions: readonly ViewToggleOption<string>[];
   priorities: readonly string[];
   getPriorityColor: (priority: string) => { border: string; bg: string };
+  renderItem: (item: T) => ReactNode;
   renderPriorityBadge: (priority: string) => ReactNode;
+  /** Optional column headers rendered above item lists (only when the list has items) */
+  renderHeader?: () => ReactNode;
   /** Optional className override for the outer BoxContainer (defaults to "lg:col-span-2") */
   className?: string;
-  /** Subtitle rendered in each GenericMonthRow (used in months view only). */
-  getSubtitle?: (items: T[]) => ReactNode;
-  /** Base href for "View All" navigation (e.g. "/taskmanager/all"). Appended with ?year=X&month=Y. */
-  viewAllBaseHref?: string;
-  /** Column definitions for rendering items as bordered grid boxes. */
-  columns: ColumnDef<T>[];
-  /** Stable unique key for each item. Defaults to `item.id`. */
-  getItemKey?: (item: T) => string;
-  /** Called when a row is clicked (opens the domain modal). */
-  onRowClick?: (item: T) => void;
-  /** Optional per-row action button (e.g. "Complete" for tasks/education). */
-  rowAction?: (item: T) => ReactNode;
-  /** Optional CSS class modifier per item (e.g. priority-colored left border). */
-  getItemClassName?: (item: T) => string;
 }
 
 export default function GenericActiveBox<T extends ActiveItem>({
@@ -64,41 +51,13 @@ export default function GenericActiveBox<T extends ActiveItem>({
   viewOptions,
   priorities,
   getPriorityColor,
+  renderItem,
   renderPriorityBadge,
+  renderHeader,
   className,
-  getSubtitle,
-  viewAllBaseHref,
-  columns,
-  getItemKey = (item) => (item as ActiveItem).id,
-  onRowClick,
-  rowAction,
-  getItemClassName,
 }: GenericActiveBoxProps<T>) {
-  const [selectedYear, setSelectedYear] = useState(nowYear);
-
-  // Compute available years from item due_dates (always include current year)
-  const availableYears = useMemo(() => {
-    const years = new Set<number>();
-    years.add(nowYear);
-    for (const item of items) {
-      if (item.due_date) {
-        years.add(new Date(item.due_date + "T00:00:00").getFullYear());
-      }
-    }
-    return Array.from(years).sort((a, b) => b - a);
-  }, [items, nowYear]);
-
-  // Filter items for the selected year
-  const itemsForYear = useMemo(
-    () =>
-      items.filter((item) => {
-        if (!item.due_date) return false;
-        return new Date(item.due_date + "T00:00:00").getFullYear() === selectedYear;
-      }),
-    [items, selectedYear],
-  );
-
-  const priorityGroups = byPriority(itemsForYear, [...priorities]);
+  const priorityGroups = byPriority(items, [...priorities]);
+  const monthGroups = activeByMonths(items, nowYear);
 
   // Auto-scroll to the current month tile when switching to months view
   useEffect(() => {
@@ -107,7 +66,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
       document
         .getElementById("current-month-tile")
         ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
+    }, 100); // small delay to allow DOM paint
     return () => clearTimeout(timeout);
   }, [view, isLoading]);
 
@@ -125,23 +84,14 @@ export default function GenericActiveBox<T extends ActiveItem>({
             ariaLabel={`${title} view toggle`}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="md"
-            onClick={onAdd}
-            disabled={isLoading}
-          >
-            + Add
-          </Button>
-          {view === "months" && (
-            <YearDropdown
-              years={availableYears}
-              selectedYear={selectedYear}
-              onChange={setSelectedYear}
-            />
-          )}
-        </div>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={onAdd}
+          disabled={isLoading}
+        >
+          + Add
+        </Button>
       </header>
 
       <div className={`${SCROLLABLE_CLASSES} space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800`}>
@@ -152,58 +102,54 @@ export default function GenericActiveBox<T extends ActiveItem>({
           <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
         )}
 
-        {!isLoading && view === "priority" && (
-          <GenericPriorityList
-            priorities={priorities}
-            getItems={(p) => priorityGroups[p] ?? []}
-            getColors={getPriorityColor}
-            renderBadge={renderPriorityBadge}
-            columns={columns}
-            getItemKey={getItemKey}
-            previewCount={5}
-            viewAllHref={viewAllBaseHref ? `${viewAllBaseHref}?view=priority` : undefined}
-            onRowClick={onRowClick}
-            rowAction={rowAction}
-            getItemClassName={getItemClassName}
-            hideHeaderOnMobile
-          />
-        )}
+        {!isLoading &&
+          view === "priority" &&
+          priorities.map((priority) => {
+            const group = priorityGroups[priority] ?? [];
+            const colors = getPriorityColor(priority);
 
-        {!isLoading && view === "months" && (
-          <div className="flex flex-col gap-4">
-            {MONTHS.map((monthName, monthIndex) => {
-              const monthItems = itemsForYear.filter((item) => {
-                if (!item.due_date) return false;
-                return new Date(item.due_date + "T00:00:00").getMonth() === monthIndex;
-              });
-              const isCurrentMonth =
-                selectedYear === nowYear && monthIndex === nowMonth;
-              return (
-                <GenericMonthRow
-                  key={monthName}
-                  monthName={monthName}
-                  monthIndex={monthIndex}
-                  year={selectedYear}
-                  items={monthItems}
-                  isCurrentMonth={isCurrentMonth}
-                  getSubtitle={getSubtitle ?? (() => null)}
-                  getDate={(item) => (item as ActiveItem).due_date}
-                  viewAllHref={
-                    viewAllBaseHref
-                      ? `${viewAllBaseHref}?year=${selectedYear}&month=${monthIndex}`
-                      : "#"
-                  }
-                  columns={columns}
-                  getItemKey={getItemKey}
-                  previewCount={5}
-                  onRowClick={onRowClick}
-                  rowAction={rowAction}
-                  getItemClassName={getItemClassName}
-                />
-              );
-            })}
-          </div>
-        )}
+            return (
+              <section
+                key={priority}
+                className={`rounded-lg border ${colors.border} ${colors.bg} p-2`}
+              >
+                <h3 className="mb-2">{renderPriorityBadge(priority)}</h3>
+                {group.length === 0 && (
+                  <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
+                )}
+                <div className="space-y-2">
+                  {group.length > 0 && renderHeader && renderHeader()}
+                  {group.map((item) => renderItem(item))}
+                </div>
+              </section>
+            );
+          })}
+
+        {!isLoading &&
+          view === "months" &&
+          monthGroups.map((group) => {
+            const isCurrentMonth = MONTH_NAMES[nowMonth] === group.label;
+            return (
+              <MonthTile
+                key={group.label}
+                id={isCurrentMonth ? "current-month-tile" : undefined}
+                title={group.label}
+                defaultExpanded={isCurrentMonth}
+                accent={group.items.length > 0}
+                className="text-sm"
+                highlight={isCurrentMonth}
+              >
+                {group.items.length === 0 ? (
+                  <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
+                ) : (
+                  <div className="space-y-2">
+                    {group.items.length > 0 && renderHeader && renderHeader()}
+                    {group.items.map((item) => renderItem(item))}
+                  </div>
+                )}
+              </MonthTile>
+            );
+          })}
       </div>
     </BoxContainer>
   );

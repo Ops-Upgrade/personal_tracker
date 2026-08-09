@@ -43,15 +43,15 @@ export default function CompletedTasksBox({
         return (
           <div
             key={task.id}
-            role="button"
-            tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); onSelectTask(task); }}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectTask(task); } }}
-            className="grid grid-cols-12 items-center gap-2 w-full rounded-md border border-zinc-200 px-2 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100 cursor-pointer dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="grid grid-cols-12 items-center gap-2 w-full rounded-md border border-zinc-200 px-2 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            <span className="col-span-4 font-semibold text-zinc-800 dark:text-zinc-100 truncate">
+            <button
+              type="button"
+              onClick={() => onSelectTask(task)}
+              className="col-span-4 cursor-pointer text-left font-semibold text-zinc-800 hover:text-zinc-900 dark:text-zinc-100 dark:hover:text-white truncate"
+            >
               {trunc(task.name, 44)}
-            </span>
+            </button>
             <div className="col-span-2 flex items-center">
               <PriorityBadge priority={task.priority} />
             </div>
@@ -65,7 +65,7 @@ export default function CompletedTasksBox({
               <Button
                 variant="danger"
                 size="sm"
-                onClick={(e: React.MouseEvent) => { e.stopPropagation(); onReopenTask(task); }}
+                onClick={() => onReopenTask(task)}
               >
                 Reopen
               </Button>

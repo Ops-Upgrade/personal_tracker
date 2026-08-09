@@ -6,7 +6,6 @@ import type { Document, DocumentPlaintext } from "@/types/document";
 import { fetchNotes, createNote, updateNote, deleteNote } from "@/api/taskmanager";
 import { fetchDocuments, createDocument, updateDocument, deleteDocument } from "@/api/common/documents";
 import { uploadDocumentFile, downloadDocumentFile, deleteDocumentFile } from "@/api/common/documentStorage";
-import type { FileActions } from "@/components/common/GenericDomainModal";
 
 interface UseNoteActionsParams {
   userId: string | null;
@@ -183,33 +182,5 @@ export function useNoteActions({ userId, refresh }: UseNoteActionsParams) {
     [userId],
   );
 
-  /** Schema-driven save adapter: (formData, fileActions) → handleNoteSave */
-  const createSaveAdapter = useCallback(
-    (existingNote: Note | null, onSuccess?: (saved: Note) => void) => {
-      return async (formData: Record<string, unknown>, fileActions: FileActions) => {
-        const name = (formData.name as string).trim();
-        if (!name) throw new Error("Note name is required.");
-        const content = (formData.content as string).trim();
-
-        const firstNewFile = fileActions.newFiles[0];
-        const pendingDoc = firstNewFile
-          ? { file: firstNewFile.file, label: firstNewFile.label }
-          : undefined;
-
-        const saved = await handleNoteSave(
-          { name, content },
-          existingNote,
-          pendingDoc,
-          fileActions.docsToLink[0] || undefined,
-          fileActions.docsToUnlink.length > 0 ? fileActions.docsToUnlink : undefined,
-          fileActions.docsToDelete.length > 0 ? fileActions.docsToDelete : undefined,
-        );
-
-        onSuccess?.(saved);
-      };
-    },
-    [handleNoteSave],
-  );
-
-  return { handleNoteSave, handleNoteDelete, handleDownloadDocument, createSaveAdapter };
+  return { handleNoteSave, handleNoteDelete, handleDownloadDocument };
 }

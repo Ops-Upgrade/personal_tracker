@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import { AUTH_ROUTE } from "@/routes/config";
 import Navbar from "@/components/layout/Navbar";
 import CryptoProvider from "@/lib/crypto/CryptoProvider";
-import VaultProvider from "@/components/vault/VaultProvider";
 
 /**
  * Protected layout — wraps all authenticated routes.
@@ -60,7 +59,7 @@ export default async function ProtectedLayout({
       />
       <main className="px-4 py-8 sm:px-6 lg:px-8">
         <CryptoProvider userId={user.id}>
-          <VaultProvider userId={user.id}>{children}</VaultProvider>
+          {children}
         </CryptoProvider>
       </main>
     </div>
