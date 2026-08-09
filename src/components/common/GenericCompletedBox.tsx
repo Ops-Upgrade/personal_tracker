@@ -51,7 +51,9 @@ export default function GenericCompletedBox<T extends CompletedSummaryItem>({
           View all
         </Button>
       </header>
-      <div className={`${SCROLLABLE_CLASSES} space-y-1 rounded-lg border border-zinc-200 p-2 dark:border-zinc-800`}>
+      <div
+        className={`${SCROLLABLE_CLASSES} space-y-1 rounded-lg border border-zinc-200 p-2 dark:border-zinc-800`}
+      >
         {isLoading && (
           <div className="text-sm text-zinc-500 dark:text-zinc-400">Loading...</div>
         )}

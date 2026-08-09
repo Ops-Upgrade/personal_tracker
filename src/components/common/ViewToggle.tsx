@@ -29,6 +29,11 @@ interface ViewToggleProps<T extends string> {
    * Defaults to true (hidden on mobile) for the "default" variant.
    */
   hideContainerOnMobile?: boolean;
+  /**
+   * Override the active-state text color when variant="media".
+   * Defaults to "text-violet-600 dark:text-violet-400" (Media Manager theme).
+   */
+  activeClassName?: string;
 }
 
 // ---------- built-in media options ----------
@@ -47,6 +52,7 @@ export default function ViewToggle<T extends string>({
   ariaLabel = "View toggle",
   variant = "default",
   hideContainerOnMobile = true,
+  activeClassName,
 }: ViewToggleProps<T>) {
   const opts =
     options ?? (MEDIA_OPTIONS as unknown as readonly ViewToggleOption<T>[]);
@@ -76,9 +82,9 @@ export default function ViewToggle<T extends string>({
             onClick={() => onChange(opt.value)}
             className={
               (isMedia
-                ? `p-1.5 rounded-md transition-colors ${
+                ? `cursor-pointer p-1.5 rounded-md transition-colors ${
                     active
-                      ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
+                      ? `bg-white dark:bg-zinc-700 shadow-sm ${activeClassName || "text-violet-600 dark:text-violet-400"}`
                       : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
                   }`
                 : `cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${

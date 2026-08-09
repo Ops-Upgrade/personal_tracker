@@ -99,47 +99,47 @@ export default function EpisodePage({
 
   // ── Load ──
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- React Compiler auto-memoizes
-  const load = async () => {
-    try {
-      await execute(async () => {
-        const [show, season, existing] = await Promise.all([
-          getMediaDetails(tmdbId, "tv"),
-          getSeasonDetails(tmdbId, seasonNumber),
-          getMediaByTmdbId(userId, tmdbId, "tv"),
-        ]);
-        setShowData(show);
-        setSeasonData(season);
-
-        if (existing) {
-          setLocalMedia(existing);
-          const epData = existing.episodes?.[episodeKey];
-          const { status: effectiveStatus } = getEffectiveEpisodeStatus(
-            existing.status,
-            epData?.status,
-          );
-          setStatus(effectiveStatus as EpisodeTracking["status"]);
-          setRating(epData?.rating ?? 0);
-          setWatchedOn(epData?.watched_on ?? "");
-          setReviewNotes(epData?.review_notes ?? "");
-          setOriginalEpisode({
-            status: effectiveStatus,
-            rating: epData?.rating ?? 0,
-            watched_on: epData?.watched_on ?? "",
-            review_notes: epData?.review_notes ?? "",
-          });
-        } else {
-          setOriginalEpisode(null);
-        }
-      });
-    } catch {
-      // execute already surfaced the generic error via its own state
-    }
-  };
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    const loadData = async () => {
+      try {
+        await execute(async () => {
+          const [show, season, existing] = await Promise.all([
+            getMediaDetails(tmdbId, "tv"),
+            getSeasonDetails(tmdbId, seasonNumber),
+            getMediaByTmdbId(userId, tmdbId, "tv"),
+          ]);
+          setShowData(show);
+          setSeasonData(season);
+
+          if (existing) {
+            setLocalMedia(existing);
+            const epData = existing.episodes?.[episodeKey];
+            const { status: effectiveStatus } = getEffectiveEpisodeStatus(
+              existing.status,
+              epData?.status,
+            );
+            setStatus(effectiveStatus as EpisodeTracking["status"]);
+            setRating(epData?.rating ?? 0);
+            setWatchedOn(epData?.watched_on ?? "");
+            setReviewNotes(epData?.review_notes ?? "");
+            setOriginalEpisode({
+              status: effectiveStatus,
+              rating: epData?.rating ?? 0,
+              watched_on: epData?.watched_on ?? "",
+              review_notes: epData?.review_notes ?? "",
+            });
+          } else {
+            setOriginalEpisode(null);
+          }
+        });
+      } catch {
+        // execute already surfaced the generic error via its own state
+      }
+    };
+    loadData();
+  }, [execute, tmdbId, seasonNumber, userId, episodeKey, retryCount]);
 
   // ── isDirty ──
   const hasEpisodeRecord = localMedia?.episodes?.[episodeKey] !== undefined;
@@ -187,7 +187,7 @@ export default function EpisodePage({
   } = useNavigationGuard({
     isDirty,
     doCancel,
-    fallbackRoute: `${ROUTES.MEDIA}?tab=manager`,
+    fallbackRoute: `${ROUTES.MEDIA}/tv/${tmdbId}?tab=episodes`,
   });
 
   // ── Handlers (local state only — save is manual) ──
@@ -413,7 +413,7 @@ export default function EpisodePage({
       <BackButton onClick={handleBackClick} />
 
       {error && (
-        <ErrorBanner message={error} onRetry={() => { clearError(); load(); }} />
+        <ErrorBanner message={error} onRetry={() => { clearError(); setRetryCount(c => c + 1); }} />
       )}
 
       {/* ── Row 1: Image + Text ── */}

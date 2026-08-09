@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@source inline("col-span-1 col-span-2 col-span-3 col-span-4 col-span-5 col-span-6 col-span-7 col-span-8 col-span-9 col-span-10 col-span-11 col-span-12");
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -24,6 +25,33 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ── Global cursor overrides ── */
+/* Tailwind preflight removes cursor:pointer from buttons. Restore it
+   globally so every <button> and button-like element shows the hand pointer. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"]:disabled,
+  input[type="button"]:disabled,
+  input[type="submit"]:disabled,
+  input[type="reset"]:disabled,
+  input[type="checkbox"]:disabled,
+  input[type="radio"]:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
 }
 
 /* ── Matrix digital rain animation ── */

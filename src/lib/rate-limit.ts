@@ -12,7 +12,7 @@ const redis = Redis.fromEnv();
 export const ipLimiter = new Ratelimit({
   redis,
   limiter: Ratelimit.slidingWindow(20, WINDOW),
-  analytics: true,
+  analytics: false,
   prefix: "ratelimit:ip",
 });
 
@@ -25,7 +25,7 @@ export function emailLimiter(prefix: string) {
   return new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(5, WINDOW),
-    analytics: true,
+    analytics: false,
     prefix: `ratelimit:email:${prefix}`,
   });
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useCallback, useState } from "react";
-import TvSeriesPage from "@/components/media/pages/TvSeriesPage";
+import TvSeriesPageWrapper from "@/components/media/pages/TvSeriesPageWrapper";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
 import { listCollections } from "@/api/media";
 import type { MediaCollection } from "@/types/media";
@@ -34,7 +34,7 @@ export default function TvRoute({
   }
 
   return (
-    <TvSeriesPage
+    <TvSeriesPageWrapper
       tmdbId={tmdbId}
       userId={userId}
       userName={userName}

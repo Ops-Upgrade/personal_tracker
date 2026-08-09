@@ -1,0 +1,117 @@
+here is my audit:
+## Task manager page:
+1) on /taskmanager route
+* clicking normal tasks work and shows correct modal
+* on /taskmanager/all route also tasks are showing correctly and can click on them
+* but /taskmanager/all dropdown is not showing the months that have no tasks
+* /taskmanager/all has a month view toggle, whcih shows all month when a specific month is selected. we need to remove month view compltely without removing it from /completed and /notes
+* on /taskmanager default route - clicking on completed tasks is opening nothing, i can see url shows query but nothing opens
+* on /taskmanager default root, entire tile of completed task is not clickable
+* /taskmanager/completed - modals are opening but, below errors:
+```Console Error
+In HTML, <button> cannot be a descendant of <button>.
+This will cause a hydration error.
+
+See more info here: https://nextjs.org/docs/messages/react-hydration-error
++ Client- Server
+
+...
+    <PageShell backHref="/taskmanager" title="Completed ..." description="All your c..." error={null} ...>
+      <div className="space-y-4">
+        <div>
+        <GenericViewPage items={[...]} columns={[...]} getItemKey={function getItemKey} views={[...]} activeView="months" ...>
+          <BoxContainer>
+            <article className={"rounded-..."}>
+              <header>
+              <div className="flex-1 min...">
+                <GenericMonthsList monthGroups={[...]} columns={[...]} getItemKey={function getItemKey} nowYear={2026} ...>
+                  <MonthTile title="July 2026" defaultExpanded={true} accent={true} className="text-sm" highlight={false}>
+                    <div id={undefined} className="rounded-xl...">
+                      <div>
+                      <div className="border-t b...">
+                        <GenericDataGrid items={[...]} columns={[...]} getItemKey={function getItemKey} ...>
+                          <div>
+                          <div className="space-y-2">
+                            <div className="group flex...">
+>                             <button
+>                               type="button"
+>                               onClick={function}
+>                               className="grid flex-1 gap-2 text-left text-sm grid-cols-12 cursor-pointer"
+>                               tabIndex={0}
+>                               onKeyDown={function}
+>                             >
+                                <div>
+                                <div>
+                                <div>
+                                <div>
+                                <div className="col-span-2">
+                                  <div className="flex justi...">
+>                                   <button
+>                                     type="button"
+>                                     onClick={function onClick}
+>                                     className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs f..."
+>                                   >
+
+src/app/(protected)/taskmanager/completed/page.tsx (177:7) @ renderReopenAction
+
+  175 |   const renderReopenAction = (task: Task) => (
+  176 |     <div className="flex justify-end items-center">
+> 177 |       <button
+      |       ^
+  178 |         type="button"
+  179 |         onClick={(e) => { e.stopPropagation(); handleToggleComplete(task, false); }}
+  180 |         className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
+
+Call Stack 23
+Show 14 ignore-listed frame(s)
+button
+unknown (0:0)
+renderReopenAction
+src/app/(protected)/taskmanager/completed/page.tsx (177:7)
+GenericDataGrid/<.children<.children<.children</<.children<.children<
+src/components/common/GenericDataGrid.tsx (174:30)
+GenericDataGrid/<.children<.children<.children<
+src/components/common/GenericDataGrid.tsx (172:30)
+GenericDataGrid
+src/components/common/GenericDataGrid.tsx (146:20)
+GenericMonthsList/<.children<
+src/components/common/GenericMonthsList.tsx (150:13)
+GenericMonthsList
+src/components/common/GenericMonthsList.tsx (73:20)
+GenericViewPage
+src/components/common/GenericViewPage.tsx (280:11)
+CompletedTasksPage
+src/app/(protected)/taskmanager/completed/page.tsx (240:9)```
+* opening notes modal - on right side, option to preview file is not showing, instead shows a list of files
+* also /taskmanager/notes does not have the year dropdown, which it needs
+* on adding a standalone file in notes store - on right side - preview option is missing; on left side - only note name option is there for some reason under "Or", the entire note text area is missing
+
+2) Coming to expense manager:
+* opening expense modal - on right side, option to preview file is not showing, instead shows a list of files
+* /expense/all dropdown is not showing the months that have no expenses
+* /expense/all has a month view toggle, whcih shows all month when a specific month is selected. we need to remove month view compltely without removing it from others
+
+3) coming to education manager:
+* /education/all dropdown is not showing the months that have no task
+* opening education modal - on right side, option to preview file is not showing, instead shows a list of files
+* on adding a standalone file in notes store - on right side - preview option is missing; on left side - only note name option is there for some reason under "Or", the entire note text area is missing
+* /education/all has a month view toggle, whcih shows all month when a specific month is selected. we need to remove month view compltely without removing it from others
+* on /education default page, entire tile of completed education is not clickable
+
+4) coming to medical:
+* opening medical modal - on right side, option to preview file is not showing, instead shows a list of files
+* /medical/all dropdown is not showing the months that have no medical records
+* /medical/all has a month view toggle, whcih shows all month when a specific month is selected. we need to remove month view compltely without removing it from others
+
+5) Coming to vault:
+* first of all /vault/records upon clicking save, the modal dissapears, which means it has some extra line of code logic which is knowingly not there in modals of other domain
+* opening record modal - on right side, option to preview file is not showing, instead shows a list of files
+* on adding a standalone file in notes store - on right side - preview option is missing; on left side - only option to link to exisitng record is there, the entire option for creating new record below **OR** is missing
+* we are getting optoin to link to password records from password manager when adding a standalone file; the fix is not to remove password records from dropdown of modal, the fix is the ensure password records dont support files, same with bank pins - no files
+* in /vault/passwords, clicking save wehn adding/editing closes the modal - it should not close and does not close when closing the files
+* in /vault/bank/bankid clicking save wehn adding/editing closes the modal - it should not close and does not close when closing the files
+
+
+Note:
+* all the modals show file name list, clicking on a file from there shows preview - this is wrong, we should be shown the preview page directly if there is a single file also present, 
+the file name list should however be shown when a preson has added/linked a new file and not pressed save - this means you cannot compltetey remove the file list, but you need to change when to dispaly that
