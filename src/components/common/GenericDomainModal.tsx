@@ -1485,11 +1485,10 @@ export default function GenericDomainModal({
                                     setSelectedFileId(f.id);
                                     setFileDropdownOpen(false);
                                   }}
-                                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
-                                    isActive
+                                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${isActive
                                       ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
                                       : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                                  }`}
+                                    }`}
                                 >
                                   <span className="flex-1 truncate">
                                     {f.name}
@@ -1585,7 +1584,7 @@ export default function GenericDomainModal({
                           file={null}
                           hasExistingFile={false}
                           onFileSelect={handleFileUpload}
-                          onFileClear={() => {}}
+                          onFileClear={() => { }}
                           showEncryptedNotice={true}
                           multiple={!isStandaloneFile}
                         />
@@ -1709,7 +1708,7 @@ export default function GenericDomainModal({
                         file={null}
                         hasExistingFile={true}
                         onFileSelect={handleFileUpload}
-                        onFileClear={() => {}}
+                        onFileClear={() => { }}
                         showEncryptedNotice={false}
                         disabled={isSaving}
                         multiple={!isStandaloneFile}
