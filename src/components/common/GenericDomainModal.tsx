@@ -105,6 +105,14 @@ interface ToastConfig {
 }
 
 // ============================================================================
+// Stable empty-array constants (prevents infinite re-renders from inline `[]` defaults)
+// ============================================================================
+
+const EMPTY_FIELDS: FieldDef[] = [];
+const EMPTY_DOCS: Document[] = [];
+const EMPTY_RECORDS: StoreParentRecord[] = [];
+
+// ============================================================================
 // GenericDomainModal
 // ============================================================================
 
@@ -194,16 +202,16 @@ export default function GenericDomainModal({
   title,
   onClose,
   onSaved,
-  fields = [],
+  fields = EMPTY_FIELDS,
   initialData = {},
   layout,
   allowFiles = false,
   allowLinking = true,
   userId = "",
-  attachedDocuments = [],
-  standaloneDocuments = [],
+  attachedDocuments = EMPTY_DOCS,
+  standaloneDocuments = EMPTY_DOCS,
   domain = "",
-  parentRecords = [],
+  parentRecords = EMPTY_RECORDS,
   renderNewRecordForm,
   extractNewRecordData,
   onSave,
@@ -276,16 +284,12 @@ export default function GenericDomainModal({
 
   // When standaloneDocuments change (e.g. after save),
   // clear stagedLinkDocId if the doc is no longer available.
-  const [prevStandaloneDocs, setPrevStandaloneDocs] = useState(standaloneDocuments);
-  if (standaloneDocuments !== prevStandaloneDocs) {
-    setPrevStandaloneDocs(standaloneDocuments);
+  useEffect(() => {
     if (stagedLinkDocId) {
-      const stillExists = standaloneDocuments.some(
-        (d) => d.id === stagedLinkDocId,
-      );
+      const stillExists = standaloneDocuments.some((d) => d.id === stagedLinkDocId);
       if (!stillExists) setStagedLinkDocId(null);
     }
-  }
+  }, [standaloneDocuments, stagedLinkDocId]);
 
   // ── Reset all file state ──
   const resetFileState = useCallback(() => {
@@ -1485,11 +1489,10 @@ export default function GenericDomainModal({
                                     setSelectedFileId(f.id);
                                     setFileDropdownOpen(false);
                                   }}
-                                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
-                                    isActive
+                                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${isActive
                                       ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"
                                       : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
-                                  }`}
+                                    }`}
                                 >
                                   <span className="flex-1 truncate">
                                     {f.name}
@@ -1585,7 +1588,7 @@ export default function GenericDomainModal({
                           file={null}
                           hasExistingFile={false}
                           onFileSelect={handleFileUpload}
-                          onFileClear={() => {}}
+                          onFileClear={() => { }}
                           showEncryptedNotice={true}
                           multiple={!isStandaloneFile}
                         />
@@ -1709,7 +1712,7 @@ export default function GenericDomainModal({
                         file={null}
                         hasExistingFile={true}
                         onFileSelect={handleFileUpload}
-                        onFileClear={() => {}}
+                        onFileClear={() => { }}
                         showEncryptedNotice={false}
                         disabled={isSaving}
                         multiple={!isStandaloneFile}
