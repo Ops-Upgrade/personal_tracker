@@ -2,28 +2,48 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/proxy";
 import { PUBLIC_ROUTES, AUTH_ROUTE, DEFAULT_AUTHENTICATED_ROUTE } from "@/routes/config";
 
-const isProduction = process.env.NODE_ENV === "production";
+const isPreviewEnv = process.env.VERCEL_ENV === "preview";
+const isProdEnv =
+  process.env.VERCEL_ENV === "production" ||
+  (process.env.NODE_ENV === "production" && !isPreviewEnv);
 
 function buildCsp(nonce: string) {
-  return isProduction
-    ? [
-        "default-src 'self'",
-        `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' 'strict-dynamic'`,
-        "style-src 'self' 'unsafe-inline'",
-        "connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com",
-        "img-src 'self' blob: data: https://*.supabase.co https://image.tmdb.org",
-        "frame-ancestors 'none'",
-        "frame-src blob:",
-      ].join("; ")
-    : [
-        "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'",
-        "style-src 'self' 'unsafe-inline'",
-        "connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com ws://localhost:3000",
-        "img-src 'self' blob: data: https://*.supabase.co https://image.tmdb.org",
-        "frame-ancestors 'none'",
-        "frame-src blob:",
-      ].join("; ");
+  if (isProdEnv) {
+    // Production: maximally locked down, no Vercel domains.
+    return [
+      "default-src 'self'",
+      `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' 'strict-dynamic'`,
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com",
+      "img-src 'self' blob: data: https://*.supabase.co https://image.tmdb.org",
+      "frame-ancestors 'none'",
+      "frame-src blob:",
+    ].join("; ");
+  }
+
+  if (isPreviewEnv) {
+    // Preview: strict CSP + Vercel Preview Toolbar domains.
+    return [
+      "default-src 'self'",
+      `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval' 'strict-dynamic' https://vercel.live`,
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com https://vercel.live wss://ws-us3.pusher.com",
+      "img-src 'self' blob: data: https://*.supabase.co https://image.tmdb.org",
+      "frame-ancestors 'none'",
+      "frame-src blob: https://vercel.live",
+    ].join("; ");
+  }
+
+  // Development: loose CSP + Vercel domains.
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://vercel.live",
+    "style-src 'self' 'unsafe-inline'",
+    "connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com ws://localhost:3000 https://vercel.live wss://ws-us3.pusher.com",
+    "img-src 'self' blob: data: https://*.supabase.co https://image.tmdb.org",
+    "frame-ancestors 'none'",
+    "frame-src blob: https://vercel.live",
+  ].join("; ");
 }
 
 /**
