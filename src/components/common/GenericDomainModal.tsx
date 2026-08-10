@@ -105,6 +105,14 @@ interface ToastConfig {
 }
 
 // ============================================================================
+// Stable empty-array constants (prevents infinite re-renders from inline `[]` defaults)
+// ============================================================================
+
+const EMPTY_FIELDS: FieldDef[] = [];
+const EMPTY_DOCS: Document[] = [];
+const EMPTY_RECORDS: StoreParentRecord[] = [];
+
+// ============================================================================
 // GenericDomainModal
 // ============================================================================
 
@@ -194,16 +202,16 @@ export default function GenericDomainModal({
   title,
   onClose,
   onSaved,
-  fields = [],
+  fields = EMPTY_FIELDS,
   initialData = {},
   layout,
   allowFiles = false,
   allowLinking = true,
   userId = "",
-  attachedDocuments = [],
-  standaloneDocuments = [],
+  attachedDocuments = EMPTY_DOCS,
+  standaloneDocuments = EMPTY_DOCS,
   domain = "",
-  parentRecords = [],
+  parentRecords = EMPTY_RECORDS,
   renderNewRecordForm,
   extractNewRecordData,
   onSave,
@@ -276,16 +284,12 @@ export default function GenericDomainModal({
 
   // When standaloneDocuments change (e.g. after save),
   // clear stagedLinkDocId if the doc is no longer available.
-  const [prevStandaloneDocs, setPrevStandaloneDocs] = useState(standaloneDocuments);
-  if (standaloneDocuments !== prevStandaloneDocs) {
-    setPrevStandaloneDocs(standaloneDocuments);
+  useEffect(() => {
     if (stagedLinkDocId) {
-      const stillExists = standaloneDocuments.some(
-        (d) => d.id === stagedLinkDocId,
-      );
+      const stillExists = standaloneDocuments.some((d) => d.id === stagedLinkDocId);
       if (!stillExists) setStagedLinkDocId(null);
     }
-  }
+  }, [standaloneDocuments, stagedLinkDocId]);
 
   // ── Reset all file state ──
   const resetFileState = useCallback(() => {
