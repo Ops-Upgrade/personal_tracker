@@ -277,26 +277,22 @@ export default function GenericDomainModal({
   const [markedForUnlink, setMarkedForUnlink] = useState<Set<string>>(
     new Set(),
   );
-  const [stagedLinkDocId, setStagedLinkDocId] = useState<string | null>(null);
+  const [rawStagedLinkDocId, setRawStagedLinkDocId] = useState<string | null>(null);
+  const stagedLinkDocId =
+    rawStagedLinkDocId &&
+    standaloneDocuments.some((d) => d.id === rawStagedLinkDocId)
+      ? rawStagedLinkDocId
+      : null;
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [linkSearchQuery, setLinkSearchQuery] = useState("");
   const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
-
-  // When standaloneDocuments change (e.g. after save),
-  // clear stagedLinkDocId if the doc is no longer available.
-  useEffect(() => {
-    if (stagedLinkDocId) {
-      const stillExists = standaloneDocuments.some((d) => d.id === stagedLinkDocId);
-      if (!stillExists) setStagedLinkDocId(null);
-    }
-  }, [standaloneDocuments, stagedLinkDocId]);
 
   // ── Reset all file state ──
   const resetFileState = useCallback(() => {
     setNewFiles([]);
     setMarkedForDeletion(new Set());
     setMarkedForUnlink(new Set());
-    setStagedLinkDocId(null);
+    setRawStagedLinkDocId(null);
     setSelectedFileId(null);
     setLinkSearchQuery("");
     setLinkDropdownOpen(false);
@@ -520,7 +516,7 @@ export default function GenericDomainModal({
 
       // Staged link — clear it
       if (stagedLinkDocId === fileId) {
-        setStagedLinkDocId(null);
+        setRawStagedLinkDocId(null);
         if (selectedFileId === fileId) setSelectedFileId(null);
         return;
       }
@@ -544,7 +540,7 @@ export default function GenericDomainModal({
   const handleFileUnlink = useCallback(
     (fileId: string) => {
       if (stagedLinkDocId === fileId) {
-        setStagedLinkDocId(null);
+        setRawStagedLinkDocId(null);
         return;
       }
       if (newFiles.find((nf) => nf.tempId === fileId)) return;
@@ -674,7 +670,7 @@ export default function GenericDomainModal({
 
   const handleLinkDropdownSelect = useCallback((docId: string) => {
     if (!docId) return;
-    setStagedLinkDocId(docId);
+    setRawStagedLinkDocId(docId);
     setLinkSearchQuery("");
     setLinkDropdownOpen(false);
     setSelectedFileId(null);
@@ -971,7 +967,7 @@ export default function GenericDomainModal({
             type="text"
             value={displayValue}
             onChange={(e) => {
-              if (stagedLinkDocId) setStagedLinkDocId(null);
+              if (stagedLinkDocId) setRawStagedLinkDocId(null);
               setLinkSearchQuery(e.target.value);
               if (!linkDropdownOpen) setLinkDropdownOpen(true);
             }}
