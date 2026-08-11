@@ -903,7 +903,7 @@ function GenericDocStore<T extends { id: string }>({
             className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"} ${theme.inputFocus}`}
           />
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            {isImage ? <ImageIcon className={`h-5 w-5 ${theme.icon}`} /> : isPdf ? <FileText className="h-5 w-5 text-red-500" /> : <File className={`h-5 w-5 ${theme.icon}`} />}
+            {isImage ? <ImageIcon className={`h-5 w-5 ${theme.icon}`} /> : isPdf ? <FileText className={`h-5 w-5 ${theme.icon}`} /> : <File className={`h-5 w-5 ${theme.icon}`} />}
           </div>
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {renamingId === doc.id ? (
@@ -970,7 +970,7 @@ function GenericDocStore<T extends { id: string }>({
         </div>
         {/* Thumbnail */}
         <div className="relative flex h-32 w-full items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800 overflow-hidden">
-          {isImage ? <ImageIcon className={`h-10 w-10 ${theme.iconLarge}`} /> : isPdf ? <FileText className="h-10 w-10 text-red-500/50" /> : <File className={`h-10 w-10 ${theme.iconLarge}`} />}
+          {isImage ? <ImageIcon className={`h-10 w-10 ${theme.iconLarge}`} /> : isPdf ? <FileText className={`h-10 w-10 ${theme.iconLarge}`} /> : <File className={`h-10 w-10 ${theme.iconLarge}`} />}
           {(doc.linkedItemName || doc.isLinked) && (
             <div className="absolute bottom-2 right-2 flex items-center justify-center rounded-full bg-white/90 p-1.5 shadow-sm backdrop-blur-sm dark:bg-zinc-900/90">
               <Link className={`h-4 w-4 ${theme.icon}`} />

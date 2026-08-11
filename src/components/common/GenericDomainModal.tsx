@@ -1209,7 +1209,7 @@ export default function GenericDomainModal({
         onClick={handleBackdropClick}
       >
         <div
-          className={`w-full ${computedMaxWidth} rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 flex flex-col min-h-[65vh] max-h-[85vh]`}
+          className={`w-full ${computedMaxWidth} rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 flex flex-col min-h-[65vh] max-h-[85vh] overflow-y-auto sm:overflow-visible`}
         >
           {/* Header */}
           <header className="shrink-0 flex items-center border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">

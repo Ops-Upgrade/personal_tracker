@@ -7,10 +7,8 @@ import type { MedicalRecord } from "@/types/medical";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import type { MonthGroup } from "@/components/common/GenericViewPage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useTableSort } from "@/hooks/useTableSort";
-import { byMonth } from "@/lib/viewHelpers";
 import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 import { useMedicalActions } from "@/hooks/useMedicalActions";
 import { useMedicalData } from "@/hooks/useMedicalData";
@@ -81,11 +79,6 @@ export default function MedicalAllPage() {
     [recordsForYear, selectedMonth],
   );
 
-  const monthGroups: MonthGroup<MedicalRecord>[] = useMemo(
-    () => byMonth(recordsForYear, selectedYear),
-    [recordsForYear, selectedYear],
-  );
-
   // ── Sort ──
 
   const { sortState, handleSort, sorted } = useTableSort(
@@ -132,7 +125,7 @@ export default function MedicalAllPage() {
             items={sorted}
             columns={MEDICAL_COLUMNS}
             getItemKey={(rec) => rec.id}
-            views={STANDARD_VIEWS.ALL_MONTHS}
+            views={STANDARD_VIEWS.ALL_ONLY}
             activeView={activeView}
             onViewChange={setActiveView}
             yearFilter={{
@@ -165,10 +158,8 @@ export default function MedicalAllPage() {
             onSortChange={handleSort}
             emptyMessage={emptyMessage}
             onRowClick={(rec) => setModalTarget(rec)}
-            monthGroups={monthGroups}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
-            disableMonthToggle
           />
         )}
       </PageShell>

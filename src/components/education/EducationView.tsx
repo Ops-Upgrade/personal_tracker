@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import { useLocalStorage } from "@/lib/useLocalStorage";
@@ -34,7 +34,7 @@ export default function EducationView() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { createSaveAdapter, handleEducationDelete, handleDownloadDocument } =
+  const { createSaveAdapter, handleEducationDelete, handleDownloadDocument, handleToggleComplete } =
     useEducationActions({ userId, refresh });
 
   const [activeView, setActiveView] = useLocalStorage<EducationViewMode>("educationActiveView", "months");
@@ -43,17 +43,8 @@ export default function EducationView() {
 
   const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(educations, "education");
 
-  // State bridge for quick-complete
-  const [quickCompleteTarget, setQuickCompleteTarget] = useState<Education | null>(null);
-
-  const eduModalTarget = quickCompleteTarget ?? modalTarget;
   const openNewEducation = openCreate;
   const openEditEducation = openEdit;
-
-  const closeEduModal = useCallback(() => {
-    closeModal();
-    setQuickCompleteTarget(null);
-  }, [closeModal]);
 
   // ── Derived data ──
 
@@ -69,7 +60,7 @@ export default function EducationView() {
   // ── CRUD handlers ──
 
   function handleQuickComplete(education: Education) {
-    setQuickCompleteTarget({ ...education, is_completed: true });
+    handleToggleComplete(education, true);
   }
 
   // ── Context for GenericDomainPage ──
@@ -100,14 +91,14 @@ export default function EducationView() {
         />
       }
       modalSlot={
-        eduModalTarget && (
+        modalTarget && (
           <GenericDomainModal
             mode="record"
-            title={eduModalTarget === "create" ? "Add education" : "Edit education"}
+            title={modalTarget === "create" ? "Add education" : "Edit education"}
             fields={EDUCATION_FIELDS}
             layout={EDUCATION_LAYOUT}
             initialData={
-              eduModalTarget === "create"
+              modalTarget === "create"
                 ? {
                     name: "",
                     provider: "",
@@ -117,19 +108,19 @@ export default function EducationView() {
                     is_completed: false,
                   }
                 : {
-                    name: eduModalTarget.name,
-                    provider: eduModalTarget.provider,
-                    priority: eduModalTarget.priority,
-                    due_date: normalizeDateForInput(eduModalTarget.due_date),
-                    description: eduModalTarget.description,
-                    is_completed: eduModalTarget.is_completed,
+                    name: modalTarget.name,
+                    provider: modalTarget.provider,
+                    priority: modalTarget.priority,
+                    due_date: normalizeDateForInput(modalTarget.due_date),
+                    description: modalTarget.description,
+                    is_completed: modalTarget.is_completed,
                   }
             }
             allowFiles
             userId={userId || ""}
             attachedDocuments={
-              eduModalTarget !== "create"
-                ? docsForEducation(eduModalTarget.id, documents)
+              modalTarget !== "create"
+                ? docsForEducation(modalTarget.id, documents)
                 : []
             }
             standaloneDocuments={documents.filter(
@@ -137,20 +128,20 @@ export default function EducationView() {
             )}
             domain="education"
             onSave={createSaveAdapter(
-              eduModalTarget === "create" ? null : eduModalTarget,
-              eduModalTarget === "create"
+              modalTarget === "create" ? null : modalTarget,
+              modalTarget === "create"
                 ? (saved) => openEditEducation(saved)
                 : undefined,
             )}
             onDeleteWithCascade={
-              eduModalTarget !== "create"
+              modalTarget !== "create"
                 ? (cascadeMode) =>
-                    handleEducationDelete(eduModalTarget.id, cascadeMode)
+                    handleEducationDelete(modalTarget.id, cascadeMode)
                 : undefined
             }
             deleteLabel="Delete"
             onDownloadDocument={handleDownloadDocument}
-            onClose={closeEduModal}
+            onClose={closeModal}
           />
         )
       }

@@ -88,6 +88,7 @@ export default function NotesPage() {
         key: "name",
         header: "Name",
         colSpan: 3,
+        mobileBehavior: "truncate",
         render: (item) =>
           item.type === "note" ? (
             <div className="truncate font-medium">{getNoteTitle(item.data)}</div>
@@ -99,6 +100,7 @@ export default function NotesPage() {
         key: "note",
         header: "Note",
         colSpan: 5,
+        mobileBehavior: "truncate",
         render: (item) =>
           item.type === "note" ? (
             <div className="truncate text-zinc-500 dark:text-zinc-400">
@@ -115,6 +117,7 @@ export default function NotesPage() {
         key: "date",
         header: "Date Added",
         colSpan: 2,
+        mobileBehavior: "fixed",
         render: (item) => (
           <div className="text-zinc-500 dark:text-zinc-400">
             {formatShortDate(item.dateStr)}
@@ -125,6 +128,7 @@ export default function NotesPage() {
         key: "files",
         header: "Files",
         colSpan: 2,
+        mobileBehavior: "truncate",
         render: (item) =>
           item.type === "note" ? (
             item.attachedDocs.length > 0 ? (

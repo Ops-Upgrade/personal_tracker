@@ -56,11 +56,7 @@ const SORT_CONFIGS: SortConfig<SortColumn, Education>[] = [
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }
 
 export default function CompletedEducationsPage() {
@@ -133,8 +129,9 @@ export default function CompletedEducationsPage() {
       {
         key: "name",
         header: "Program Name",
-        colSpan: 3,
+        colSpan: 2,
         sortColumn: "name",
+        mobileBehavior: "truncate",
         render: (edu) => (
           <span className="font-medium text-zinc-800 dark:text-zinc-100">
             {trunc(edu.name, 28) || "—"}
@@ -146,6 +143,7 @@ export default function CompletedEducationsPage() {
         header: "Provider",
         colSpan: 2,
         sortColumn: "provider",
+        mobileBehavior: "truncate",
         render: (edu) => (
           <span className="text-zinc-600 dark:text-zinc-300">
             {trunc(edu.provider, 22) || "—"}
@@ -157,6 +155,8 @@ export default function CompletedEducationsPage() {
         header: "Priority",
         colSpan: 2,
         sortColumn: "priority",
+        mobileBehavior: "fixed",
+        align: "center",
         render: (edu) =>
           edu.priority ? (
             <PriorityBadge priority={edu.priority as Priority} />
@@ -169,6 +169,7 @@ export default function CompletedEducationsPage() {
         header: "Due Date",
         colSpan: 2,
         sortColumn: "due_date",
+        mobileBehavior: "fixed",
         render: (edu) => (
           <span className="text-zinc-600 dark:text-zinc-300">
             {edu.due_date ? formatDate(edu.due_date) : "—"}
@@ -176,20 +177,21 @@ export default function CompletedEducationsPage() {
         ),
       },
       {
-        key: "completed_at",
-        header: "Completed",
+        key: "description",
+        header: "Description",
         colSpan: 2,
-        sortColumn: "completed_at",
+        mobileBehavior: "truncate",
         render: (edu) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {edu.completed_at ? formatDate(edu.completed_at) : "—"}
+          <span className="text-zinc-500 dark:text-zinc-400">
+            {trunc(edu.description, 24) || "—"}
           </span>
         ),
       },
       {
         key: "files",
         header: "Files",
-        colSpan: 1,
+        colSpan: 2,
+        mobileBehavior: "fixed",
         render: (edu) => {
           const docCount = docCountsByEdu.get(edu.id) ?? 0;
           return docCount > 0 ? (

@@ -5,6 +5,7 @@ import type { Education } from "@/types/education";
 import type { Document } from "@/types/document";
 import GenericCompletedBox from "@/components/common/GenericCompletedBox";
 import PriorityBadge from "@/components/common/PriorityBadge";
+import { PaperClipIcon } from "@/components/common/Icons";
 import { formatShortDate, sortByCompletedDesc, trunc } from "./helpers";
 
 interface CompletedEducationsBoxProps {
@@ -35,12 +36,12 @@ export default function CompletedEducationsBox({
   }, [documents]);
 
   const listHeader = (
-    <div className="grid grid-cols-12 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-      <div className="col-span-4">Program Name</div>
-      <div className="col-span-3">Provider</div>
-      <div className="col-span-2">Priority</div>
+    <div className="grid grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
+      <div className="col-span-3 min-w-0 truncate">Program Name</div>
+      <div className="col-span-3 min-w-0 truncate">Provider</div>
+      <div className="col-span-2 text-center">Priority</div>
       <div className="col-span-2">Date</div>
-      <div className="col-span-1 text-right">Files</div>
+      <div className="col-span-2 text-right">Files</div>
     </div>
   );
 
@@ -61,22 +62,23 @@ export default function CompletedEducationsBox({
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectEducation(edu); } }}
             className="grid grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-sm cursor-pointer dark:border-zinc-700"
           >
-            <span className="col-span-4 font-semibold text-zinc-800 dark:text-zinc-100">
+            <span className="col-span-3 min-w-0 truncate font-semibold text-zinc-800 dark:text-zinc-100">
               {trunc(edu.name, 24)}
             </span>
-            <div className="col-span-3 text-zinc-600 dark:text-zinc-300">
+            <div className="col-span-3 min-w-0 truncate text-zinc-600 dark:text-zinc-300">
               {trunc(edu.provider, 20)}
             </div>
-            <div className="col-span-2 flex items-center">
+            <div className="col-span-2 flex items-center justify-center">
               {edu.priority ? <PriorityBadge priority={edu.priority} /> : "-"}
             </div>
-            <div className="col-span-2 text-zinc-600 dark:text-zinc-300">
+            <div className="col-span-2 shrink-0 whitespace-nowrap overflow-hidden text-zinc-600 dark:text-zinc-300">
               {formatShortDate(edu.completed_at)}
             </div>
-            <div className="col-span-1 text-right">
+            <div className="col-span-2 text-right">
               {docCount > 0 ? (
-                <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                  {docCount}
+                <span className="inline-flex items-center justify-center gap-1 text-amber-500" title={`${docCount} document(s) attached`}>
+                  <PaperClipIcon className="h-4 w-4" />
+                  <span className="text-zinc-600 dark:text-zinc-300">({docCount})</span>
                 </span>
               ) : (
                 <span className="text-xs text-zinc-400">—</span>

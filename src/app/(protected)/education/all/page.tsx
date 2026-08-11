@@ -7,12 +7,10 @@ import type { Education } from "@/types/education";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import type { MonthGroup } from "@/components/common/GenericViewPage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useEducationActions } from "@/hooks/useEducationActions";
 import { useEducationData } from "@/hooks/useEducationData";
 import { useTableSort } from "@/hooks/useTableSort";
-import { byDueMonth } from "@/lib/viewHelpers";
 import GenericDomainModal from "@/components/common/GenericDomainModal";
 import { normalizeDateForInput } from "@/lib/utils";
 import { EDUCATION_COLUMNS, SORT_CONFIGS, EDUCATION_FIELDS, EDUCATION_LAYOUT } from "@/components/education/config";
@@ -79,11 +77,6 @@ export default function EducationAllPage() {
     [educationsForYear, selectedMonth],
   );
 
-  const monthGroups: MonthGroup<Education>[] = useMemo(
-    () => byDueMonth(educationsForYear, selectedYear),
-    [educationsForYear, selectedYear],
-  );
-
   // ── Sort ──
 
   const { sortState, handleSort, sorted } = useTableSort(
@@ -131,7 +124,7 @@ export default function EducationAllPage() {
             items={sorted}
             columns={EDUCATION_COLUMNS}
             getItemKey={(e) => e.id}
-            views={STANDARD_VIEWS.ALL_MONTHS}
+            views={STANDARD_VIEWS.ALL_ONLY}
             activeView={activeView}
             onViewChange={setActiveView}
             yearFilter={{
@@ -164,10 +157,8 @@ export default function EducationAllPage() {
             onSortChange={handleSort}
             emptyMessage={emptyMessage}
             onRowClick={(e) => setModalTarget(e)}
-            monthGroups={monthGroups}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
-            disableMonthToggle
           />
         )}
       </PageShell>

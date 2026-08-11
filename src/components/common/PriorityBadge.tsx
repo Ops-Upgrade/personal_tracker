@@ -19,7 +19,7 @@ export default function PriorityBadge({ priority }: PriorityBadgeProps) {
         className={`inline-block h-2 w-2 rounded-full ${colors.dot}`}
         aria-hidden="true"
       />
-      <span className={`text-xs font-semibold ${colors.text}`}>
+      <span className={`text-xs font-semibold ${colors.text} hidden md:inline`}>
         {priority[0].toUpperCase() + priority.slice(1)}
       </span>
     </span>

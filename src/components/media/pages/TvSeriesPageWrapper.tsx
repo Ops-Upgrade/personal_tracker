@@ -407,7 +407,7 @@ export default function TvSeriesPageWrapper({
                           </div>
                         </div>
                       </div>
-                      <div className="absolute top-0 left-0 right-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl transition-all duration-300 group-hover:shadow-xl group-hover:border-violet-300 dark:group-hover:border-violet-700 overflow-hidden flex flex-col">
+                      <div className="relative md:absolute top-0 left-0 right-0 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl transition-all duration-300 group-hover:shadow-xl group-hover:border-violet-300 dark:group-hover:border-violet-700 overflow-hidden flex flex-col">
                         <div className="w-full aspect-video relative shrink-0 bg-zinc-100 dark:bg-zinc-800">
                           {stillUrl ? (
                             <Image

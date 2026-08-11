@@ -72,15 +72,15 @@ export default function SortableHeader<Column extends string = string>({
 
   // ── <button> / <div> branch: apply flex layout directly ──
   const className = [
-    `inline-flex items-center gap-0.5 ${sharedTextClasses}`,
+    `flex items-center min-w-0 gap-0.5 ${sharedTextClasses}`,
     extraClassName,
   ]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <Component onClick={handleClick} className={className}>
-      {label}
+    <Component onClick={handleClick} className={className} title={label}>
+      <span className="truncate">{label}</span>
       {icon}
     </Component>
   );

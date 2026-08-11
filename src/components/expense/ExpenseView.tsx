@@ -27,7 +27,7 @@ import { trunc } from "@/lib/viewHelpers";
 
 function formatShortDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }
 
 /** SVG icon symbols for the expense view toggle */
@@ -108,7 +108,8 @@ export default function ExpenseView() {
       {
         key: "item",
         header: "Item",
-        colSpan: 3,
+        colSpan: 2,
+        mobileBehavior: "truncate",
         render: (exp) => (
           <span className="font-medium text-zinc-800 dark:text-zinc-100">
             {trunc(exp.item, 24) || "—"}
@@ -119,6 +120,7 @@ export default function ExpenseView() {
         key: "seller",
         header: "Seller",
         colSpan: 2,
+        mobileBehavior: "truncate",
         render: (exp) => (
           <span className="text-zinc-600 dark:text-zinc-300">
             {trunc(exp.seller, 20) || "—"}
@@ -129,6 +131,7 @@ export default function ExpenseView() {
         key: "cost",
         header: "Cost",
         colSpan: 2,
+        mobileBehavior: "fixed",
         render: (exp) => (
           <span className="text-zinc-700 dark:text-zinc-200">
             ₹ {exp.cost.toLocaleString("en-IN")}
@@ -139,6 +142,7 @@ export default function ExpenseView() {
         key: "date",
         header: "Date",
         colSpan: 2,
+        mobileBehavior: "fixed",
         render: (exp) => (
           <span className="text-zinc-600 dark:text-zinc-300">
             {formatShortDate(exp.date)}
@@ -149,6 +153,7 @@ export default function ExpenseView() {
         key: "reason",
         header: "Reason",
         colSpan: 2,
+        mobileBehavior: "truncate",
         render: (exp) => (
           <span className="text-zinc-500 dark:text-zinc-400">
             {trunc(exp.reason, 20) || "—"}
@@ -158,7 +163,8 @@ export default function ExpenseView() {
       {
         key: "files",
         header: "Files",
-        colSpan: 1,
+        colSpan: 2,
+        mobileBehavior: "fixed",
         render: (exp) => {
           const count = exp.document_ids?.length ?? 0;
           return count > 0 ? (
@@ -283,19 +289,16 @@ export default function ExpenseView() {
               />
             </div>
           </header>
-          <div className={`${SCROLLABLE_CLASSES} flex flex-col md:flex-row gap-4 items-start`}>
-            {/* Left Column (or Single Column) */}
-            <div className="flex-1 flex flex-col gap-4 w-full">
-              {expensesByMonth
-                .filter((_, i) => viewMode === "multi" ? i % 2 === 0 : true)
-                .map(({ monthName, monthIndex, expenses: monthExpenses }) => {
-                  const isCurrentMonth =
-                    istParsed !== null &&
-                    selectedYear === istParsed.year &&
-                    monthIndex === istParsed.month;
-                  return (
+          <div className={`${SCROLLABLE_CLASSES} ${viewMode === "multi" ? "columns-1 md:columns-2 gap-4 space-y-4" : "flex flex-col gap-4"}`}>
+            {expensesByMonth
+              .map(({ monthName, monthIndex, expenses: monthExpenses }) => {
+                const isCurrentMonth =
+                  istParsed !== null &&
+                  selectedYear === istParsed.year &&
+                  monthIndex === istParsed.month;
+                return (
+                  <div key={monthName} className={viewMode === "multi" ? "break-inside-avoid inline-block w-full mb-4" : ""}>
                     <GenericMonthRow
-                      key={monthName}
                       monthName={monthName}
                       monthIndex={monthIndex}
                       year={selectedYear}
@@ -313,44 +316,9 @@ export default function ExpenseView() {
                       onRowClick={(expense) => openEdit(expense)}
                       viewAllHref={`${ROUTES.EXPENSE_ALL}?year=${selectedYear}&month=${monthIndex}`}
                     />
-                  );
-                })}
-            </div>
-
-            {/* Right Column (only visible in multi view) */}
-            {viewMode === "multi" && (
-              <div className="flex-1 flex-col gap-4 w-full hidden md:flex">
-                {expensesByMonth
-                  .filter((_, i) => i % 2 !== 0)
-                  .map(({ monthName, monthIndex, expenses: monthExpenses }) => {
-                    const isCurrentMonth =
-                      istParsed !== null &&
-                      selectedYear === istParsed.year &&
-                      monthIndex === istParsed.month;
-                    return (
-                      <GenericMonthRow
-                        key={monthName}
-                        monthName={monthName}
-                        monthIndex={monthIndex}
-                        year={selectedYear}
-                        items={monthExpenses}
-                        isCurrentMonth={isCurrentMonth}
-                        getDate={(expense) => expense.date}
-                        getSubtitle={(items) => {
-                          const total = items.reduce((sum, e) => sum + e.cost, 0);
-                          const count = items.length;
-                          return <>Total Expense: ₹ {total.toLocaleString("en-IN")} · {count} item{count !== 1 ? "s" : ""}</>;
-                        }}
-                        columns={expenseColumns}
-                        getItemKey={(expense) => expense.id}
-                        previewCount={5}
-                        onRowClick={(expense) => openEdit(expense)}
-                        viewAllHref={`${ROUTES.EXPENSE_ALL}?year=${selectedYear}&month=${monthIndex}`}
-                      />
-                    );
-                  })}
-              </div>
-            )}
+                  </div>
+                );
+              })}
           </div>
         </BoxContainer>
       )}

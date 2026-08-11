@@ -49,22 +49,15 @@ export type UnifiedNoteRecord =
   | { type: "note"; id: string; data: Note; attachedDocs: Document[]; dateStr: string }
   | { type: "file"; id: string; data: Document; dateStr: string };
 
-/**
- * Merge notes and standalone (unlinked) documents into a single chronologically
- * sorted array so both appear in the same list on the Task Manager dashboard
- * and the "View All Notes" page.
- */
+/** Merge actual notes (only), sorted chronologically. */
 export function getUnifiedNotes(notes: Note[], documents: Document[]): UnifiedNoteRecord[] {
   const docsByNoteId = new Map<string, Document[]>();
-  const standaloneDocs: Document[] = [];
 
   for (const doc of documents) {
     if (doc.domain !== "taskmanager") continue;
     if (doc.linked_id) {
       if (!docsByNoteId.has(doc.linked_id)) docsByNoteId.set(doc.linked_id, []);
       docsByNoteId.get(doc.linked_id)!.push(doc);
-    } else {
-      standaloneDocs.push(doc);
     }
   }
 
@@ -77,15 +70,6 @@ export function getUnifiedNotes(notes: Note[], documents: Document[]): UnifiedNo
       data: note,
       attachedDocs: docsByNoteId.get(note.id) ?? [],
       dateStr: note.created_at,
-    });
-  }
-
-  for (const doc of standaloneDocs) {
-    unified.push({
-      type: "file",
-      id: `file-${doc.id}`,
-      data: doc,
-      dateStr: doc.created_at,
     });
   }
 

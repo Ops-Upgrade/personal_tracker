@@ -41,8 +41,6 @@ export interface GenericMonthsListProps<T> {
   rowAction?: (item: T) => ReactNode;
   /** Per-row CSS class modifier (e.g. priority-colored left border). */
   getItemClassName?: (item: T) => string;
-  /** When true, hides column headers on mobile screens (full mode only). */
-  hideHeaderOnMobile?: boolean;
 }
 
 /**
@@ -124,7 +122,6 @@ export default function GenericMonthsList<T>({
                   onRowClick={onRowClick}
                   rowAction={rowAction}
                   getItemClassName={getItemClassName}
-                  hideHeaderOnMobile
                 />
               )}
             </MonthTile>

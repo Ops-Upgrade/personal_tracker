@@ -8,11 +8,9 @@ import type { Task } from "@/types/taskmanager";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import type { MonthGroup } from "@/components/common/GenericViewPage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTaskActions } from "@/hooks/useTaskActions";
-import { byDueMonth } from "@/lib/viewHelpers";
 import { TASK_COLUMNS, SORT_CONFIGS } from "@/components/taskmanager/config";
 import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 
@@ -117,11 +115,6 @@ export default function TaskManagerAllPage() {
     [tasksForYear, selectedMonth],
   );
 
-  const monthGroups: MonthGroup<Task>[] = useMemo(
-    () => byDueMonth(tasksForYear, selectedYear),
-    [tasksForYear, selectedYear],
-  );
-
   // ── Sort ──
 
   const { sortState, handleSort, sorted } = useTableSort(
@@ -169,7 +162,7 @@ export default function TaskManagerAllPage() {
             items={sorted}
             columns={TASK_COLUMNS}
             getItemKey={(t) => t.id}
-            views={STANDARD_VIEWS.ALL_MONTHS}
+            views={STANDARD_VIEWS.ALL_ONLY}
             activeView={activeView}
             onViewChange={setActiveView}
             yearFilter={{
@@ -202,10 +195,8 @@ export default function TaskManagerAllPage() {
             onSortChange={handleSort}
             emptyMessage={emptyMessage}
             onRowClick={(t) => setModalTarget(t)}
-            monthGroups={monthGroups}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
-            disableMonthToggle
           />
         )}
       </PageShell>

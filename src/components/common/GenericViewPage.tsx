@@ -57,6 +57,12 @@ export interface ColumnDef<T, C extends string = string> {
   sortColumn?: C;
   /** Render the cell contents for a given item. */
   render: (item: T) => ReactNode;
+  /** Controls responsive truncation on mobile.
+   *  `"truncate"` collapses the column with `text-overflow: ellipsis`.
+   *  `"fixed"` prevents shrinking so badges, dates, and action buttons stay legible. */
+  mobileBehavior?: "truncate" | "fixed";
+  /** Horizontal alignment of the column content. Defaults to left. */
+  align?: "left" | "center" | "right";
 }
 
 /** A group of items keyed by a month label (e.g. "August 2026"). */

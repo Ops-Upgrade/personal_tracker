@@ -9,7 +9,7 @@ import type { ColumnDef } from "@/components/common/GenericViewPage";
 import PriorityBadge from "@/components/common/PriorityBadge";
 import Button from "@/components/common/Button";
 import { ROUTES } from "@/routes/paths";
-import { getPriorityColor, trunc } from "./helpers";
+import { formatShortDate, getPriorityColor, trunc } from "./helpers";
 
 const TASK_VIEW_OPTIONS: readonly ViewToggleOption<TaskView>[] = [
   { value: "months", label: "Months" },
@@ -28,10 +28,6 @@ interface ActiveTasksBoxProps {
   onMarkComplete: (task: Task) => void;
 }
 
-function dueDisplay(dueDate: string | null): string {
-  return dueDate ?? "-";
-}
-
 export default function ActiveTasksBox({
   tasks,
   isLoading,
@@ -46,49 +42,70 @@ export default function ActiveTasksBox({
   // ── Column definitions (view-dependent for priority/due-date column) ──
 
   const taskColumns: ColumnDef<Task>[] = useMemo(
-    () => [
-      {
-        key: "name",
-        header: "Task Name",
-        colSpan: 4,
-        render: (task) => (
-          <span className="font-semibold text-zinc-800 dark:text-zinc-100">
-            {trunc(task.name, 34)}
-          </span>
-        ),
-      },
-      {
-        key: view === "priority" ? "due_date" : "priority",
-        header: view === "priority" ? "Due Date" : "Priority",
-        colSpan: 2,
-        render: (task) =>
-          view === "priority" ? (
-            <span className="text-zinc-600 dark:text-zinc-300">
-              {dueDisplay(task.due_date)}
+    () => {
+      const isPriorityView = view === "priority";
+      const cols: ColumnDef<Task>[] = [
+        {
+          key: "name",
+          header: "Task Name",
+          colSpan: 3,
+          mobileBehavior: "truncate",
+          render: (task) => (
+            <span className="font-semibold text-zinc-800 dark:text-zinc-100">
+              {trunc(task.name, 34)}
             </span>
-          ) : (
-            <PriorityBadge priority={task.priority} />
           ),
-      },
-      {
-        key: "mode",
-        header: "Mode",
-        colSpan: 2,
+        },
+      ];
+
+      if (!isPriorityView) {
+        cols.push({
+          key: "priority",
+          header: "Priority",
+          colSpan: 2,
+          mobileBehavior: "fixed",
+          align: "center",
+          render: (task) => <PriorityBadge priority={task.priority} />,
+        });
+      }
+
+      cols.push({
+        key: "due_date",
+        header: "Due Date",
+        colSpan: isPriorityView ? 4 : 3,
+        mobileBehavior: "fixed",
         render: (task) => (
-          <span className="text-zinc-600 dark:text-zinc-300">{task.mode}</span>
-        ),
-      },
-      {
-        key: "description",
-        header: "Description",
-        colSpan: 4,
-        render: (task) => (
-          <span className="text-zinc-700 dark:text-zinc-200">
-            {trunc(task.description, 38)}
+          <span className="text-zinc-600 dark:text-zinc-300">
+            {formatShortDate(task.due_date)}
           </span>
         ),
-      },
-    ],
+      });
+
+      cols.push(
+        {
+          key: "mode",
+          header: "Mode",
+          colSpan: 2,
+          mobileBehavior: "truncate",
+          render: (task) => (
+            <span className="text-zinc-600 dark:text-zinc-300">{task.mode}</span>
+          ),
+        },
+        {
+          key: "description",
+          header: "Description",
+          colSpan: isPriorityView ? 3 : 2,
+          mobileBehavior: "truncate",
+          render: (task) => (
+            <span className="text-zinc-700 dark:text-zinc-200">
+              {trunc(task.description, 38)}
+            </span>
+          ),
+        },
+      );
+
+      return cols;
+    },
     [view],
   );
 

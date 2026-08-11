@@ -24,12 +24,12 @@ export default function CompletedTasksBox({
   const sorted = [...tasks].sort(sortByCompletedDesc);
 
   const listHeader = (
-    <div className="grid grid-cols-12 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-      <div className="col-span-4">Name</div>
-      <div className="col-span-2">Priority</div>
+    <div className="grid grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
+      <div className="col-span-2 min-w-0 truncate">Name</div>
+      <div className="col-span-2 text-center">Priority</div>
       <div className="col-span-2">Mode</div>
       <div className="col-span-2">Date</div>
-      <div className="col-span-2 text-right">Actions</div>
+      <div className="col-span-4 text-right">Actions</div>
     </div>
   );
 
@@ -49,19 +49,19 @@ export default function CompletedTasksBox({
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectTask(task); } }}
             className="grid grid-cols-12 items-center gap-2 w-full rounded-md border border-zinc-200 px-2 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100 cursor-pointer dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            <span className="col-span-4 font-semibold text-zinc-800 dark:text-zinc-100 truncate">
+            <span className="col-span-2 min-w-0 truncate font-semibold text-zinc-800 dark:text-zinc-100">
               {trunc(task.name, 44)}
             </span>
-            <div className="col-span-2 flex items-center">
+            <div className="col-span-2 flex items-center justify-center">
               <PriorityBadge priority={task.priority} />
             </div>
-            <span className="col-span-2 text-xs capitalize text-zinc-500 dark:text-zinc-400 flex items-center">
+            <span className="col-span-2 text-xs capitalize text-zinc-500 dark:text-zinc-400 flex items-center min-w-0 truncate">
               {task.mode}
             </span>
-            <span className="col-span-2 text-zinc-600 dark:text-zinc-300 flex items-center">
+            <span className="col-span-2 min-w-0 truncate text-zinc-600 dark:text-zinc-300">
               {formatShortDate(task.completed_at)}
             </span>
-            <div className="col-span-2 flex justify-end items-center">
+            <div className="col-span-4 flex justify-end items-center">
               <Button
                 variant="danger"
                 size="sm"

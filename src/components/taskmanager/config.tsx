@@ -30,11 +30,7 @@ export const SORT_CONFIGS = [
 export function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }
 
 // ── Column definitions for the "all" view ──
@@ -43,8 +39,9 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
   {
     key: "name",
     header: "Task Name",
-    colSpan: 3,
+    colSpan: 2,
     sortColumn: "name",
+    mobileBehavior: "truncate",
     render: (t) => (
       <span className="font-medium text-zinc-800 dark:text-zinc-100">
         {trunc(t.name, 24) || "—"}
@@ -56,6 +53,8 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
     header: "Priority",
     colSpan: 2,
     sortColumn: "priority",
+    mobileBehavior: "fixed",
+    align: "center",
     render: (t) => <PriorityBadge priority={t.priority} />,
   },
   {
@@ -63,6 +62,7 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
     header: "Due Date",
     colSpan: 2,
     sortColumn: "due_date",
+    mobileBehavior: "fixed",
     render: (t) => (
       <span className="text-zinc-600 dark:text-zinc-300">
         {formatDate(t.due_date)}
@@ -72,8 +72,9 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
   {
     key: "mode",
     header: "Mode",
-    colSpan: 1,
+    colSpan: 2,
     sortColumn: "mode",
+    mobileBehavior: "truncate",
     render: (t) => (
       <span className="text-zinc-600 dark:text-zinc-300">{t.mode}</span>
     ),
@@ -83,6 +84,7 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
     header: "Description",
     colSpan: 2,
     sortColumn: "description",
+    mobileBehavior: "truncate",
     render: (t) => (
       <span className="text-zinc-500 dark:text-zinc-400">
         {trunc(t.description, 28) || "—"}
@@ -94,13 +96,14 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
     header: "Status",
     colSpan: 2,
     sortColumn: "is_completed",
+    mobileBehavior: "fixed",
     render: (t) => (
       <span
-        className={
+        className={`text-[10px] sm:text-xs ${
           t.is_completed
             ? "text-emerald-600 dark:text-emerald-400"
             : "text-amber-600 dark:text-amber-400"
-        }
+        }`}
       >
         {t.is_completed ? "Completed" : "Active"}
       </span>
