@@ -146,7 +146,7 @@ export default function ActiveTasksBox({
       viewOptions={TASK_VIEW_OPTIONS}
       priorities={PRIORITIES}
       getPriorityColor={(p) => getPriorityColor(p as typeof PRIORITIES[number])}
-      renderPriorityBadge={(p) => <PriorityBadge priority={p as typeof PRIORITIES[number]} />}
+      renderPriorityBadge={(p) => <PriorityBadge priority={p as typeof PRIORITIES[number]} showTextOnMobile />}
       columns={taskColumns}
       onRowClick={onSelectTask}
       rowAction={rowAction}

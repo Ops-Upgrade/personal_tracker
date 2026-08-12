@@ -186,7 +186,7 @@ export default function ActiveEducationsBox({
       viewOptions={EDUCATION_VIEW_OPTIONS}
       priorities={PRIORITIES}
       getPriorityColor={(p) => getPriorityColor(p as "low" | "medium" | "high" | "critical")}
-      renderPriorityBadge={(p) => <PriorityBadge priority={p as "low" | "medium" | "high" | "critical"} />}
+      renderPriorityBadge={(p) => <PriorityBadge priority={p as "low" | "medium" | "high" | "critical"} showTextOnMobile />}
       columns={educationColumns}
       onRowClick={onSelectEducation}
       rowAction={rowAction}
