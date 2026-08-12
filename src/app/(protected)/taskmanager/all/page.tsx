@@ -5,13 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTaskData } from "@/hooks/useTaskData";
 import { ROUTES } from "@/routes/paths";
 import type { Task } from "@/types/taskmanager";
+import { PRIORITIES } from "@/types/common";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
+import GenericViewPage, { STANDARD_VIEWS, type PriorityGroup } from "@/components/common/GenericViewPage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useTaskActions } from "@/hooks/useTaskActions";
 import { TASK_COLUMNS, SORT_CONFIGS } from "@/components/taskmanager/config";
+import { byPriority } from "@/components/taskmanager/helpers";
 import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 
 const TASK_FIELDS: FieldDef[] = [
@@ -123,6 +125,22 @@ export default function TaskManagerAllPage() {
     SORT_CONFIGS,
   );
 
+  // ── Priority grouping (whole year, ignores month filter) ──
+
+  const priorityGroups: PriorityGroup<Task>[] = useMemo(() => {
+    const groupsRecord = byPriority(tasksForYear);
+    return PRIORITIES.map((p) => ({
+      priority: p,
+      items: groupsRecord[p] ?? [],
+    })).filter((g) => g.items.length > 0);
+  }, [tasksForYear]);
+
+  // Priority view groups by priority already, so drop the redundant column.
+  const priorityViewColumns = useMemo(
+    () => TASK_COLUMNS.filter((c) => c.key !== "priority"),
+    []
+  );
+
   // ── Modal state ──
 
   const [modalTarget, setModalTarget] = useState<Task | null>(null);
@@ -162,7 +180,7 @@ export default function TaskManagerAllPage() {
             items={sorted}
             columns={TASK_COLUMNS}
             getItemKey={(t) => t.id}
-            views={STANDARD_VIEWS.ALL_ONLY}
+            views={STANDARD_VIEWS.ALL_PRIORITY}
             activeView={activeView}
             onViewChange={setActiveView}
             yearFilter={{
@@ -177,7 +195,7 @@ export default function TaskManagerAllPage() {
                 );
               },
             }}
-            monthFilter={{
+            monthFilter={activeView === "all" ? {
               months: availableMonths,
               selectedMonth,
               onChange: (month) => {
@@ -190,13 +208,15 @@ export default function TaskManagerAllPage() {
                   { scroll: false },
                 );
               },
-            }}
+            } : undefined}
             sortState={sortState}
             onSortChange={handleSort}
             emptyMessage={emptyMessage}
             onRowClick={(t) => setModalTarget(t)}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
+            priorityGroups={priorityGroups}
+            priorityColumns={priorityViewColumns}
           />
         )}
       </PageShell>
