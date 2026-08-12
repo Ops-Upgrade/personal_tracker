@@ -134,7 +134,6 @@ src/
 │   │   ├── EducationView.tsx   # Main controller for education page
 │   │   ├── ActiveEducationsBox.tsx
 │   │   ├── CompletedEducationsBox.tsx
-│   │   ├── CompletedEducationsModal.tsx
 │   │   └── helpers.ts
 │   ├── medical/                # Medical Records feature components
 │   │   └── MedicalView.tsx     # Main controller for medical records
@@ -154,7 +153,6 @@ src/
 │       ├── MediaView.tsx       # Main orchestrator (tabs, data, CRUD)
 │       ├── CollectionFilterBar.tsx # Filter bar for DefaultView
 │       ├── CollectionModal.tsx # Create/rename/delete collection + color picker
-│       ├── MediaStatusSection.tsx # One BoxContainer per status group
 │       ├── MediaGrid.tsx       # CSS grid for media posters
 │       ├── MediaCard.tsx       # Poster, title, quick status/rating controls
 │       ├── TmdbAttribution.tsx # TMDB ToS attribution footer

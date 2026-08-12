@@ -8,7 +8,7 @@ import type { MedicalRecord } from "@/types/medical";
 
 // --- Column type ---
 
-type SortColumn = "name" | "clinic" | "date";
+type SortColumn = "name" | "clinic" | "date" | "diagnosis";
 
 // --- Sort configs ---
 
@@ -16,6 +16,7 @@ const SORT_CONFIGS: SortConfig<SortColumn, MedicalRecord>[] = [
   { column: "name", extractor: (rec) => rec.name.toLowerCase() },
   { column: "clinic", extractor: (rec) => (rec.clinic ?? "").toLowerCase() },
   { column: "date", extractor: (rec) => new Date(rec.date + "T00:00:00").getTime() },
+  { column: "diagnosis", extractor: (rec) => (rec.diagnosis_timeline ?? "").toLowerCase() },
 ];
 
 // --- Main Component ---
@@ -62,6 +63,7 @@ export default function MedicalTable({
                 <th className="pb-2 pr-3 font-medium">Name</th>
                 <th className="pb-2 pr-3 font-medium">Clinic</th>
                 <th className="pb-2 pr-3 font-medium">Date</th>
+                <th className="pb-2 pr-3 font-medium">Diagnosis</th>
                 <th className="pb-2 font-medium text-center">Files</th>
               </>
             ) : (
@@ -90,6 +92,14 @@ export default function MedicalTable({
                   onSort={handleSort}
                   className="pb-2 pr-3 font-medium"
                 />
+                <SortableHeader
+                  as="th"
+                  column="diagnosis"
+                  label="Diagnosis"
+                  sortState={sortState}
+                  onSort={handleSort}
+                  className="pb-2 pr-3 font-medium"
+                />
                 <th className="pb-2 font-medium text-center">Files</th>
               </>
             )}
@@ -108,8 +118,11 @@ export default function MedicalTable({
               <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-300">
                 {trunc(record.clinic, 20) || "—"}
               </td>
-              <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-300">
+              <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
                 {formatDate(record.date)}
+              </td>
+              <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400 truncate max-w-[120px]">
+                {trunc(record.diagnosis_timeline, 28) || "—"}
               </td>
               <td className="py-2 text-center">
                 {(record.document_ids && record.document_ids.length > 0) ? (
@@ -131,9 +144,5 @@ export default function MedicalTable({
 
 function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }

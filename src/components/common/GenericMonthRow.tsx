@@ -105,7 +105,6 @@ export default function GenericMonthRow<T>({
           onRowClick={onRowClick}
           rowAction={rowAction}
           getItemClassName={getItemClassName}
-          hideHeaderOnMobile
         />
       )}
     </MonthTile>

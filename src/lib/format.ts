@@ -18,5 +18,6 @@ export function formatBytes(bytes: number): string {
  */
 export function formatShortDate(value: string | null): string {
   if (!value) return "-";
-  return new Date(value).toLocaleDateString();
+  const d = new Date(value);
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }

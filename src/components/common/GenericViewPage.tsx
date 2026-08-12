@@ -32,6 +32,11 @@ export const STANDARD_VIEWS = {
   ALL_ONLY: [
     { value: "all", label: "All" },
   ] as ViewToggleOption<string>[],
+  /** Flat list + priority-grouped views. */
+  ALL_PRIORITY: [
+    { value: "all", label: "Month" },
+    { value: "priority", label: "Priority" },
+  ] as ViewToggleOption<string>[],
   /** Flat list + month-grouped views (no priority). */
   ALL_MONTHS: [
     { value: "all", label: "All" },
@@ -57,6 +62,12 @@ export interface ColumnDef<T, C extends string = string> {
   sortColumn?: C;
   /** Render the cell contents for a given item. */
   render: (item: T) => ReactNode;
+  /** Controls responsive truncation on mobile.
+   *  `"truncate"` collapses the column with `text-overflow: ellipsis`.
+   *  `"fixed"` prevents shrinking so badges, dates, and action buttons stay legible. */
+  mobileBehavior?: "truncate" | "fixed";
+  /** Horizontal alignment of the column content. Defaults to left. */
+  align?: "left" | "center" | "right";
 }
 
 /** A group of items keyed by a month label (e.g. "August 2026"). */
@@ -174,7 +185,7 @@ interface GenericViewPageProps<T, C extends string = string> {
 const DEFAULT_PRIORITY_CONFIG: PriorityGroupConfig = {
   priorities: PRIORITIES as unknown as readonly string[],
   getColors: (p) => getPriorityColor(p as Priority),
-  renderBadge: (p) => <PriorityBadge priority={p as Priority} />,
+  renderBadge: (p) => <PriorityBadge priority={p as Priority} showTextOnMobile />,
 };
 
 // ── Component ──
@@ -223,6 +234,7 @@ export default function GenericViewPage<T, C extends string = string>({
                 onChange={onViewChange}
                 options={views}
                 ariaLabel="View toggle"
+                hideContainerOnMobile={false}
               />
             )}
           </div>

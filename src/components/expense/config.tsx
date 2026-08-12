@@ -32,11 +32,7 @@ export const SORT_CONFIGS = [
 
 export function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }
 
 // ── Column definitions for the "all" view ──
@@ -45,8 +41,9 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
   {
     key: "item",
     header: "Item",
-    colSpan: 3,
+    colSpan: 2,
     sortColumn: "item",
+    mobileBehavior: "truncate",
     render: (exp) => (
       <span className="font-medium text-zinc-800 dark:text-zinc-100">
         {trunc(exp.item, 24) || "—"}
@@ -58,6 +55,7 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
     header: "Seller",
     colSpan: 2,
     sortColumn: "seller",
+    mobileBehavior: "truncate",
     render: (exp) => (
       <span className="text-zinc-600 dark:text-zinc-300">
         {trunc(exp.seller, 20) || "—"}
@@ -69,6 +67,8 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
     header: "Cost",
     colSpan: 2,
     sortColumn: "cost",
+    mobileBehavior: "fixed",
+    align: "right",
     render: (exp) => (
       <span className="text-zinc-700 dark:text-zinc-200">
         ₹ {exp.cost.toLocaleString("en-IN")}
@@ -80,6 +80,7 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
     header: "Date",
     colSpan: 2,
     sortColumn: "date",
+    mobileBehavior: "fixed",
     render: (exp) => (
       <span className="text-zinc-600 dark:text-zinc-300">
         {formatDate(exp.date)}
@@ -91,6 +92,7 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
     header: "Reason",
     colSpan: 2,
     sortColumn: "reason",
+    mobileBehavior: "truncate",
     render: (exp) => (
       <span className="text-zinc-500 dark:text-zinc-400">
         {trunc(exp.reason, 20) || "—"}
@@ -100,7 +102,8 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
   {
     key: "files",
     header: "Files",
-    colSpan: 1,
+    colSpan: 2,
+    mobileBehavior: "fixed",
     render: (exp) => {
       const count = exp.document_ids?.length ?? 0;
       return count > 0 ? (

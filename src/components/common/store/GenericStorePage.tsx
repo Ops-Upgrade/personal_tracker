@@ -23,7 +23,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { LinkSlashIcon } from "@/components/common/Icons";
+import { LinkSlashIcon, PaperClipIcon } from "@/components/common/Icons";
 import BackButton from "@/components/common/BackButton";
 import BoxContainer from "@/components/common/BoxContainer";
 import BulkActionBar from "@/components/common/BulkActionBar";
@@ -38,6 +38,7 @@ import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import GenericDomainModal, { type StoreParentRecord } from "@/components/common/GenericDomainModal";
 import BulkLinkModal from "./BulkLinkModal";
 import { getUniqueFileName } from "@/lib/viewHelpers";
+import { useLocalStorage } from "@/lib/useLocalStorage";
 import { getSession } from "@/api/auth";
 import {
   createDocument,
@@ -256,10 +257,13 @@ function InlineSecretValue({ value, isSecret, isCopyable = true }: { value: stri
       className="group/val flex flex-1 min-w-0 items-center gap-1 rounded px-1 py-2 -mx-1 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors cursor-text"
       onClick={(e) => e.stopPropagation()}
     >
-      <span className="text-base text-zinc-700 dark:text-zinc-300 font-mono overflow-x-auto whitespace-nowrap flex-1 min-w-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+      <span
+        className="text-base text-zinc-700 dark:text-zinc-300 font-mono truncate flex-1 min-w-0"
+        title={isSecret && !revealed ? undefined : value}
+      >
         {isSecret && !revealed ? "••••••••" : value}
       </span>
-      <div className="flex items-center gap-1 opacity-0 group-hover/val:opacity-100 focus-within:opacity-100 transition-opacity">
+      <div className="flex shrink-0 items-center gap-1 opacity-100 md:opacity-0 md:group-hover/val:opacity-100 focus-within:opacity-100 transition-opacity">
         {isSecret && (
           <button
             type="button"
@@ -343,8 +347,8 @@ function DataListView({
   return (
     <>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex flex-row items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="order-1 flex flex-row items-center gap-3">
           <ViewToggle
             value={viewMode}
             onChange={onViewModeChange}
@@ -362,29 +366,29 @@ function DataListView({
             </button>
           )}
         </div>
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0">
-          {hasSelection && bulkActionBar ? (
-            bulkActionBar
-          ) : (
-            <>
+        {hasSelection && bulkActionBar ? (
+          <div className="order-2 sm:order-3 w-full sm:w-auto">{bulkActionBar}</div>
+        ) : (
+          <>
+            <div className="order-3 sm:order-2 w-full sm:w-auto sm:ml-auto mt-3 sm:mt-0">
               <SearchBar
                 value={searchQuery}
                 onChange={onSearchChange}
                 placeholder={searchPlaceholder}
                 className="flex-1 sm:w-64"
               />
-              {onAdd && (
-                <button
-                  onClick={onAdd}
-                  className={`cursor-pointer inline-flex items-center justify-center gap-x-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${themeBtnClassName || "bg-zinc-900 hover:bg-black dark:bg-zinc-100 dark:text-black dark:hover:bg-white"}`}
-                >
-                  <Plus className="-ml-0.5 h-4 w-4" />
-                  {addLabel}
-                </button>
-              )}
-            </>
-          )}
-        </div>
+            </div>
+            {onAdd && (
+              <button
+                onClick={onAdd}
+                className={`order-2 sm:order-3 cursor-pointer inline-flex items-center justify-center gap-x-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${themeBtnClassName || "bg-zinc-900 hover:bg-black dark:bg-zinc-100 dark:text-black dark:hover:bg-white"}`}
+              >
+                <Plus className="-ml-0.5 h-4 w-4" />
+                {addLabel}
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       {/* Content */}
@@ -865,7 +869,7 @@ function GenericDocStore<T extends { id: string }>({
 
   // --- Search / view state ---
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"tiles" | "list">("tiles");
+  const [viewMode, setViewMode] = useLocalStorage<"tiles" | "list">("store_view_" + domain, "tiles");
 
   const filteredDocs = useMemo(() => {
     if (!searchQuery) return documentTiles;
@@ -900,10 +904,10 @@ function GenericDocStore<T extends { id: string }>({
             checked={isSelected}
             onChange={(e) => { e.stopPropagation(); toggleSelection(doc.id, e.target.checked); }}
             onClick={(e) => e.stopPropagation()}
-            className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"} ${theme.inputFocus}`}
+            className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${isSelected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"} ${theme.inputFocus}`}
           />
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800">
-            {isImage ? <ImageIcon className={`h-5 w-5 ${theme.icon}`} /> : isPdf ? <FileText className="h-5 w-5 text-red-500" /> : <File className={`h-5 w-5 ${theme.icon}`} />}
+            {isImage ? <ImageIcon className={`h-5 w-5 ${theme.icon}`} /> : isPdf ? <FileText className={`h-5 w-5 ${theme.icon}`} /> : <File className={`h-5 w-5 ${theme.icon}`} />}
           </div>
           <div className="flex min-w-0 flex-1 items-center gap-2">
             {renamingId === doc.id ? (
@@ -915,7 +919,7 @@ function GenericDocStore<T extends { id: string }>({
             )}
             {renamingId !== doc.id && (
               <button onClick={(e) => { e.stopPropagation(); startRename(doc); }}
-                className={`shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.icon} ${theme.iconHover}`}>
+                className={`shrink-0 p-0.5 rounded opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.icon} ${theme.iconHover}`}>
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             )}
@@ -964,20 +968,20 @@ function GenericDocStore<T extends { id: string }>({
         className={`group relative flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm transition-all duration-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 cursor-pointer ${theme.hoverBorder} ${isRemoving ? "opacity-0 scale-95" : "opacity-100 scale-100"}`}
       >
         {/* Selection checkbox */}
-        <div className={`absolute top-2 left-2 z-10 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} onClick={(e) => e.stopPropagation()}>
+        <div className={`absolute top-2 left-2 z-10 transition-opacity ${isSelected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"}`} onClick={(e) => e.stopPropagation()}>
           <input type="checkbox" checked={isSelected} onChange={(e) => toggleSelection(doc.id, e.target.checked)}
             className={`h-4 w-4 rounded border-zinc-300 bg-white/80 dark:border-zinc-600 dark:bg-zinc-800/80 ${theme.inputFocus}`} />
         </div>
         {/* Thumbnail */}
         <div className="relative flex h-32 w-full items-center justify-center bg-zinc-50 dark:bg-zinc-800/50 border-b border-zinc-100 dark:border-zinc-800 overflow-hidden">
-          {isImage ? <ImageIcon className={`h-10 w-10 ${theme.iconLarge}`} /> : isPdf ? <FileText className="h-10 w-10 text-red-500/50" /> : <File className={`h-10 w-10 ${theme.iconLarge}`} />}
+          {isImage ? <ImageIcon className={`h-10 w-10 ${theme.iconLarge}`} /> : isPdf ? <FileText className={`h-10 w-10 ${theme.iconLarge}`} /> : <File className={`h-10 w-10 ${theme.iconLarge}`} />}
           {(doc.linkedItemName || doc.isLinked) && (
             <div className="absolute bottom-2 right-2 flex items-center justify-center rounded-full bg-white/90 p-1.5 shadow-sm backdrop-blur-sm dark:bg-zinc-900/90">
               <Link className={`h-4 w-4 ${theme.icon}`} />
             </div>
           )}
           {/* Overlay actions */}
-          <div className="absolute inset-x-0 top-0 flex items-start justify-end p-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100 bg-gradient-to-b from-black/40 to-transparent">
+          <div className="absolute inset-x-0 top-0 flex items-start justify-end p-2 opacity-100 md:opacity-0 transition-opacity duration-200 md:group-hover:opacity-100 bg-gradient-to-b from-black/40 to-transparent">
             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
               {doc.linkedItemName && wrappedOnUnlinkFromParent && (
                 <OverlayActionButton onClick={() => setDocToUnlink(doc)} title="Unlink" className="hover:bg-amber-500/80"><LinkSlashIcon className="h-4 w-4" /></OverlayActionButton>
@@ -997,7 +1001,7 @@ function GenericDocStore<T extends { id: string }>({
             <div className="flex items-center gap-1 min-w-0">
               <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100" title={doc.fileName}>{doc.fileName}</span>
               <button onClick={(e) => { e.stopPropagation(); startRename(doc); }}
-                className={`shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.icon} ${theme.iconHover}`}>
+                className={`shrink-0 p-0.5 rounded opacity-100 md:opacity-0 md:group-hover:opacity-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all ${theme.icon} ${theme.iconHover}`}>
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -1208,6 +1212,7 @@ function GenericDocStore<T extends { id: string }>({
 // ============================================================
 
 function GenericRecordStore<T extends { id: string }>({
+  storeType,
   domain = "vault",
   title,
   description,
@@ -1271,6 +1276,10 @@ function GenericRecordStore<T extends { id: string }>({
     }
   }, [userId, fetchData]);
 
+  // Selection
+  const { selectedIds, toggleSelection, selectAll, clearSelection } = useSelection();
+  const [modalRecord, setModalRecord] = useState<T | null | undefined>(undefined);
+
   // Optimistic save
   const handleSaved = useCallback((entry: T) => {
     setData((prev) => {
@@ -1278,12 +1287,17 @@ function GenericRecordStore<T extends { id: string }>({
       if (idx >= 0) { const next = [...prev]; next[idx] = entry; return next; }
       return [entry, ...prev];
     });
+    // Sync the open modal with the saved entry so its initialData refreshes and
+    // the dirty check clears — otherwise cancelling right after a save triggers
+    // a spurious "unsaved changes" prompt.
+    // Add mode (modalRecord === null): the freshly created record has no
+    // editable stale state left, so close the modal.
+    setModalRecord((prev) => {
+      if (prev === null) return undefined;
+      return prev && prev.id === entry.id ? entry : prev;
+    });
     reload();
   }, [reload]);
-
-  // Selection
-  const { selectedIds, toggleSelection, selectAll, clearSelection } = useSelection();
-  const [modalRecord, setModalRecord] = useState<T | null | undefined>(undefined);
 
   // Delete confirmation (inline, not via useDeleteConfirm to use our callbacks)
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
@@ -1336,7 +1350,7 @@ function GenericRecordStore<T extends { id: string }>({
 
   // Search / view state
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"tiles" | "list">("tiles");
+  const [viewMode, setViewMode] = useLocalStorage<"tiles" | "list">("store_view_" + (domain || storeType), "tiles");
 
   const filtered = useMemo(() => {
     if (!searchQuery) return items;
@@ -1356,30 +1370,40 @@ function GenericRecordStore<T extends { id: string }>({
         {!disableSelection && (
           <input type="checkbox" checked={isSelected} onChange={(e) => { e.stopPropagation(); toggleSelection(item.id, e.target.checked); }}
             onClick={(e) => e.stopPropagation()}
-            className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"} ${theme.inputFocus}`} />
+            className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 transition-opacity ${isSelected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"} ${theme.inputFocus}`} />
         )}
-        {tileLayout === "body-only" ? (
-          <div className="w-1/3 min-w-[120px] pt-0.5 flex items-start">
-            <div className="flex-1 min-w-0 flex items-center gap-1 rounded px-1 py-2 -mx-1 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors cursor-text" onClick={(e) => e.stopPropagation()}>
-              <span className="text-base text-zinc-700 dark:text-zinc-300 font-mono overflow-x-auto whitespace-nowrap flex-1 min-w-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">{item.title}</span>
+        {/* Name + values: stacked on mobile, side-by-side columns on desktop */}
+        <div className="flex flex-col sm:flex-row flex-1 min-w-0 items-start sm:items-center gap-4">
+          {tileLayout === "body-only" ? (
+            <div className="w-full sm:w-1/3 sm:min-w-[120px] pt-0.5 flex items-start">
+              <div className="flex-1 min-w-0 flex items-center gap-1 rounded px-1 py-2 -mx-1 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors cursor-text" onClick={(e) => e.stopPropagation()}>
+                <span className="text-base text-zinc-700 dark:text-zinc-300 font-mono overflow-x-auto whitespace-nowrap flex-1 min-w-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">{item.title}</span>
+              </div>
             </div>
+          ) : (
+            <div className="w-full sm:w-1/3 sm:min-w-[120px] font-medium text-sm text-zinc-900 dark:text-zinc-100 break-words pt-0.5">{item.title}</div>
+          )}
+          <div className="w-px hidden sm:block bg-zinc-200 dark:bg-zinc-700 self-stretch min-h-[1.5rem]" />
+          <div className="flex-1 w-full flex flex-col gap-1 min-w-0">
+            {item.values.map((v, idx) => (
+              <div key={idx} className="flex items-center gap-2 min-w-0">
+                {v.label && <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400 w-24 shrink-0">{v.label}</span>}
+                <div className="flex-1 min-w-0"><InlineSecretValue value={v.value} isSecret={v.isSecret ?? false} isCopyable={v.isCopyable} /></div>
+              </div>
+            ))}
           </div>
-        ) : (
-          <div className="w-1/3 min-w-[120px] font-medium text-sm text-zinc-900 dark:text-zinc-100 break-words pt-0.5">{item.title}</div>
-        )}
-        <div className="w-px bg-zinc-200 dark:bg-zinc-700 self-stretch min-h-[1.5rem]" />
-        <div className="flex-1 flex flex-col gap-1 min-w-0">
-          {item.values.map((v, idx) => (
-            <div key={idx} className="flex items-start gap-2">
-              {v.label && <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400 w-24 shrink-0 mt-0.5">{v.label}</span>}
-              <div className="flex-1 min-w-0"><InlineSecretValue value={v.value} isSecret={v.isSecret ?? false} isCopyable={v.isCopyable} /></div>
-            </div>
-          ))}
         </div>
-        <button onClick={(e) => { e.stopPropagation(); setItemToDelete(item.id); }}
-          className="cursor-pointer flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 opacity-0 group-hover:opacity-100 transition-all" title="Delete">
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={(e) => { e.stopPropagation(); setItemToDelete(item.id); }}
+            className="cursor-pointer flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all" title="Delete">
+            <Trash2 className="h-4 w-4" />
+          </button>
+          {item.hasFiles && (
+            <span title="Has files" className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${theme.icon}`}>
+              <PaperClipIcon className="h-4 w-4" />
+            </span>
+          )}
+        </div>
       </div>
     );
   };
@@ -1394,16 +1418,23 @@ function GenericRecordStore<T extends { id: string }>({
           <div className="flex items-center gap-2 min-w-0">
             {!disableSelection && (
               <input type="checkbox" checked={isSelected} onChange={(e) => toggleSelection(item.id, e.target.checked)} onClick={(e) => e.stopPropagation()}
-                className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 ${theme.inputFocus} transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`} />
+                className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 ${theme.inputFocus} transition-opacity ${isSelected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"}`} />
             )}
             <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100" title={tileLayout === "standard" ? item.title : undefined}>
               {tileLayout === "standard" ? item.title : " "}
             </span>
           </div>
-          <button onClick={(e) => { e.stopPropagation(); setItemToDelete(item.id); }}
-            className="cursor-pointer flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/60 text-zinc-700 backdrop-blur-sm transition-all hover:bg-red-500/80 hover:text-white dark:bg-black/40 dark:text-zinc-300 opacity-0 group-hover:opacity-100" title="Delete">
-            <Trash2 className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={(e) => { e.stopPropagation(); setItemToDelete(item.id); }}
+              className="cursor-pointer flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/60 text-zinc-700 backdrop-blur-sm transition-all hover:bg-red-500/80 hover:text-white dark:bg-black/40 dark:text-zinc-300 opacity-100 md:opacity-0 md:group-hover:opacity-100" title="Delete">
+              <Trash2 className="h-4 w-4" />
+            </button>
+            {item.hasFiles && (
+              <span title="Has files" className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${theme.icon}`}>
+                <PaperClipIcon className="h-4 w-4" />
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex flex-col flex-1 p-3 gap-2 justify-end overflow-hidden">
           {tileLayout === "body-only" && (
@@ -1414,7 +1445,7 @@ function GenericRecordStore<T extends { id: string }>({
             </div>
           )}
           {item.values.map((v, idx) => (
-            <div key={idx} className="flex flex-col overflow-hidden">
+            <div key={idx} className="flex min-w-0 flex-col overflow-hidden">
               {v.label && <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-400 dark:text-zinc-500 px-1">{v.label}</span>}
               <InlineSecretValue value={v.value} isSecret={v.isSecret ?? false} isCopyable={v.isCopyable} />
             </div>

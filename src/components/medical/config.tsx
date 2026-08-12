@@ -19,11 +19,7 @@ export const SORT_CONFIGS = [
 
 export function formatDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }
 
 // ── Column definitions for the "all" view ──
@@ -34,6 +30,7 @@ export const MEDICAL_COLUMNS: ColumnDef<MedicalRecord, SortColumn>[] = [
     header: "Name",
     colSpan: 3,
     sortColumn: "name",
+    mobileBehavior: "truncate",
     render: (rec) => (
       <span className="font-medium text-zinc-800 dark:text-zinc-100">
         {trunc(rec.name, 24) || "—"}
@@ -45,6 +42,7 @@ export const MEDICAL_COLUMNS: ColumnDef<MedicalRecord, SortColumn>[] = [
     header: "Clinic",
     colSpan: 2,
     sortColumn: "clinic",
+    mobileBehavior: "truncate",
     render: (rec) => (
       <span className="text-zinc-600 dark:text-zinc-300">
         {trunc(rec.clinic, 20) || "—"}
@@ -54,8 +52,9 @@ export const MEDICAL_COLUMNS: ColumnDef<MedicalRecord, SortColumn>[] = [
   {
     key: "date",
     header: "Date",
-    colSpan: 2,
+    colSpan: 3,
     sortColumn: "date",
+    mobileBehavior: "fixed",
     render: (rec) => (
       <span className="text-zinc-600 dark:text-zinc-300">
         {formatDate(rec.date)}
@@ -65,7 +64,8 @@ export const MEDICAL_COLUMNS: ColumnDef<MedicalRecord, SortColumn>[] = [
   {
     key: "diagnosis",
     header: "Diagnosis",
-    colSpan: 3,
+    colSpan: 2,
+    mobileBehavior: "truncate",
     render: (rec) => (
       <span className="text-zinc-500 dark:text-zinc-400">
         {trunc(rec.diagnosis_timeline, 28) || "—"}
@@ -76,6 +76,7 @@ export const MEDICAL_COLUMNS: ColumnDef<MedicalRecord, SortColumn>[] = [
     key: "files",
     header: "Files",
     colSpan: 2,
+    mobileBehavior: "fixed",
     render: (rec) => {
       const count = rec.document_ids?.length ?? 0;
       return count > 0 ? (

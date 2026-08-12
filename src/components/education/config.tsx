@@ -48,11 +48,7 @@ export const SORT_CONFIGS = [
 export function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }
 
 // ── Column definitions for the "all" view ──
@@ -61,8 +57,9 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
   {
     key: "name",
     header: "Program Name",
-    colSpan: 3,
+    colSpan: 2,
     sortColumn: "name",
+    mobileBehavior: "truncate",
     render: (e) => (
       <span className="font-medium text-zinc-800 dark:text-zinc-100">
         {trunc(e.name, 24) || "—"}
@@ -74,6 +71,7 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
     header: "Provider",
     colSpan: 2,
     sortColumn: "provider",
+    mobileBehavior: "truncate",
     render: (e) => (
       <span className="text-zinc-600 dark:text-zinc-300">
         {trunc(e.provider, 20) || "—"}
@@ -85,13 +83,16 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
     header: "Priority",
     colSpan: 2,
     sortColumn: "priority",
+    mobileBehavior: "fixed",
+    align: "center",
     render: (e) => <PriorityBadge priority={e.priority} />,
   },
   {
     key: "due_date",
     header: "Due Date",
-    colSpan: 2,
+    colSpan: 3,
     sortColumn: "due_date",
+    mobileBehavior: "fixed",
     render: (e) => (
       <span className="text-zinc-600 dark:text-zinc-300">
         {formatDate(e.due_date)}
@@ -101,7 +102,8 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
   {
     key: "description",
     header: "Description",
-    colSpan: 2,
+    colSpan: 1,
+    mobileBehavior: "truncate",
     render: (e) => (
       <span className="text-zinc-500 dark:text-zinc-400">
         {trunc(e.description, 24) || "—"}
@@ -111,7 +113,8 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
   {
     key: "files",
     header: "Files",
-    colSpan: 1,
+    colSpan: 2,
+    mobileBehavior: "fixed",
     render: (e) => {
       const count = e.document_ids?.length ?? 0;
       return count > 0 ? (

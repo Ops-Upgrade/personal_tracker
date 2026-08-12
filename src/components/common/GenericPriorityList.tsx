@@ -36,8 +36,6 @@ export interface GenericPriorityListProps<T> {
   rowAction?: (item: T) => ReactNode;
   /** Per-row CSS class modifier (e.g. priority-colored left border). */
   getItemClassName?: (item: T) => string;
-  /** When true, hides column headers on mobile screens. */
-  hideHeaderOnMobile?: boolean;
 }
 
 /**
@@ -59,7 +57,6 @@ export default function GenericPriorityList<T>({
   rowClassName,
   rowAction,
   getItemClassName,
-  hideHeaderOnMobile,
 }: GenericPriorityListProps<T>) {
   const router = useRouter();
 
@@ -91,7 +88,6 @@ export default function GenericPriorityList<T>({
                   rowClassName={rowClassName}
                   rowAction={rowAction}
                   getItemClassName={getItemClassName}
-                  hideHeaderOnMobile={hideHeaderOnMobile}
                 />
                 {previewCount && viewAllHref && (
                   <div className="mt-2 flex justify-end">

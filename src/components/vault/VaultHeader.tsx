@@ -14,7 +14,7 @@ export default function VaultHeader() {
   const showCountdown = state === "grace" && graceSecondsLeft !== null;
 
   return (
-    <div className="absolute top-6 right-4 z-30 flex items-center gap-3">
+    <div className="absolute top-0 right-0 sm:right-4 z-30 flex items-center gap-3">
       {/* Unlocked badge */}
       <div className="flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm dark:bg-emerald-900/30 dark:text-emerald-400">
         <ShieldCheck className="h-3.5 w-3.5" />

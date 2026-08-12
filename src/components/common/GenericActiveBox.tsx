@@ -113,7 +113,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
 
   return (
     <BoxContainer className={className ?? "lg:col-span-2"}>
-      <header className="mb-3 flex items-center justify-between gap-3">
+      <header className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             {title}
@@ -123,6 +123,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
             onChange={onViewChange}
             options={viewOptions}
             ariaLabel={`${title} view toggle`}
+            hideContainerOnMobile={false}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -165,7 +166,6 @@ export default function GenericActiveBox<T extends ActiveItem>({
             onRowClick={onRowClick}
             rowAction={rowAction}
             getItemClassName={getItemClassName}
-            hideHeaderOnMobile
           />
         )}
 

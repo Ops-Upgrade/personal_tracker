@@ -188,11 +188,11 @@ export default function CompletedTasksPage() {
 
   const completionColumns: ColumnDef<Task, "name" | "date">[] = useMemo(
     () => [
-      { key: "name",     header: "Name",     colSpan: 4, sortColumn: "name", render: renderTaskName },
-      { key: "priority", header: "Priority", colSpan: 2, render: renderTaskPriority },
-      { key: "mode",     header: "Mode",     colSpan: 2, render: renderTaskMode },
-      { key: "date",     header: "Date",     colSpan: 2, sortColumn: "date", render: renderTaskDate },
-      { key: "actions",  header: "Actions",  colSpan: 2, render: renderReopenAction },
+      { key: "name",     header: "Name",     colSpan: 2, sortColumn: "name", mobileBehavior: "truncate", render: renderTaskName },
+      { key: "priority", header: "Priority", colSpan: 2, mobileBehavior: "fixed",    align: "center", render: renderTaskPriority },
+      { key: "mode",     header: "Mode",     colSpan: 2, mobileBehavior: "truncate", render: renderTaskMode },
+      { key: "date",     header: "Date",     colSpan: 2, sortColumn: "date", mobileBehavior: "truncate", render: renderTaskDate },
+      { key: "actions",  header: "Actions",  colSpan: 4, mobileBehavior: "fixed",    align: "right",  render: renderReopenAction },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -200,10 +200,10 @@ export default function CompletedTasksPage() {
 
   const priorityViewColumns: ColumnDef<Task>[] = useMemo(
     () => [
-      { key: "name",    header: "Name",    colSpan: 4, render: renderTaskName },
-      { key: "mode",    header: "Mode",    colSpan: 3, render: renderTaskMode },
-      { key: "date",    header: "Date",    colSpan: 3, render: renderTaskDate },
-      { key: "actions", header: "Actions", colSpan: 2, render: renderReopenAction },
+      { key: "name",    header: "Name",    colSpan: 3, mobileBehavior: "truncate", render: renderTaskName },
+      { key: "mode",    header: "Mode",    colSpan: 2, mobileBehavior: "truncate", render: renderTaskMode },
+      { key: "date",    header: "Date",    colSpan: 3, mobileBehavior: "truncate", render: renderTaskDate },
+      { key: "actions", header: "Actions", colSpan: 4, mobileBehavior: "fixed",    align: "right",  render: renderReopenAction },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -211,11 +211,11 @@ export default function CompletedTasksPage() {
 
   const monthsViewColumns: ColumnDef<Task>[] = useMemo(
     () => [
-      { key: "name",     header: "Name",     colSpan: 4, render: renderTaskName },
-      { key: "priority", header: "Priority", colSpan: 2, render: renderTaskPriority },
-      { key: "mode",     header: "Mode",     colSpan: 2, render: renderTaskMode },
-      { key: "date",     header: "Date",     colSpan: 2, render: renderTaskDate },
-      { key: "actions",  header: "Actions",  colSpan: 2, render: renderReopenAction },
+      { key: "name",     header: "Name",     colSpan: 2, mobileBehavior: "truncate", render: renderTaskName },
+      { key: "priority", header: "Priority", colSpan: 2, mobileBehavior: "fixed",    align: "center", render: renderTaskPriority },
+      { key: "mode",     header: "Mode",     colSpan: 2, mobileBehavior: "truncate", render: renderTaskMode },
+      { key: "date",     header: "Date",     colSpan: 2, mobileBehavior: "truncate", render: renderTaskDate },
+      { key: "actions",  header: "Actions",  colSpan: 4, mobileBehavior: "fixed",    align: "right",  render: renderReopenAction },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],

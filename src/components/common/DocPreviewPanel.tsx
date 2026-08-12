@@ -93,7 +93,7 @@ export default function DocPreviewPanel({
   const hasRemoteFile = Boolean(existingFileName && existingIv && onLoadPreview);
 
   return (
-    <div className="flex items-center justify-center h-full w-full overflow-hidden p-4">
+    <div className="flex items-center justify-center h-full w-full overflow-hidden p-4 min-h-[300px] sm:min-h-0">
       {/* Remote encrypted file — click to load */}
       {!blobUrl && !isLoading && !loadError && hasRemoteFile && !file && (
         <button

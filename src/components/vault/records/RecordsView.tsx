@@ -12,7 +12,7 @@ import type { PersonalRecord, PersonalRecordPlaintext, VaultRecordItem } from "@
 
 const RECORD_FIELDS: FieldDef[] = [
   { key: "name", type: "text", label: "Name", placeholder: "e.g. Aadhaar Number" },
-  { key: "value", type: "text", label: "Value", placeholder: "The reference number or ID" },
+  { key: "value", type: "text", label: "Value", placeholder: "The reference number or ID", isCopyable: true },
 ];
 
 export default function RecordsView() {
@@ -41,8 +41,9 @@ export default function RecordsView() {
       id: r.id,
       title: r.name,
       values: [{ value: r.value }],
+      hasFiles: docs.some((d) => d.linked_id === r.id && d.domain === "vault"),
     }),
-    [],
+    [docs],
   );
 
   const onDeleteRecord = useCallback(async (id: string) => { await deleteVaultEntry(id); }, []);

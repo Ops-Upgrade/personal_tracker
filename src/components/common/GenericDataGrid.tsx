@@ -36,10 +36,6 @@ export interface GenericDataGridProps<T, C extends string = string> {
   /** Per-row CSS class modifier (e.g. priority-colored left border). */
   getItemClassName?: (item: T) => string;
 
-  // ── Header visibility ──
-  /** When true, hides column headers on mobile screens. Defaults to false. */
-  hideHeaderOnMobile?: boolean;
-
   // ── Action column ──
   /** Width of the spacer for the rowAction column in the header. Defaults to "85px". */
   actionColumnWidth?: string;
@@ -68,6 +64,12 @@ const getColSpanClass = (n: number): string => {
 const HEADER_CLASSES =
   "text-xs font-semibold text-zinc-500 uppercase tracking-wider";
 
+const getMobileBehaviorClass = (b?: "truncate" | "fixed"): string => {
+  if (b === "truncate") return "min-w-0 truncate";
+  if (b === "fixed") return "shrink-0 min-w-max whitespace-nowrap overflow-hidden";
+  return "min-w-0";
+};
+
 // ── Component ──
 
 /**
@@ -88,7 +90,6 @@ export default function GenericDataGrid<T, C extends string = string>({
   rowClassName,
   rowAction,
   getItemClassName,
-  hideHeaderOnMobile = false,
   actionColumnWidth = "85px",
 }: GenericDataGridProps<T, C>) {
   const resolveRowClass = (item: T): string => {
@@ -96,9 +97,11 @@ export default function GenericDataGrid<T, C extends string = string>({
     return rowClassName ?? "";
   };
 
-  const headerVisibilityClass = hideHeaderOnMobile
-    ? "hidden sm:flex"
-    : "flex";
+  const getAlignClass = (align?: "left" | "center" | "right"): string => {
+    if (align === "center") return "justify-center text-center";
+    if (align === "right") return "justify-end text-right";
+    return "justify-start text-left";
+  };
 
   return (
     <>
@@ -111,13 +114,15 @@ export default function GenericDataGrid<T, C extends string = string>({
         </div>
       ) : (
         <>
-          {/* Column headers */}
-          <div className={`${headerVisibilityClass} items-center gap-2 px-2 pb-2 border-b border-zinc-200 dark:border-zinc-700`}>
-            <div className="grid flex-1 gap-2 grid-cols-12 pl-[3px]">
+          {/* Column headers — always visible */}
+          <div className="flex items-center gap-2 px-2 pb-2 border-b border-zinc-200 dark:border-zinc-700">
+            <div className="grid flex-1 gap-2 grid-cols-12 pl-[3px] items-center">
               {columns.map((col) => {
+                const spanClass = getColSpanClass(col.colSpan);
+                const alignClass = getAlignClass(col.align);
                 if (col.sortColumn && sortState !== undefined && onSortChange) {
                   return (
-                    <div key={col.key} className={getColSpanClass(col.colSpan)}>
+                    <div key={col.key} className={`min-w-0 truncate ${spanClass} ${alignClass}`}>
                       <SortableHeader
                         as="div"
                         column={col.sortColumn}
@@ -131,9 +136,10 @@ export default function GenericDataGrid<T, C extends string = string>({
                 return (
                   <div
                     key={col.key}
-                    className={`${HEADER_CLASSES} ${getColSpanClass(col.colSpan)}`}
+                    className={`flex items-center min-w-0 ${HEADER_CLASSES} ${spanClass} ${alignClass}`}
+                    title={col.header}
                   >
-                    {col.header}
+                    <span className="truncate">{col.header}</span>
                   </div>
                 );
               })}
@@ -167,13 +173,21 @@ export default function GenericDataGrid<T, C extends string = string>({
                           }
                         : undefined
                     }
-                    className={`grid flex-1 gap-2 text-left text-sm grid-cols-12 ${clickable ? "cursor-pointer" : ""}`}
+                    className={`grid flex-1 gap-2 text-left text-sm grid-cols-12 items-center ${clickable ? "cursor-pointer" : ""}`}
                   >
-                    {columns.map((col) => (
-                      <div key={col.key} className={getColSpanClass(col.colSpan)}>
-                        {col.render(item)}
-                      </div>
-                    ))}
+                    {columns.map((col) => {
+                      const alignClass = col.align ? `text-${col.align}` : "";
+                      const content = col.render(item);
+                      return (
+                        <div key={col.key} className={`${getMobileBehaviorClass(col.mobileBehavior)} ${getColSpanClass(col.colSpan)} ${alignClass}`}>
+                          {col.mobileBehavior === "truncate" ? (
+                            <div className="w-full truncate block">{content}</div>
+                          ) : (
+                            content
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                   {rowAction && rowAction(item)}
                 </div>

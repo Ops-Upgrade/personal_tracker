@@ -14,7 +14,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 /** Base classes: inline-flex for proper alignment, rounded, transition, cursor-pointer */
 const baseClasses =
-  "inline-flex items-center justify-center rounded-lg font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
+  "inline-flex items-center justify-center rounded-lg font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap";
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:

@@ -31,11 +31,11 @@ export default function NotesBox({
   onSelectDocument,
 }: NotesBoxProps) {
   const listHeader = (
-    <div className="grid grid-cols-12 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-      <div className="col-span-3">Name</div>
-      <div className="col-span-5">Note</div>
+    <div className="grid grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
+      <div className="col-span-4 min-w-0 truncate">Name</div>
+      <div className="col-span-4 min-w-0 truncate">Note</div>
       <div className="col-span-2">Date Added</div>
-      <div className="col-span-2">Files</div>
+      <div className="col-span-2 text-right">Files</div>
     </div>
   );
 
@@ -62,10 +62,10 @@ export default function NotesBox({
         >
           {item.type === "note" ? (
             <>
-              <div className="col-span-3 truncate font-medium">
+              <div className="col-span-4 min-w-0 truncate font-medium">
                 {getNoteTitle(item.data)}
               </div>
-              <div className="col-span-5 truncate text-zinc-500 dark:text-zinc-400">
+              <div className="col-span-4 min-w-0 truncate text-zinc-500 dark:text-zinc-400">
                 {(() => {
                   const stripped = stripHtml(item.data.content || "");
                   return stripped ? trunc(stripped, 60) : "—";
@@ -74,7 +74,7 @@ export default function NotesBox({
               <div className="col-span-2 text-zinc-500 dark:text-zinc-400">
                 {formatShortDate(item.data.created_at)}
               </div>
-              <div className="col-span-2">
+              <div className="col-span-2 text-right">
                 {item.attachedDocs.length > 0 ? (
                   <span className="inline-flex items-center gap-1 text-sky-500" title={`${item.attachedDocs.length} document(s) attached`}>
                     <PaperClipIcon className="h-4 w-4" />
@@ -87,13 +87,18 @@ export default function NotesBox({
             </>
           ) : (
             <>
-              <div className="col-span-3 text-zinc-400 dark:text-zinc-500">—</div>
-              <div className="col-span-5 text-zinc-400 dark:text-zinc-500">—</div>
+              <div className="col-span-4 min-w-0 truncate font-medium">
+                {item.data.label || "Unnamed"}
+              </div>
+              <div className="col-span-4 text-zinc-400 dark:text-zinc-500">—</div>
               <div className="col-span-2 text-zinc-500 dark:text-zinc-400">
                 {formatShortDate(item.data.created_at)}
               </div>
-              <div className="col-span-2 truncate text-zinc-500 dark:text-zinc-400">
-                {item.data.label || "Unnamed"}
+              <div className="col-span-2 text-right">
+                <span className="inline-flex items-center gap-1 text-sky-500" title="1 document attached">
+                  <PaperClipIcon className="h-4 w-4" />
+                  <span className="text-zinc-500 dark:text-zinc-400">(1)</span>
+                </span>
               </div>
             </>
           )}

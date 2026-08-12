@@ -7,12 +7,10 @@ import type { Expense } from "@/types/expense";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
 import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import type { MonthGroup } from "@/components/common/GenericViewPage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useTableSort } from "@/hooks/useTableSort";
 import { useExpenseActions } from "@/hooks/useExpenseActions";
 import { useExpenseData } from "@/hooks/useExpenseData";
-import { byMonth } from "@/lib/viewHelpers";
 import GenericDomainModal from "@/components/common/GenericDomainModal";
 import { normalizeDateForInput } from "@/lib/utils";
 import { EXPENSE_COLUMNS, SORT_CONFIGS, EXPENSE_FIELDS } from "@/components/expense/config";
@@ -74,11 +72,6 @@ export default function ExpenseAllPage() {
     [expensesForYear, selectedMonth],
   );
 
-  const monthGroups: MonthGroup<Expense>[] = useMemo(
-    () => byMonth(expensesForYear, selectedYear),
-    [expensesForYear, selectedYear],
-  );
-
   // ── Sort ──
 
   const { sortState, handleSort, sorted } = useTableSort(
@@ -126,7 +119,7 @@ export default function ExpenseAllPage() {
             items={sorted}
             columns={EXPENSE_COLUMNS}
             getItemKey={(exp) => exp.id}
-            views={STANDARD_VIEWS.ALL_MONTHS}
+            views={STANDARD_VIEWS.ALL_ONLY}
             activeView={activeView}
             onViewChange={setActiveView}
             yearFilter={{
@@ -159,10 +152,8 @@ export default function ExpenseAllPage() {
             onSortChange={handleSort}
             emptyMessage={emptyMessage}
             onRowClick={(exp) => setModalTarget(exp)}
-            monthGroups={monthGroups}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
-            disableMonthToggle
           />
         )}
       </PageShell>

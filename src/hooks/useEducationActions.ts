@@ -196,6 +196,22 @@ export function useEducationActions({ userId, refresh }: UseEducationActionsPara
     [userId],
   );
 
+  /** Toggle is_completed on an education (used for Quick Complete). */
+  const handleToggleComplete = useCallback(
+    async (edu: Education, isCompleted: boolean) => {
+      if (!userId) throw new Error("No active session.");
+      const nowIso = new Date().toISOString();
+      await updateEducation(userId, edu.id, {
+        ...edu,
+        is_completed: isCompleted,
+        completed_at: isCompleted ? nowIso : null,
+        updated_at: nowIso,
+      });
+      await refresh();
+    },
+    [userId, refresh],
+  );
+
   /** Schema-driven save adapter: (formData, fileActions) → handleEducationSave */
   const createSaveAdapter = useCallback(
     (existingEducation: Education | null, onSuccess?: (saved: Education) => void) => {
@@ -229,5 +245,5 @@ export function useEducationActions({ userId, refresh }: UseEducationActionsPara
     [handleEducationSave],
   );
 
-  return { handleEducationSave, handleEducationDelete, handleDownloadDocument, createSaveAdapter };
+  return { handleEducationSave, handleEducationDelete, handleDownloadDocument, createSaveAdapter, handleToggleComplete };
 }

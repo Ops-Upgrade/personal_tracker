@@ -28,7 +28,7 @@ type MedicalViewMode = "all" | "single" | "multi";
 
 function formatShortDate(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00");
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }
 
 /** SVG icon symbols for the medical view toggle */
@@ -111,6 +111,7 @@ export default function MedicalView() {
         key: "name",
         header: "Name",
         colSpan: 3,
+        mobileBehavior: "truncate",
         render: (rec) => (
           <span className="font-medium text-zinc-800 dark:text-zinc-100">
             {trunc(rec.name, 24) || "—"}
@@ -121,6 +122,7 @@ export default function MedicalView() {
         key: "clinic",
         header: "Clinic",
         colSpan: 2,
+        mobileBehavior: "truncate",
         render: (rec) => (
           <span className="text-zinc-600 dark:text-zinc-300">
             {trunc(rec.clinic, 20) || "—"}
@@ -130,7 +132,8 @@ export default function MedicalView() {
       {
         key: "date",
         header: "Date",
-        colSpan: 2,
+        colSpan: 3,
+        mobileBehavior: "fixed",
         render: (rec) => (
           <span className="text-zinc-600 dark:text-zinc-300">
             {formatShortDate(rec.date)}
@@ -140,7 +143,8 @@ export default function MedicalView() {
       {
         key: "diagnosis",
         header: "Diagnosis",
-        colSpan: 3,
+        colSpan: 2,
+        mobileBehavior: "truncate",
         render: (rec) => (
           <span className="text-zinc-500 dark:text-zinc-400">
             {trunc(rec.diagnosis_timeline, 28) || "—"}
@@ -151,6 +155,7 @@ export default function MedicalView() {
         key: "files",
         header: "Files",
         colSpan: 2,
+        mobileBehavior: "fixed",
         render: (rec) => {
           const count = rec.document_ids?.length ?? 0;
           return count > 0 ? (
@@ -296,19 +301,16 @@ export default function MedicalView() {
               <MedicalTable records={recordsForSelectedYear} onSelectRecord={openEdit} />
             </div>
           ) : (
-            <div className={`${SCROLLABLE_CLASSES} flex flex-col md:flex-row gap-4 items-start`}>
-              {/* Left Column (or Single Column) */}
-              <div className="flex-1 flex flex-col gap-4 w-full">
-                {recordsByMonth
-                  .filter((_, i) => viewMode === "multi" ? i % 2 === 0 : true)
-                  .map(({ monthName, monthIndex, records: monthRecords }) => {
-                    const isCurrentMonth =
-                      istParsed !== null &&
-                      selectedYear === istParsed.year &&
-                      monthIndex === istParsed.month;
-                    return (
+            <div className={`${SCROLLABLE_CLASSES} ${viewMode === "multi" ? "flex flex-col md:block md:columns-2 gap-4 md:gap-4 space-y-4 md:space-y-4" : "flex flex-col gap-4"}`}>
+              {recordsByMonth
+                .map(({ monthName, monthIndex, records: monthRecords }) => {
+                  const isCurrentMonth =
+                    istParsed !== null &&
+                    selectedYear === istParsed.year &&
+                    monthIndex === istParsed.month;
+                  return (
+                    <div key={`month-${monthName}`} className={viewMode === "multi" ? "break-inside-avoid inline-block w-full mb-4" : ""}>
                       <GenericMonthRow
-                        key={`month-${monthName}`}
                         monthName={monthName}
                         monthIndex={monthIndex}
                         year={selectedYear}
@@ -325,43 +327,9 @@ export default function MedicalView() {
                         onRowClick={(record) => openEdit(record)}
                         viewAllHref={`${ROUTES.MEDICAL_ALL}?year=${selectedYear}&month=${monthIndex}`}
                       />
-                    );
-                  })}
-              </div>
-
-              {/* Right Column (only visible in multi view) */}
-              {viewMode === "multi" && (
-                <div className="flex-1 flex-col gap-4 w-full hidden md:flex">
-                  {recordsByMonth
-                    .filter((_, i) => i % 2 !== 0)
-                    .map(({ monthName, monthIndex, records: monthRecords }) => {
-                      const isCurrentMonth =
-                        istParsed !== null &&
-                        selectedYear === istParsed.year &&
-                        monthIndex === istParsed.month;
-                      return (
-                        <GenericMonthRow
-                          key={`month-${monthName}`}
-                          monthName={monthName}
-                          monthIndex={monthIndex}
-                          year={selectedYear}
-                          items={monthRecords}
-                          isCurrentMonth={isCurrentMonth}
-                          getDate={(record) => record.date}
-                          getSubtitle={(items) => {
-                            const count = items.length;
-                            return <>{count} record{count !== 1 ? "s" : ""}</>;
-                          }}
-                          columns={medicalColumns}
-                          getItemKey={(record) => record.id}
-                          previewCount={5}
-                          onRowClick={(record) => openEdit(record)}
-                          viewAllHref={`${ROUTES.MEDICAL_ALL}?year=${selectedYear}&month=${monthIndex}`}
-                        />
-                      );
-                    })}
-                </div>
-              )}
+                    </div>
+                  );
+                })}
             </div>
           )}
         </BoxContainer>

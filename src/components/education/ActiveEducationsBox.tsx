@@ -12,7 +12,7 @@ import PriorityBadge from "@/components/common/PriorityBadge";
 import { getPriorityColor } from "@/lib/priorityColors";
 import { PaperClipIcon } from "@/components/common/Icons";
 import { ROUTES } from "@/routes/paths";
-import { trunc } from "./helpers";
+import { formatShortDate, trunc } from "./helpers";
 
 const EDUCATION_VIEW_OPTIONS: readonly ViewToggleOption<EducationViewMode>[] = [
   { value: "months", label: "Months" },
@@ -30,10 +30,6 @@ interface ActiveEducationsBoxProps {
   onAdd: () => void;
   onSelectEducation: (education: Education) => void;
   onMarkComplete: (education: Education) => void;
-}
-
-function dueDisplay(dueDate: string | null): string {
-  return dueDate ?? "-";
 }
 
 export default function ActiveEducationsBox({
@@ -58,72 +54,96 @@ export default function ActiveEducationsBox({
     return map;
   }, [documents]);
 
-  // ── Column definitions (view-dependent for priority/due-date column) ──
+  // ── Column definitions (view-dependent: Priority hidden in priority view, Due Date always present) ──
 
   const educationColumns: ColumnDef<Education>[] = useMemo(
-    () => [
-      {
-        key: "name",
-        header: "Program Name",
+    () => {
+      const isPriorityView = view === "priority";
+      const cols: ColumnDef<Education>[] = [
+        {
+          key: "name",
+          header: "Program Name",
+          colSpan: isPriorityView ? 3 : 2,
+          mobileBehavior: "truncate",
+          render: (edu) => (
+            <span className="font-semibold text-zinc-800 dark:text-zinc-100">
+              {trunc(edu.name, 34)}
+            </span>
+          ),
+        },
+        {
+          key: "provider",
+          header: "Provider",
+          colSpan: 2,
+          mobileBehavior: "truncate",
+          render: (edu) => (
+            <span className="text-zinc-600 dark:text-zinc-300">
+              {trunc(edu.provider, 24)}
+            </span>
+          ),
+        },
+      ];
+
+      if (!isPriorityView) {
+        cols.push({
+          key: "priority",
+          header: "Priority",
+          colSpan: 2,
+          mobileBehavior: "fixed",
+          render: (edu) =>
+            edu.priority ? (
+              <PriorityBadge priority={edu.priority} />
+            ) : (
+              <span className="text-zinc-400">—</span>
+            ),
+        });
+      }
+
+      cols.push({
+        key: "due_date",
+        header: "Due Date",
         colSpan: 3,
-        render: (edu) => (
-          <span className="font-semibold text-zinc-800 dark:text-zinc-100">
-            {trunc(edu.name, 34)}
-          </span>
-        ),
-      },
-      {
-        key: "provider",
-        header: "Provider",
-        colSpan: 3,
+        mobileBehavior: "fixed",
         render: (edu) => (
           <span className="text-zinc-600 dark:text-zinc-300">
-            {trunc(edu.provider, 24)}
+            {formatShortDate(edu.due_date)}
           </span>
         ),
-      },
-      {
-        key: view === "priority" ? "due_date" : "priority",
-        header: view === "priority" ? "Due Date" : "Priority",
-        colSpan: 2,
-        render: (edu) =>
-          view === "priority" ? (
-            <span className="text-zinc-600 dark:text-zinc-300">
-              {dueDisplay(edu.due_date)}
+      });
+
+      cols.push(
+        {
+          key: "description",
+          header: "Description",
+          colSpan: 1,
+          mobileBehavior: "truncate",
+          render: (edu) => (
+            <span className="text-zinc-700 dark:text-zinc-200">
+              {trunc(edu.description, 38)}
             </span>
-          ) : edu.priority ? (
-            <PriorityBadge priority={edu.priority} />
-          ) : (
-            <span className="text-zinc-400">—</span>
           ),
-      },
-      {
-        key: "description",
-        header: "Description",
-        colSpan: 2,
-        render: (edu) => (
-          <span className="text-zinc-700 dark:text-zinc-200">
-            {trunc(edu.description, 38)}
-          </span>
-        ),
-      },
-      {
-        key: "files",
-        header: "Files",
-        colSpan: 2,
-        render: (edu) => {
-          const count = docCountsByEdu.get(edu.id) ?? 0;
-          return count > 0 ? (
-            <span className="inline-flex items-center gap-1 text-amber-500" title={`${count} document(s) attached`}>
-              <PaperClipIcon className="h-4 w-4" />
-              <span className="text-zinc-600 dark:text-zinc-300">({count})</span>
-            </span>
-          ) : (
-            <span className="text-zinc-400 dark:text-zinc-600">—</span>
-          );
         },
-      },
-    ],
+        {
+          key: "files",
+          header: "Files",
+          colSpan: 2,
+          mobileBehavior: "fixed",
+          render: (edu) => {
+            const count = docCountsByEdu.get(edu.id) ?? 0;
+            return count > 0 ? (
+              <span className="inline-flex items-center gap-1 text-amber-500" title={`${count} document(s) attached`}>
+                <PaperClipIcon className="h-4 w-4" />
+                <span className="text-zinc-600 dark:text-zinc-300">({count})</span>
+              </span>
+            ) : (
+              <span className="text-zinc-400 dark:text-zinc-600">—</span>
+            );
+          },
+        },
+      );
+
+      return cols;
+    },
     [view, docCountsByEdu],
   );
 
@@ -166,7 +186,7 @@ export default function ActiveEducationsBox({
       viewOptions={EDUCATION_VIEW_OPTIONS}
       priorities={PRIORITIES}
       getPriorityColor={(p) => getPriorityColor(p as "low" | "medium" | "high" | "critical")}
-      renderPriorityBadge={(p) => <PriorityBadge priority={p as "low" | "medium" | "high" | "critical"} />}
+      renderPriorityBadge={(p) => <PriorityBadge priority={p as "low" | "medium" | "high" | "critical"} showTextOnMobile />}
       columns={educationColumns}
       onRowClick={onSelectEducation}
       rowAction={rowAction}

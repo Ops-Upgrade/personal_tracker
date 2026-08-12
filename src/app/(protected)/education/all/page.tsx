@@ -4,18 +4,18 @@ import { useCallback, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import type { Education } from "@/types/education";
+import { PRIORITIES } from "@/types/common";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import type { MonthGroup } from "@/components/common/GenericViewPage";
+import GenericViewPage, { STANDARD_VIEWS, type PriorityGroup } from "@/components/common/GenericViewPage";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useEducationActions } from "@/hooks/useEducationActions";
 import { useEducationData } from "@/hooks/useEducationData";
 import { useTableSort } from "@/hooks/useTableSort";
-import { byDueMonth } from "@/lib/viewHelpers";
 import GenericDomainModal from "@/components/common/GenericDomainModal";
 import { normalizeDateForInput } from "@/lib/utils";
 import { EDUCATION_COLUMNS, SORT_CONFIGS, EDUCATION_FIELDS, EDUCATION_LAYOUT } from "@/components/education/config";
+import { byPriority } from "@/components/education/helpers";
 
 export default function EducationAllPage() {
   const router = useRouter();
@@ -79,17 +79,28 @@ export default function EducationAllPage() {
     [educationsForYear, selectedMonth],
   );
 
-  const monthGroups: MonthGroup<Education>[] = useMemo(
-    () => byDueMonth(educationsForYear, selectedYear),
-    [educationsForYear, selectedYear],
-  );
-
   // ── Sort ──
 
   const { sortState, handleSort, sorted } = useTableSort(
     "eduAllSortState",
     educationsForMonth,
     SORT_CONFIGS,
+  );
+
+  // ── Priority grouping (whole year, ignores month filter) ──
+
+  const priorityGroups: PriorityGroup<Education>[] = useMemo(() => {
+    const groupsRecord = byPriority(educationsForYear);
+    return PRIORITIES.map((p) => ({
+      priority: p,
+      items: groupsRecord[p] ?? [],
+    })).filter((g) => g.items.length > 0);
+  }, [educationsForYear]);
+
+  // Priority view groups by priority already, so drop the redundant column.
+  const priorityViewColumns = useMemo(
+    () => EDUCATION_COLUMNS.filter((c) => c.key !== "priority"),
+    []
   );
 
   // ── Modal state ──
@@ -131,7 +142,7 @@ export default function EducationAllPage() {
             items={sorted}
             columns={EDUCATION_COLUMNS}
             getItemKey={(e) => e.id}
-            views={STANDARD_VIEWS.ALL_MONTHS}
+            views={STANDARD_VIEWS.ALL_PRIORITY}
             activeView={activeView}
             onViewChange={setActiveView}
             yearFilter={{
@@ -146,7 +157,7 @@ export default function EducationAllPage() {
                 );
               },
             }}
-            monthFilter={{
+            monthFilter={activeView === "all" ? {
               months: availableMonths,
               selectedMonth,
               onChange: (month) => {
@@ -159,15 +170,15 @@ export default function EducationAllPage() {
                   { scroll: false },
                 );
               },
-            }}
+            } : undefined}
             sortState={sortState}
             onSortChange={handleSort}
             emptyMessage={emptyMessage}
             onRowClick={(e) => setModalTarget(e)}
-            monthGroups={monthGroups}
             nowYear={nowYear ?? new Date().getFullYear()}
             nowMonth={nowMonth ?? new Date().getMonth()}
-            disableMonthToggle
+            priorityGroups={priorityGroups}
+            priorityColumns={priorityViewColumns}
           />
         )}
       </PageShell>
