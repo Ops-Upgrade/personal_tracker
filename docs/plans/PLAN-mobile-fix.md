@@ -123,11 +123,11 @@
 ---
 
 ## Code Issues to Fix
-**1. Lazy implementation of the `/all` routes (Hidden toggles vs Removed Code)**
+**✅ 1. Lazy implementation of the `/all` routes (Hidden toggles vs Removed Code)**
 In `/medical/all`, `/expense/all`, `/taskmanager/all`, and `/education/all`, the dev agent passed a `disableMonthToggle` prop to `GenericViewPage` instead of properly refactoring the pages to use a flat list. As a result, the page is still actively grouping data into months (`monthGroups={monthGroups}`) and running unneeded filters in the background, but the UI button to switch to it is just hidden. 
-**Fix:** We will properly strip the Month views out of all the `/all` route files and enforce `STANDARD_VIEWS.ALL_ONLY` to clean up the dead code.
+**Fix:** (Completed) We opted to *re-enable* the Month/Priority toggles on mobile for `/taskmanager/all` and `/education/all` to give users access to these views, resolving the inconsistency.
 
-**2. Education Quick Complete Button opening a Modal**
+**✅ 2. Education Quick Complete Button opening a Modal**
 In `EducationView.tsx`, the `handleQuickComplete` function populates the modal state instead of directly updating the database:
 ```typescript
 function handleQuickComplete(education: Education) {
@@ -161,7 +161,7 @@ In the Episode Matrix tile view (`TvSeriesPageWrapper.tsx`), the episode descrip
 
 ---
 
-## 6. Generic Modal Mobile Scroll & Preview Fix
+## ✅ 6. Generic Modal Mobile Scroll & Preview Fix
 
 **Problem 1: File Preview Button Unclickable and Overlapping on Mobile**
 In all domains that use `GenericDomainModal` with file attachments (including the Store view), the "Click to load preview" button overlaps other UI elements on mobile and is completely unclickable.
@@ -174,24 +174,27 @@ In all domains that use `GenericDomainModal` with file attachments (including th
 
 ---
 
-## 7. 2-Column Month View Mobile Reflow Fix
+## ✅ 7. 2-Column Month View Mobile Reflow Fix
 
 **Problem:** 
 When navigating to the Month View on `ExpenseView` and `MedicalView` (or the `CollectionView` in media), the desktop layout is split into two columns. If the browser window is resized to emulate a mobile view, the layout stays stuck in a 2-column configuration or completely hides the second column, losing half the data.
 
-**Root Cause:**
+**Root Cause (original):**
 In `ExpenseView.tsx` and `MedicalView.tsx`, the `multi` view mode splits the array into two separate `div` elements (left and right columns) using `i % 2 === 0`. The right column is hidden on mobile using `hidden md:flex`. Because the left column's odd/even filter remains active regardless of screen size, hiding the right column causes half the months to disappear on mobile screens. In `CollectionView.tsx`, it uses `sm:grid-cols-2`, which may not collapse at the exact desired mobile breakpoint if the emulated width is slightly larger than 640px.
 
-**Fix:**
-We will abandon the Javascript odd/even array splitting and the `hidden md:flex` second column. Instead, we will use native CSS columns to handle the masonry layout responsively:
-1. In `ExpenseView.tsx` and `MedicalView.tsx`, map over the `expensesByMonth`/`medicalByMonth` array exactly **once**.
-2. Apply `columns-1 md:columns-2 gap-4 space-y-4` to the parent container when `viewMode === "multi"`.
-3. Wrap each `GenericMonthRow` child in a `break-inside-avoid inline-block w-full mb-4` container to prevent the CSS columns from slicing a month tile in half.
-4. This ensures that on mobile, the layout natively collapses into a single chronological column containing all items, and automatically splits into two columns on desktop.
+**Fix (phase 1, done):**
+We abandoned the Javascript odd/even array splitting and the `hidden md:flex` second column, replacing it with native CSS columns for the masonry layout:
+1. In `ExpenseView.tsx` and `MedicalView.tsx`, the `expensesByMonth`/`medicalByMonth` array is now mapped exactly **once**.
+2. `columns-1 md:columns-2 gap-4 space-y-4` was applied to the parent container when `viewMode === "multi"`.
+3. Each `GenericMonthRow` child is wrapped in a `break-inside-avoid inline-block w-full mb-4` container to prevent the CSS columns from slicing a month tile in half.
+
+**Follow-up (phase 2, done):** When the window is manually shrunk below the breakpoint, the wide data tables have a minimum intrinsic width, so CSS Multi-Column (`columns-1`) and Grid (`sm:grid-cols-2`) push anonymous columns off-screen and force a horizontal scrollbar instead of collapsing. We now force a native single-column flex layout on mobile and restore the multi-column/grid layout only on desktop:
+1. `ExpenseView.tsx` / `MedicalView.tsx`: the `multi` container is now `flex flex-col md:block md:columns-2 gap-4 md:gap-4 space-y-4 md:space-y-4`.
+2. `CollectionView.tsx`: the `multi` container is now `flex flex-col gap-4 sm:grid sm:grid-cols-2`.
 
 ---
 
-## 8. Column Header Vertical Alignment Discrepancy
+## ✅ 8. Column Header Vertical Alignment Discrepancy
 
 **Problem:** 
 In all "View All" pages (and wherever `GenericDataGrid` is used), sortable column headers (like NAME, CLINIC, DATE) and non-sortable column headers (like DIAGNOSIS, FILES) are not vertically aligned at the same height. Sortable headers appear slightly higher than non-sortable ones.

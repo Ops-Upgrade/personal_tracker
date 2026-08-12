@@ -281,7 +281,7 @@ export default function CollectionView({
         className={
           viewMode === "single"
             ? "flex flex-col gap-4"
-            : "grid gap-4 sm:grid-cols-2"
+            : "flex flex-col gap-4 sm:grid sm:grid-cols-2"
         }
       >
         {sortedCollections.map((c) => {

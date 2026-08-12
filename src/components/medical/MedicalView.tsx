@@ -301,7 +301,7 @@ export default function MedicalView() {
               <MedicalTable records={recordsForSelectedYear} onSelectRecord={openEdit} />
             </div>
           ) : (
-            <div className={`${SCROLLABLE_CLASSES} ${viewMode === "multi" ? "columns-1 md:columns-2 gap-4 space-y-4" : "flex flex-col gap-4"}`}>
+            <div className={`${SCROLLABLE_CLASSES} ${viewMode === "multi" ? "flex flex-col md:block md:columns-2 gap-4 md:gap-4 space-y-4 md:space-y-4" : "flex flex-col gap-4"}`}>
               {recordsByMonth
                 .map(({ monthName, monthIndex, records: monthRecords }) => {
                   const isCurrentMonth =
