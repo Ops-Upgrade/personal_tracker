@@ -99,6 +99,8 @@ export interface VaultRecordItem {
     isSecret?: boolean;
     isCopyable?: boolean;
   }[];
+  /** True when the entry has attached files — shows a paperclip badge in tile/list views. */
+  hasFiles?: boolean;
 }
 
 // ── Union type for generic handling ──

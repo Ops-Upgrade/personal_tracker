@@ -41,7 +41,7 @@ interface VaultHomeGridProps {
  *  and the locked background skeleton. */
 export default function VaultHomeGrid({ interactive = true }: VaultHomeGridProps) {
   return (
-    <div className="space-y-6 px-4 py-6">
+    <div className="space-y-6 px-4 pb-6">
       <BackButton href={ROUTES.DASHBOARD} />
       <div>
         <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">

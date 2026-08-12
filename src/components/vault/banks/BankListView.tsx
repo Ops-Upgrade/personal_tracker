@@ -47,7 +47,6 @@ export default function BankListView() {
       itemNamePlural="bank accounts"
       singleDeleteDescription="This will permanently delete this bank entry and all its PINs. This action cannot be undone."
       mapRecordToItem={mapRecordToItem}
-      disableSelection
       emptyMessage="No banks added yet. Add your first bank."
       searchPlaceholder="Search banks..."
       onActionClick={(id) => router.push(ROUTES.VAULT_BANK_DETAIL(id))}
@@ -59,6 +58,7 @@ export default function BankListView() {
             title={isEditing ? "Edit Bank" : "Add Bank"}
             onClose={onClose}
             fields={BANK_FIELDS}
+            layout={[["bank_name"]]}
             initialData={{ bank_name: record?.bank_name ?? "" }}
             onSave={async (formData) => {
               const name = (formData.bank_name as string).trim();

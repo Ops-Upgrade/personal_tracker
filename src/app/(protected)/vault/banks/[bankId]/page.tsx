@@ -18,7 +18,7 @@ export interface BankPinData {
 
 const PIN_FIELDS: FieldDef[] = [
   { key: "name", type: "text", label: "Name", placeholder: "e.g. ATM PIN, MPIN" },
-  { key: "pin", type: "password", label: "PIN", placeholder: "PIN value" },
+  { key: "pin", type: "password", label: "PIN", placeholder: "PIN value", isCopyable: true },
 ];
 
 export default function BankDetailPage({ params }: { params: Promise<{ bankId: string }> }) {
@@ -144,6 +144,7 @@ export default function BankDetailPage({ params }: { params: Promise<{ bankId: s
         onBulkDeleteRecords={onBulkDeleteRecords}
         itemName="PIN"
         mapRecordToItem={mapRecordToItem}
+        tileLayout="body-only"
         emptyMessage="No PINs added yet."
         searchPlaceholder="Search PINs..."
         headerActions={
@@ -162,6 +163,7 @@ export default function BankDetailPage({ params }: { params: Promise<{ bankId: s
               title={isEditing ? "Edit PIN" : "Add PIN"}
               onClose={onClose}
               fields={PIN_FIELDS}
+              layout={[["name"], ["pin"]]}
               initialData={{
                 name: record?.name ?? "",
                 pin: record?.pin ?? "",

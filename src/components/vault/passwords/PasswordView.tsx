@@ -9,8 +9,8 @@ import type { PasswordEntry, PasswordEntryPlaintext, VaultRecordItem } from "@/t
 
 const PASSWORD_FIELDS: FieldDef[] = [
   { key: "site_name", type: "text", label: "Site Name", placeholder: "e.g. Gmail" },
-  { key: "username", type: "text", label: "Username", placeholder: "Your username or email" },
-  { key: "password", type: "password", label: "Password", placeholder: "Password" },
+  { key: "username", type: "text", label: "Username", placeholder: "Your username or email", isCopyable: true },
+  { key: "password", type: "password", label: "Password", placeholder: "Password", isCopyable: true },
 ];
 
 export default function PasswordView() {
@@ -58,6 +58,7 @@ export default function PasswordView() {
             title={isEditing ? "Edit Credential" : "Add Credential"}
             onClose={onClose}
             fields={PASSWORD_FIELDS}
+            layout={[["site_name"], ["username"], ["password"]]}
             initialData={{
               site_name: record?.site_name ?? "",
               username: record?.username ?? "",

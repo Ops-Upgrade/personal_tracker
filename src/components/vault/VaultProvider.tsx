@@ -43,6 +43,16 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
 
   const isVaultRoute = useCallback((p: string) => p.startsWith("/vault"), []);
 
+  // Latest-value refs so init()/the grace effect can read current state and
+  // pathname without adding them to dependency arrays — that would re-run
+  // init() on every navigation and restart timers on unrelated state changes.
+  const stateRef = useRef(state);
+  const pathnameRef = useRef(pathname);
+  useEffect(() => {
+    stateRef.current = state;
+    pathnameRef.current = pathname;
+  }, [state, pathname]);
+
   // ── Initialise: check if PIN is set ──
 
   useEffect(() => {
@@ -51,7 +61,16 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
       try {
         const hasPin = await checkVaultPinSet(userId);
         if (cancelled) return;
-        setState(hasPin ? "locked" : "setup_required");
+        // Session persistence: an unlock survives refreshes on vault pages.
+        // Keyed by userId so a different account in the same tab cannot
+        // inherit the session. Only restored while on a vault route — a
+        // refresh away from the vault locks normally, and the grace timer
+        // still arms when the user next leaves the vault.
+        const restoredUnlocked =
+          hasPin &&
+          isVaultRoute(pathnameRef.current) &&
+          sessionStorage.getItem(`vault_session_${userId}`) === "1";
+        setState(hasPin ? (restoredUnlocked ? "unlocked" : "locked") : "setup_required");
       } catch {
         if (!cancelled) setState("locked"); // fallback: show lock screen
       }
@@ -60,15 +79,16 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, isVaultRoute]);
 
   // ── Grace period: pathname-based navigation-away timer ──
 
   useEffect(() => {
-    if (state !== "unlocked" && state !== "grace") return;
+    const current = stateRef.current;
+    if (current !== "unlocked" && current !== "grace") return;
 
     if (isVaultRoute(pathname)) {
-      // Returned to vault — cancel grace timer
+      // On a vault route — cancel any grace timer (returned to vault)
       if (graceTimerRef.current) {
         clearTimeout(graceTimerRef.current);
         graceTimerRef.current = null;
@@ -79,7 +99,7 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
       }
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setGraceSecondsLeft(null);
-      if (state === "grace") setState("unlocked");
+      if (current === "grace") setState("unlocked");
     } else {
       // Left vault — start grace timer if not already running
       if (!graceTimerRef.current) {
@@ -99,9 +119,14 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
         graceTimerRef.current = setTimeout(() => {
           if (countdownRef.current) clearInterval(countdownRef.current);
           countdownRef.current = null;
-          setState("locked");
           graceTimerRef.current = null;
-          setGraceSecondsLeft(null);
+          // Lock only if still away from the vault — if the user navigated
+          // back, the cancel branch above has already handled the timers.
+          if (!isVaultRoute(pathnameRef.current)) {
+            setState("locked");
+            setGraceSecondsLeft(null);
+            sessionStorage.removeItem(`vault_session_${userId}`);
+          }
         }, 30_000);
       }
     }
@@ -110,7 +135,7 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
       // Cleanup handled in the next effect run — React handles this.
       // We don't clear here because we want the timer to survive re-renders.
     };
-  }, [pathname, state, isVaultRoute]);
+  }, [pathname, isVaultRoute, userId]);
 
   // ── Actions ──
 
@@ -121,6 +146,7 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
         setLastVerifyResult(result);
         if (result.success) {
           setState("unlocked");
+          sessionStorage.setItem(`vault_session_${userId}`, "1");
           return true;
         }
         if (result.lockedOut) {
@@ -147,7 +173,8 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
     setGraceSecondsLeft(null);
     setLastVerifyResult(null);
     setState("locked");
-  }, []);
+    sessionStorage.removeItem(`vault_session_${userId}`);
+  }, [userId]);
 
   const clearPinResetSuccess = useCallback(() => {
     setPinResetSuccess(false);
