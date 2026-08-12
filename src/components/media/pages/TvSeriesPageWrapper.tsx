@@ -374,7 +374,7 @@ export default function TvSeriesPageWrapper({
                     </>
                   ) : (
                     <>
-                      <div className="opacity-0 pointer-events-none flex flex-col border border-transparent">
+                      <div className="hidden md:block opacity-0 pointer-events-none border border-transparent">
                         <div className="w-full aspect-video shrink-0" />
                         <div className="p-3 pb-2">
                           <h4 className="text-sm font-semibold truncate">
@@ -462,7 +462,7 @@ export default function TvSeriesPageWrapper({
                           </div>
                         </div>
                         {ep.overview && (
-                          <div className="grid transition-all duration-300 grid-rows-[0fr] group-hover:grid-rows-[1fr]">
+                          <div className="grid transition-all duration-300 grid-rows-[1fr] md:grid-rows-[0fr] md:group-hover:grid-rows-[1fr]">
                             <div className="overflow-hidden">
                               <p className="px-3 pb-3 text-xs text-zinc-600 dark:text-zinc-300 leading-relaxed max-h-[120px] overflow-y-auto overscroll-contain">
                                 {ep.overview}

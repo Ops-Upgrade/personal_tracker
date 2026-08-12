@@ -231,7 +231,7 @@ export function SortableTileItem({
             type="button"
             data-no-nav
             onClick={() => onRemove(media.id)}
-            className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white/80 hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute top-1 right-1 p-1 rounded bg-black/50 text-white/80 hover:text-red-400 cursor-pointer opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
             aria-label="Remove from collection"
           >
             <Trash2 size={12} />
@@ -248,7 +248,7 @@ export function SortableTileItem({
           {...attributes}
           {...listeners}
           data-no-nav
-          className="absolute bottom-1 right-1 p-1 rounded bg-black/50 text-white/80 hover:text-white cursor-grab active:cursor-grabbing touch-none opacity-0 group-hover:opacity-100 transition-opacity"
+          className="absolute bottom-1 right-1 p-1 rounded bg-black/50 text-white/80 hover:text-white cursor-grab active:cursor-grabbing touch-none opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
           aria-label="Drag to reorder"
         >
           <GripVertical size={12} />

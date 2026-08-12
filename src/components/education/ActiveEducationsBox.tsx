@@ -102,7 +102,7 @@ export default function ActiveEducationsBox({
       cols.push({
         key: "due_date",
         header: "Due Date",
-        colSpan: isPriorityView ? 3 : 2,
+        colSpan: 3,
         mobileBehavior: "fixed",
         render: (edu) => (
           <span className="text-zinc-600 dark:text-zinc-300">
@@ -115,7 +115,7 @@ export default function ActiveEducationsBox({
         {
           key: "description",
           header: "Description",
-          colSpan: 2,
+          colSpan: 1,
           mobileBehavior: "truncate",
           render: (edu) => (
             <span className="text-zinc-700 dark:text-zinc-200">

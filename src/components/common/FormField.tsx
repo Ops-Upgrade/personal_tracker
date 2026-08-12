@@ -1,6 +1,7 @@
 "use client";
 
-import type { ChangeEvent } from "react";
+import { useCallback, useState, type ChangeEvent } from "react";
+import { Check, Copy, Eye, EyeOff } from "lucide-react";
 
 // ── Shared Tailwind classes ──
 
@@ -10,6 +11,9 @@ const INPUT_CLASSES =
   "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50";
 
 const DATE_CLASSES = `${INPUT_CLASSES} [color-scheme:dark]`;
+
+const INPUT_ACTION_CLASSES =
+  "cursor-pointer flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-300 transition-colors disabled:opacity-50";
 
 // ── Input ──
 
@@ -22,6 +26,8 @@ interface InputFieldProps {
   type?: "text" | "date" | "number" | "password";
   min?: string | number;
   step?: string;
+  /** When true, renders an inline copy button inside the input. Password inputs always get a reveal (eye) toggle. */
+  isCopyable?: boolean;
 }
 
 export function InputField({
@@ -33,20 +39,66 @@ export function InputField({
   type = "text",
   min,
   step,
+  isCopyable = false,
 }: InputFieldProps) {
+  const [revealed, setRevealed] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const isPassword = type === "password";
+  const showActions = isPassword || isCopyable;
+  const effectiveType = isPassword && revealed ? "text" : type;
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard unavailable — silently ignore
+    }
+  }, [value]);
+
   return (
     <label className="block">
       <span className={LABEL_CLASSES}>{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-        disabled={disabled}
-        placeholder={placeholder}
-        min={min}
-        step={step}
-        className={type === "date" ? DATE_CLASSES : INPUT_CLASSES}
-      />
+      <div className="relative">
+        <input
+          type={effectiveType}
+          value={value}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={placeholder}
+          min={min}
+          step={step}
+          className={`${type === "date" ? DATE_CLASSES : INPUT_CLASSES} ${showActions ? (isPassword && isCopyable ? "pr-16" : "pr-10") : ""}`}
+        />
+        {showActions && (
+          <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+            {isPassword && (
+              <button
+                type="button"
+                onClick={() => setRevealed((r) => !r)}
+                disabled={disabled}
+                className={INPUT_ACTION_CLASSES}
+                title={revealed ? "Hide" : "Reveal"}
+              >
+                {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            )}
+            {isCopyable && (
+              <button
+                type="button"
+                onClick={handleCopy}
+                disabled={disabled}
+                className={INPUT_ACTION_CLASSES}
+                title="Copy"
+              >
+                {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
     </label>
   );
 }

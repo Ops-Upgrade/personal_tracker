@@ -96,6 +96,8 @@ export interface FieldDef {
   options?: { value: string; label: string }[];
   /** For richtext fields */
   minHeight?: string;
+  /** When true, renders an inline copy button inside the input (see InputField). */
+  isCopyable?: boolean;
 }
 
 interface ToastConfig {
@@ -287,6 +289,13 @@ export default function GenericDomainModal({
   const [linkSearchQuery, setLinkSearchQuery] = useState("");
   const [linkDropdownOpen, setLinkDropdownOpen] = useState(false);
 
+  // One-shot flag: auto-select the first file on initial load. Never
+  // re-armed — post-save auto-select uses pendingAutoSelectAfterSaveRef.
+  const hasAutoSelectedRef = useRef(false);
+  // One-shot flag armed by handleSave: auto-select the first file once the
+  // files list refreshes after a successful save.
+  const pendingAutoSelectAfterSaveRef = useRef(false);
+
   // ── Reset all file state ──
   const resetFileState = useCallback(() => {
     setNewFiles([]);
@@ -413,14 +422,36 @@ export default function GenericDomainModal({
     standaloneDocuments,
   ]);
 
-  // ── Auto-select first file once on initial load ──
-  const hasAutoSelectedRef = useRef(false);
+  // ── Auto-select the first file on initial load and after a save ──
+  //
+  // Two one-shot triggers, both skipped while the user has staged new uploads
+  // (newFiles.length > 0): auto-selecting a freshly uploaded file would yank
+  // the modal away from the file list before the user saves, which is not
+  // wanted — the list must stay visible until save.
   useEffect(() => {
-    if (!hasAutoSelectedRef.current && selectedFileId === null && files.length > 0) {
+    // Initial load: auto-select the first file once when the modal opens.
+    if (
+      !hasAutoSelectedRef.current &&
+      selectedFileId === null &&
+      files.length > 0 &&
+      newFiles.length === 0
+    ) {
       hasAutoSelectedRef.current = true;
       setSelectedFileId(files[0].id);
+      return;
     }
-  }, [files, selectedFileId]);
+    // Post-save: auto-select the first file once when the files list
+    // refreshes from the server after a successful save.
+    if (
+      pendingAutoSelectAfterSaveRef.current &&
+      selectedFileId === null &&
+      files.length > 0 &&
+      newFiles.length === 0
+    ) {
+      pendingAutoSelectAfterSaveRef.current = false;
+      setSelectedFileId(files[0].id);
+    }
+  }, [files, selectedFileId, newFiles]);
 
   // =========================================================================
   // Derived: available/filtered standalone docs for link dropdown
@@ -721,6 +752,10 @@ export default function GenericDomainModal({
 
       // Clear file state on success
       resetFileState();
+
+      // Arm the post-save auto-select: once the files list refreshes from the
+      // server, preview the first file instead of the plain list.
+      pendingAutoSelectAfterSaveRef.current = true;
 
       triggerToast("✓ Saved", "success");
       onSaved?.();
@@ -1070,6 +1105,7 @@ export default function GenericDomainModal({
               onChange={(v) => updateField(field.key, v)}
               placeholder={field.placeholder}
               disabled={disabled}
+              isCopyable={field.isCopyable}
             />
           );
         case "date":
@@ -1107,6 +1143,7 @@ export default function GenericDomainModal({
               onChange={(v) => updateField(field.key, v)}
               placeholder={field.placeholder}
               disabled={disabled}
+              isCopyable={field.isCopyable}
             />
           );
         case "select":
@@ -1205,11 +1242,11 @@ export default function GenericDomainModal({
       {/* Modal backdrop + container                                        */}
       {/* ================================================================= */}
       <div
-        className={`fixed inset-0 ${zClassName} flex items-center justify-center bg-zinc-950/60 p-4`}
+        className={`fixed inset-0 ${zClassName} flex items-start sm:items-center justify-center bg-zinc-950/60 p-4 pt-16 sm:pt-4`}
         onClick={handleBackdropClick}
       >
         <div
-          className={`w-full ${computedMaxWidth} rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 flex flex-col min-h-[65vh] max-h-[85vh] overflow-y-auto sm:overflow-visible`}
+          className={`w-full ${computedMaxWidth} rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 flex flex-col min-h-[65vh] max-h-[85vh] overflow-y-auto`}
         >
           {/* Header */}
           <header className="shrink-0 flex items-center border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
@@ -1220,13 +1257,13 @@ export default function GenericDomainModal({
 
           {/* Body */}
           <div
-            className={`flex flex-1 min-h-0 ${actualShowRightPanel ? "flex-col sm:flex-row" : ""}`}
+            className={`w-full flex-1 min-h-0 ${actualShowRightPanel ? "flex flex-col sm:grid sm:grid-cols-[minmax(0,1fr)_420px] sm:grid-rows-[minmax(0,1fr)_auto]" : "flex flex-col"}`}
           >
             {/* ============================================================= */}
             {/* Left: Form area (record mode) or Link/Create (standalone)      */}
             {/* ============================================================= */}
-            <div className="shrink-0 flex-col sm:shrink sm:flex-1 min-w-0 sm:min-h-0 flex">
-              <div className="flex-1 sm:overflow-y-auto p-4">
+            <div className={`flex flex-col min-w-0 shrink-0 sm:flex-1 sm:min-h-0 ${actualShowRightPanel ? "sm:col-start-1 sm:row-start-1" : ""}`}>
+              <div className="sm:flex-1 sm:overflow-y-auto p-4">
                 {isStandaloneFile ? (
                   /* ---- Standalone file mode: link/create form ---- */
                   <div className="flex flex-col h-full space-y-3">
@@ -1360,49 +1397,13 @@ export default function GenericDomainModal({
                 )}
               </div>
 
-              {/* Footer: Action buttons */}
-              <div className="shrink-0 flex justify-end gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800">
-                {(onDelete || onDeleteWithCascade) && (
-                  <Button
-                    variant="danger"
-                    size="md"
-                    onClick={handleDeleteClick}
-                    disabled={isSaving}
-                  >
-                    {deleteLabel}
-                  </Button>
-                )}
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onClick={attemptClose}
-                  disabled={isSaving}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="md"
-                  onClick={handleSave}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <span className="flex items-center gap-1">
-                      <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
-                      Saving...
-                    </span>
-                  ) : (
-                    "Save"
-                  )}
-                </Button>
-              </div>
             </div>
 
             {/* ============================================================= */}
             {/* Right: Files panel                                             */}
             {/* ============================================================= */}
             {actualShowRightPanel && (
-              <div className="shrink-0 flex-col sm:shrink sm:border-t-0 sm:w-[420px] sm:border-l border-t border-zinc-200 dark:border-zinc-800 flex sm:min-h-0 sm:flex-1 min-w-0">
+              <div className="shrink-0 flex flex-col sm:col-start-2 sm:row-start-1 sm:row-span-2 sm:min-h-0 sm:border-t-0 sm:border-l border-t border-zinc-200 dark:border-zinc-800 min-w-0">
                 {/* ---- Nav bar with action buttons ---- */}
                 {hasFiles && selectedFile && (
                   <div className="shrink-0 flex items-center gap-1 px-3 py-2 border-b border-zinc-200 dark:border-zinc-800">
@@ -1723,6 +1724,43 @@ export default function GenericDomainModal({
                 )}
               </div>
             )}
+
+            {/* Footer: Action buttons (direct body child — bottom-left on desktop grid, after files on mobile) */}
+            <div className={`shrink-0 flex justify-end gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800 ${actualShowRightPanel ? "sm:col-start-1 sm:row-start-2" : "mt-auto"}`}>
+              {(onDelete || onDeleteWithCascade) && (
+                <Button
+                  variant="danger"
+                  size="md"
+                  onClick={handleDeleteClick}
+                  disabled={isSaving}
+                >
+                  {deleteLabel}
+                </Button>
+              )}
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={attemptClose}
+                disabled={isSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="md"
+                onClick={handleSave}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <span className="flex items-center gap-1">
+                    <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                    Saving...
+                  </span>
+                ) : (
+                  "Save"
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       </div>
