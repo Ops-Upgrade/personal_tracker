@@ -5,10 +5,6 @@ import { PRIORITIES } from "@/types/common";
 
 export {
   sortByCompletedDesc,
-  sortByCreatedAtDesc,
-  sortByDueDateAsc,
-  activeByMonths,
-  completedByMonths,
   trunc,
 } from "@/lib/viewHelpers";
 
@@ -37,5 +33,3 @@ export function fileTypeLabel(mime: string): string {
   if (mime === "image/webp") return "WEBP";
   return "File";
 }
-
-export { getUniqueFileName } from "@/lib/viewHelpers";
