@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
@@ -22,16 +22,30 @@ import TmdbAttribution from "./TmdbAttribution";
 type TopTab = "manager" | "discover";
 type SubTab = "default" | "collections";
 
+// ── Module-level cache: survives SPA navigation so a bare /media visit
+//    restores the last sub-tab instead of always defaulting to "Media" ──
+
+const mediaViewCache = {
+  subtab: "default" as SubTab,
+};
+
 export default function MediaView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mediaItems, setMediaItems] = useState<Media[]>([]);
   const [collections, setCollections] = useState<MediaCollection[]>([]);
 
-  // Tab state is derived from URL search params — the URL is the single source of truth.
+  // Tab state is derived from URL search params, with a module-level cache as
+  // fallback when the sub-tab param is absent (e.g. bare /media navigation).
   // switchTopTab / switchSubTab update the URL, which triggers a re-render with fresh searchParams.
   const activeTopTab: TopTab = searchParams.get("tab") === "discover" ? "discover" : "manager";
-  const activeSubTab: SubTab = searchParams.get("subtab") === "collections" ? "collections" : "default";
+  const urlSubtab = searchParams.get("subtab");
+  const activeSubTab: SubTab =
+    urlSubtab === "collections"
+      ? "collections"
+      : urlSubtab === "default"
+        ? "default"
+        : mediaViewCache.subtab;
 
   // ── Toast / popup state ──
   const [toastConfig, setToastConfig] = useState<{
@@ -63,6 +77,14 @@ export default function MediaView() {
     params.set("subtab", subtab);
     router.replace(`?${params.toString()}`, { scroll: false });
   }, [router, activeTopTab]);
+
+  // Keep the module cache in sync whenever the URL explicitly sets a sub-tab.
+  useEffect(() => {
+    const param = searchParams.get("subtab");
+    if (param === "default" || param === "collections") {
+      mediaViewCache.subtab = param;
+    }
+  }, [searchParams]);
 
   const loadAllData = useCallback(async (uid: string) => {
     const [media, cols] = await Promise.all([

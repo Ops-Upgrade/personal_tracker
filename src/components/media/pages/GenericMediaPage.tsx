@@ -111,6 +111,18 @@ export default function GenericMediaPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  // ── Context-aware back navigation ──
+  // The originating view passes ?from=collection&colId=… (or ?from=discover)
+  // so Back returns to that context instead of always landing on My Media.
+  const from = searchParams.get("from");
+  const colId = searchParams.get("colId");
+  const fallbackRoute =
+    from === "collection" && colId
+      ? ROUTES.MEDIA_COLLECTION(colId)
+      : from === "discover"
+        ? `${ROUTES.MEDIA}?tab=discover`
+        : `${ROUTES.MEDIA}?tab=manager`;
+
   // ── Data fetching via shared hook ──
   const {
     tmdbData,
@@ -173,9 +185,15 @@ export default function GenericMediaPage({
     searchParams.get("tab") === "episodes" ? "episodes" : "tracking";
   const setActiveTab = useCallback(
     (tab: "tracking" | "episodes") => {
-      router.replace(`?tab=${tab}`, { scroll: false });
+      const params = new URLSearchParams();
+      params.set("tab", tab);
+      // Preserve navigation-context params so Back still returns to the
+      // originating collection / discover view after switching tabs.
+      if (from) params.set("from", from);
+      if (colId) params.set("colId", colId);
+      router.replace(`?${params.toString()}`, { scroll: false });
     },
-    [router],
+    [router, from, colId],
   );
 
   // ── Load & hydrate ──
@@ -273,7 +291,7 @@ export default function GenericMediaPage({
   } = useNavigationGuard({
     isDirty,
     doCancel,
-    fallbackRoute: `${ROUTES.MEDIA}?tab=manager`,
+    fallbackRoute,
   });
 
   // ── Handlers ──
@@ -330,8 +348,16 @@ export default function GenericMediaPage({
   // ── Save ──
 
   async function handleSave() {
+    // Default untracked saves to "unwatched" so the create path always stores
+    // a concrete status (a bare undefined would override the "watched" create
+    // default and JSON.stringify would drop the field from the blob entirely).
+    // For tracked media the hydrated status is always used; undefined only
+    // occurs for legacy records that have no stored status, which we leave
+    // untouched so the updateMedia merge preserves the record as-is.
+    const effectiveStatus = status ?? (!isTracked ? "unwatched" : undefined);
+
     const patch: Partial<MediaPlaintext> = {
-      status,
+      status: effectiveStatus,
       rating: rating || undefined,
       review_notes: reviewNotes || undefined,
       collection_ids: collectionIds.length > 0 ? collectionIds : undefined,
@@ -375,14 +401,19 @@ export default function GenericMediaPage({
 
     const result = await save(patch, finalCreateFields);
     if (result) {
+      const savedStatus = result.status ?? effectiveStatus ?? "unwatched";
+      setStatus(savedStatus);
       setOriginalMedia({
-        status: result.status ?? "unwatched",
+        status: savedStatus,
         rating: result.rating ?? 0,
         watched_on: result.watched_on ?? "",
         review_notes: result.review_notes ?? "",
+        // Snapshot the local collectionIds state, not the API response — the
+        // response may not echo collection_ids back (e.g. legacy records with
+        // only collection_id), which would desync the snapshot from local
+        // state and trigger a false "Unsaved Changes" warning after a save.
         collection_ids:
-          result.collection_ids ??
-          (result.collection_id ? [result.collection_id] : []),
+          collectionIds.length > 0 ? [...collectionIds].sort() : undefined,
       } as MediaPlaintext);
     }
   }

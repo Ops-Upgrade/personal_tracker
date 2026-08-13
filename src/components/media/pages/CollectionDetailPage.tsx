@@ -22,7 +22,7 @@ import {
 } from "@/api/media";
 import type { Media, MediaCollection, TmdbSearchResult } from "@/types/media";
 import ThemePicker from "@/components/media/modals/ThemePicker";
-import AddMediaModal from "@/components/media/modals/AddMediaModal";
+import AddMediaModal, { clearAddMediaModalCache } from "@/components/media/modals/AddMediaModal";
 import AddMediaTile from "@/components/media/views/AddMediaTile";
 import { getThemeStyles } from "@/lib/collectionThemes";
 import { computeProgress } from "@/components/media/utils";
@@ -143,6 +143,15 @@ export default function CollectionDetailPage({
       dataLoadedRef.current = true;
     }
   }, [sortedItems, isLoading]);
+
+  // Clear this collection's AddMediaModal discover-search cache when leaving
+  // the page (back, delete, or navigation away) so stale searches don't
+  // reappear on re-entry.
+  useEffect(() => {
+    return () => {
+      clearAddMediaModalCache(collectionId);
+    };
+  }, [collectionId]);
 
   // ── Derived data ──
 
@@ -329,6 +338,11 @@ export default function CollectionDetailPage({
       const media = await listMedia(userId);
       setAllMedia([...media]);
 
+      // Save keeps the user on this page, so clear the AddMediaModal
+      // discover-search cache here as well — reopening the modal after a save
+      // should start fresh instead of showing the pre-save search.
+      clearAddMediaModalCache(collectionId);
+
       triggerToast("✓ Saved", "success");
     } catch {
       triggerToast("Failed to save collection. Please try again.", "error");
@@ -361,6 +375,13 @@ export default function CollectionDetailPage({
     doCancel,
     fallbackRoute: `${ROUTES.MEDIA}?tab=manager&subtab=collections`,
   });
+
+  // Forward navigation to media detail pages carries the collection context
+  // (?from=collection&colId=…) so the detail page's Back button returns here.
+  const handleNavigateToMedia = useCallback(
+    (url: string) => navigateTo(`${url}?from=collection&colId=${collectionId}`),
+    [navigateTo, collectionId],
+  );
 
   // ── Delete ──
 
@@ -539,7 +560,7 @@ export default function CollectionDetailPage({
                 isUnsaved={(m) => pendingAdds.some((p) => p.id === m.id)}
                 onReorder={(newOrder) => setDisplayOrder(newOrder.map((m) => m.id))}
                 onRemove={handleRemoveItem}
-                onNavigateItem={navigateTo}
+                onNavigateItem={handleNavigateToMedia}
                 appendElement={<AddMediaTile viewMode={viewMode} onClick={() => setIsAddModalOpen(true)} />}
               />
             )}
@@ -608,6 +629,7 @@ export default function CollectionDetailPage({
         onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddTitle}
         allMedia={allMedia}
+        collectionId={collectionId}
       />
 
       {/* ── Unsaved Changes Dialog ── */}

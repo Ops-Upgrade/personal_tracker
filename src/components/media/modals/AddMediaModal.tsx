@@ -14,6 +14,27 @@ import MediaCard from "@/components/media/MediaCard";
 import SearchBar from "@/components/common/SearchBar";
 const DEBOUNCE_MS = 400;
 
+// ── Module-level cache keyed by collectionId: survives the parent's
+//    key-based remount so the discover search query + results persist across
+//    modal close/reopen, scoped per page so searches never leak between
+//    collections. Pages clear their entry on save/unmount. ──
+
+const addMediaModalCache = new Map<
+  string,
+  { query: string; results: TmdbSearchResult[] }
+>();
+
+function getModalCache(collectionId: string) {
+  if (!addMediaModalCache.has(collectionId)) {
+    addMediaModalCache.set(collectionId, { query: "", results: [] });
+  }
+  return addMediaModalCache.get(collectionId)!;
+}
+
+export function clearAddMediaModalCache(collectionId: string) {
+  addMediaModalCache.delete(collectionId);
+}
+
 type Mode = "select_source" | "tracked" | "discover";
 
 interface AddMediaModalProps {
@@ -21,6 +42,7 @@ interface AddMediaModalProps {
   onClose: () => void;
   onAdd: (item: TmdbSearchResult) => void;
   allMedia: Media[];
+  collectionId: string;
 }
 
 export default function AddMediaModal({
@@ -28,12 +50,24 @@ export default function AddMediaModal({
   onClose,
   onAdd,
   allMedia,
+  collectionId,
 }: AddMediaModalProps) {
   const [mode, setMode] = useState<Mode>("select_source");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [discoverResults, setDiscoverResults] = useState<TmdbSearchResult[]>([]);
+  const [searchQuery, setSearchQuery] = useState(
+    () => getModalCache(collectionId).query,
+  );
+  const [discoverResults, setDiscoverResults] = useState<TmdbSearchResult[]>(
+    () => getModalCache(collectionId).results,
+  );
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Sync state → module-level cache so it survives modal remounts ──
+  useEffect(() => {
+    const entry = getModalCache(collectionId);
+    entry.query = searchQuery;
+    entry.results = discoverResults;
+  }, [collectionId, searchQuery, discoverResults]);
 
   const { loading: searching, execute: retryExecute, cancel: cancelRetry } = useTmdbRetry();
 

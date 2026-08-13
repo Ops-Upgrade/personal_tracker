@@ -10,7 +10,7 @@ import { useLocalStorage } from "@/lib/useLocalStorage";
 import { createCollection, createMedia, findDuplicate, listMedia, getMediaDetails, updateMedia, updateCollection } from "@/api/media";
 import type { Media, TmdbSearchResult } from "@/types/media";
 import ThemePicker from "@/components/media/modals/ThemePicker";
-import AddMediaModal from "@/components/media/modals/AddMediaModal";
+import AddMediaModal, { clearAddMediaModalCache } from "@/components/media/modals/AddMediaModal";
 import AddMediaTile from "@/components/media/views/AddMediaTile";
 import { getThemeStyles } from "@/lib/collectionThemes";
 import { computeProgress } from "@/components/media/utils";
@@ -23,6 +23,9 @@ import type { ToastType } from "@/components/common/Toast";
 import TmdbAttribution from "@/components/media/TmdbAttribution";
 
 const DEFAULT_COLOR = "#8B5CF6";
+
+/** Cache key for the AddMediaModal on this page — the collection doesn't exist yet. */
+const NEW_COLLECTION_CACHE_KEY = "new-collection";
 
 /** Estimate runtime for progress bar — TMDB search results don't include runtime. */
 function estimateRuntime(item: TmdbSearchResult): number {
@@ -126,6 +129,15 @@ export default function NewCollectionPage() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Clear the AddMediaModal discover-search cache when leaving this page —
+  // save navigates to the new collection's detail page, back returns to
+  // My Media, so unmount cleanup covers both.
+  useEffect(() => {
+    return () => {
+      clearAddMediaModalCache(NEW_COLLECTION_CACHE_KEY);
+    };
   }, []);
 
   const progress = useMemo(() => computeProgress(localItems), [localItems]);
@@ -393,6 +405,7 @@ export default function NewCollectionPage() {
         onClose={() => setIsAddModalOpen(false)}
         onAdd={handleAddTitle}
         allMedia={trackedMedia}
+        collectionId={NEW_COLLECTION_CACHE_KEY}
       />
 
       {/* ── Unsaved Changes Dialog ── */}
