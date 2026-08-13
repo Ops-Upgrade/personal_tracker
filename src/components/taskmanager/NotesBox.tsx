@@ -32,9 +32,9 @@ export default function NotesBox({
 }: NotesBoxProps) {
   const listHeader = (
     <div className="grid grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-      <div className="col-span-4 min-w-0 truncate">Name</div>
+      <div className="col-span-3 min-w-0 truncate">Name</div>
       <div className="col-span-4 min-w-0 truncate">Note</div>
-      <div className="col-span-2">Date Added</div>
+      <div className="col-span-3">Date Added</div>
       <div className="col-span-2 text-right">Files</div>
     </div>
   );
@@ -62,7 +62,7 @@ export default function NotesBox({
         >
           {item.type === "note" ? (
             <>
-              <div className="col-span-4 min-w-0 truncate font-medium">
+              <div className="col-span-3 min-w-0 truncate font-medium">
                 {getNoteTitle(item.data)}
               </div>
               <div className="col-span-4 min-w-0 truncate text-zinc-500 dark:text-zinc-400">
@@ -71,7 +71,7 @@ export default function NotesBox({
                   return stripped ? trunc(stripped, 60) : "—";
                 })()}
               </div>
-              <div className="col-span-2 text-zinc-500 dark:text-zinc-400">
+              <div className="col-span-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
                 {formatShortDate(item.data.created_at)}
               </div>
               <div className="col-span-2 text-right">
@@ -87,11 +87,11 @@ export default function NotesBox({
             </>
           ) : (
             <>
-              <div className="col-span-4 min-w-0 truncate font-medium">
+              <div className="col-span-3 min-w-0 truncate font-medium">
                 {item.data.label || "Unnamed"}
               </div>
               <div className="col-span-4 text-zinc-400 dark:text-zinc-500">—</div>
-              <div className="col-span-2 text-zinc-500 dark:text-zinc-400">
+              <div className="col-span-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
                 {formatShortDate(item.data.created_at)}
               </div>
               <div className="col-span-2 text-right">

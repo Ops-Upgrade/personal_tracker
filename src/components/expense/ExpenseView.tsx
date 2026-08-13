@@ -141,7 +141,7 @@ export default function ExpenseView() {
       {
         key: "date",
         header: "Date",
-        colSpan: 2,
+        colSpan: 3,
         mobileBehavior: "fixed",
         render: (exp) => (
           <span className="text-zinc-600 dark:text-zinc-300">
@@ -152,7 +152,7 @@ export default function ExpenseView() {
       {
         key: "reason",
         header: "Reason",
-        colSpan: 2,
+        colSpan: 1,
         mobileBehavior: "truncate",
         render: (exp) => (
           <span className="text-zinc-500 dark:text-zinc-400">

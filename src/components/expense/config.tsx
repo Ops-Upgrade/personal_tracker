@@ -68,7 +68,6 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
     colSpan: 2,
     sortColumn: "cost",
     mobileBehavior: "fixed",
-    align: "right",
     render: (exp) => (
       <span className="text-zinc-700 dark:text-zinc-200">
         ₹ {exp.cost.toLocaleString("en-IN")}
@@ -78,7 +77,7 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
   {
     key: "date",
     header: "Date",
-    colSpan: 2,
+    colSpan: 3,
     sortColumn: "date",
     mobileBehavior: "fixed",
     render: (exp) => (
@@ -90,7 +89,7 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
   {
     key: "reason",
     header: "Reason",
-    colSpan: 2,
+    colSpan: 1,
     sortColumn: "reason",
     mobileBehavior: "truncate",
     render: (exp) => (

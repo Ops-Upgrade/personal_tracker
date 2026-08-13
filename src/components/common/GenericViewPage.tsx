@@ -58,6 +58,8 @@ export interface ColumnDef<T, C extends string = string> {
   header: string;
   /** Grid column span out of 12. */
   colSpan: number;
+  /** Grid column span on `md:` screens and up (defaults to `colSpan`). */
+  mdColSpan?: number;
   /** When set, this column renders a SortableHeader with this sort key. */
   sortColumn?: C;
   /** Render the cell contents for a given item. */

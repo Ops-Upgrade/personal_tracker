@@ -97,9 +97,23 @@ export default function EducationAllPage() {
     })).filter((g) => g.items.length > 0);
   }, [educationsForYear]);
 
-  // Priority view groups by priority already, so drop the redundant column.
+  // Priority view groups by priority already, so drop the redundant column
+  // and redistribute its freed span(s) to Program Name to keep the 12-col
+  // grid balanced on mobile and desktop.
   const priorityViewColumns = useMemo(
-    () => EDUCATION_COLUMNS.filter((c) => c.key !== "priority"),
+    () => {
+      const priorityCol = EDUCATION_COLUMNS.find((c) => c.key === "priority");
+      const filtered = EDUCATION_COLUMNS.filter((c) => c.key !== "priority");
+      return filtered.map((c) =>
+        c.key === "name"
+          ? {
+              ...c,
+              colSpan: (c.colSpan || 2) + (priorityCol?.colSpan ?? 1),
+              mdColSpan: (c.mdColSpan ?? c.colSpan ?? 2) + (priorityCol?.mdColSpan ?? 0),
+            }
+          : c
+      );
+    },
     []
   );
 

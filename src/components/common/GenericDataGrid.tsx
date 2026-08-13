@@ -43,7 +43,7 @@ export interface GenericDataGridProps<T, C extends string = string> {
 
 // ── Helpers ──
 
-const getColSpanClass = (n: number): string => {
+const getColSpanClass = (n: number, md?: number): string => {
   const spans: Record<number, string> = {
     1: "col-span-1",
     2: "col-span-2",
@@ -58,7 +58,8 @@ const getColSpanClass = (n: number): string => {
     11: "col-span-11",
     12: "col-span-12",
   };
-  return spans[n] || "col-span-1";
+  const base = spans[n] || "col-span-1";
+  return md !== undefined ? `${base} md:${spans[md] || "col-span-1"}` : base;
 };
 
 const HEADER_CLASSES =
@@ -118,7 +119,7 @@ export default function GenericDataGrid<T, C extends string = string>({
           <div className="flex items-center gap-2 px-2 pb-2 border-b border-zinc-200 dark:border-zinc-700">
             <div className="grid flex-1 gap-2 grid-cols-12 pl-[3px] items-center">
               {columns.map((col) => {
-                const spanClass = getColSpanClass(col.colSpan);
+                const spanClass = getColSpanClass(col.colSpan, col.mdColSpan);
                 const alignClass = getAlignClass(col.align);
                 if (col.sortColumn && sortState !== undefined && onSortChange) {
                   return (
@@ -129,6 +130,7 @@ export default function GenericDataGrid<T, C extends string = string>({
                         label={col.header}
                         sortState={sortState}
                         onSort={onSortChange}
+                        align={col.align}
                       />
                     </div>
                   );
@@ -179,7 +181,7 @@ export default function GenericDataGrid<T, C extends string = string>({
                       const alignClass = col.align ? `text-${col.align}` : "";
                       const content = col.render(item);
                       return (
-                        <div key={col.key} className={`${getMobileBehaviorClass(col.mobileBehavior)} ${getColSpanClass(col.colSpan)} ${alignClass}`}>
+                        <div key={col.key} className={`${getMobileBehaviorClass(col.mobileBehavior)} ${getColSpanClass(col.colSpan, col.mdColSpan)} ${alignClass}`}>
                           {col.mobileBehavior === "truncate" ? (
                             <div className="w-full truncate block">{content}</div>
                           ) : (
