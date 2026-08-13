@@ -20,6 +20,8 @@ interface SortableHeaderProps<Column extends string = string> {
   as?: "button" | "div" | "th";
   /** Optional additional class names (e.g. grid column spans) */
   className?: string;
+  /** Horizontal alignment of the label inside the header cell. Defaults to left. */
+  align?: "left" | "center" | "right";
 }
 
 // ---------- component ----------
@@ -31,6 +33,7 @@ export default function SortableHeader<Column extends string = string>({
   onSort,
   as: Component = "button",
   className: extraClassName,
+  align = "left",
 }: SortableHeaderProps<Column>) {
   const isActive = sortState?.column === column;
   const nextDirection: SortDirection =
@@ -71,8 +74,11 @@ export default function SortableHeader<Column extends string = string>({
   }
 
   // ── <button> / <div> branch: apply flex layout directly ──
+  const justifyClass =
+    align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
+
   const className = [
-    `flex items-center min-w-0 gap-0.5 ${sharedTextClasses}`,
+    `flex items-center min-w-0 gap-0.5 w-full ${justifyClass} ${sharedTextClasses}`,
     extraClassName,
   ]
     .filter(Boolean)

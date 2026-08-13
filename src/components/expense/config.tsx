@@ -68,7 +68,6 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
     colSpan: 2,
     sortColumn: "cost",
     mobileBehavior: "fixed",
-    align: "right",
     render: (exp) => (
       <span className="text-zinc-700 dark:text-zinc-200">
         ₹ {exp.cost.toLocaleString("en-IN")}

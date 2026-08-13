@@ -49,6 +49,7 @@ export default function ActiveTasksBox({
           key: "name",
           header: "Task Name",
           colSpan: 3,
+          mdColSpan: isPriorityView ? 3 : 2,
           mobileBehavior: "truncate",
           render: (task) => (
             <span className="font-semibold text-zinc-800 dark:text-zinc-100">
@@ -63,6 +64,7 @@ export default function ActiveTasksBox({
           key: "priority",
           header: "Priority",
           colSpan: 1,
+          mdColSpan: 2,
           mobileBehavior: "fixed",
           align: "center",
           render: (task) => <PriorityBadge priority={task.priority} />,
@@ -119,7 +121,12 @@ export default function ActiveTasksBox({
 
   const rowAction = useCallback(
     (task: Task) => (
-      <Button variant="success" size="sm" onClick={() => onMarkComplete(task)}>
+      <Button
+        variant="success"
+        size="sm"
+        className="w-[85px]"
+        onClick={() => onMarkComplete(task)}
+      >
         Complete
       </Button>
     ),

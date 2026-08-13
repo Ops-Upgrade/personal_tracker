@@ -135,9 +135,23 @@ export default function TaskManagerAllPage() {
     })).filter((g) => g.items.length > 0);
   }, [tasksForYear]);
 
-  // Priority view groups by priority already, so drop the redundant column.
+  // Priority view groups by priority already, so drop the redundant column
+  // and redistribute its freed span(s) to Task Name to keep the 12-col grid
+  // balanced on mobile and desktop.
   const priorityViewColumns = useMemo(
-    () => TASK_COLUMNS.filter((c) => c.key !== "priority"),
+    () => {
+      const priorityCol = TASK_COLUMNS.find((c) => c.key === "priority");
+      const filtered = TASK_COLUMNS.filter((c) => c.key !== "priority");
+      return filtered.map((c) =>
+        c.key === "name"
+          ? {
+              ...c,
+              colSpan: (c.colSpan || 2) + (priorityCol?.colSpan ?? 1),
+              mdColSpan: (c.mdColSpan ?? c.colSpan ?? 2) + (priorityCol?.mdColSpan ?? 0),
+            }
+          : c
+      );
+    },
     []
   );
 

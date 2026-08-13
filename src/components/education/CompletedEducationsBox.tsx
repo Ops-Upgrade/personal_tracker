@@ -37,9 +37,9 @@ export default function CompletedEducationsBox({
 
   const listHeader = (
     <div className="grid grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-      <div className="col-span-3 min-w-0 truncate">Program Name</div>
+      <div className="col-span-3 md:col-span-2 min-w-0 truncate">Program Name</div>
       <div className="col-span-3 min-w-0 truncate">Provider</div>
-      <div className="col-span-1 text-center">Priority</div>
+      <div className="col-span-1 md:col-span-2 truncate text-center">Priority</div>
       <div className="col-span-3">Date</div>
       <div className="col-span-2 text-right">Files</div>
     </div>
@@ -62,13 +62,13 @@ export default function CompletedEducationsBox({
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectEducation(edu); } }}
             className="grid grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-sm cursor-pointer dark:border-zinc-700"
           >
-            <span className="col-span-3 min-w-0 truncate font-semibold text-zinc-800 dark:text-zinc-100">
+            <span className="col-span-3 md:col-span-2 min-w-0 truncate font-semibold text-zinc-800 dark:text-zinc-100">
               {trunc(edu.name, 24)}
             </span>
             <div className="col-span-3 min-w-0 truncate text-zinc-600 dark:text-zinc-300">
               {trunc(edu.provider, 20)}
             </div>
-            <div className="col-span-1 flex items-center justify-center">
+            <div className="col-span-1 md:col-span-2 flex items-center justify-center">
               {edu.priority ? <PriorityBadge priority={edu.priority} /> : "-"}
             </div>
             <div className="col-span-3 shrink-0 whitespace-nowrap text-zinc-600 dark:text-zinc-300">

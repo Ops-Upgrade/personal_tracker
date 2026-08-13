@@ -82,6 +82,7 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
     key: "priority",
     header: "Priority",
     colSpan: 1,
+    mdColSpan: 2,
     sortColumn: "priority",
     mobileBehavior: "fixed",
     align: "center",
@@ -91,6 +92,7 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
     key: "due_date",
     header: "Due Date",
     colSpan: 3,
+    mdColSpan: 2,
     sortColumn: "due_date",
     mobileBehavior: "fixed",
     render: (e) => (

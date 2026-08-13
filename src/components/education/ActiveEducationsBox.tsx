@@ -64,6 +64,7 @@ export default function ActiveEducationsBox({
           key: "name",
           header: "Program Name",
           colSpan: isPriorityView ? 3 : 2,
+          mdColSpan: isPriorityView ? 4 : 2,
           mobileBehavior: "truncate",
           render: (edu) => (
             <span className="font-semibold text-zinc-800 dark:text-zinc-100">
@@ -89,6 +90,7 @@ export default function ActiveEducationsBox({
           key: "priority",
           header: "Priority",
           colSpan: 1,
+          mdColSpan: 2,
           mobileBehavior: "fixed",
           render: (edu) =>
             edu.priority ? (
@@ -103,6 +105,7 @@ export default function ActiveEducationsBox({
         key: "due_date",
         header: "Due Date",
         colSpan: 4,
+        mdColSpan: 3,
         mobileBehavior: "fixed",
         render: (edu) => (
           <span className="text-zinc-600 dark:text-zinc-300">
@@ -159,7 +162,12 @@ export default function ActiveEducationsBox({
 
   const rowAction = useCallback(
     (edu: Education) => (
-      <Button variant="success" size="sm" onClick={() => onMarkComplete(edu)}>
+      <Button
+        variant="success"
+        size="sm"
+        className="w-[85px]"
+        onClick={() => onMarkComplete(edu)}
+      >
         Complete
       </Button>
     ),
