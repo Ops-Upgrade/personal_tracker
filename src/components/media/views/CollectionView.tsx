@@ -17,15 +17,11 @@ import { computeProgress, getCollectionItems } from "@/components/media/utils";
 
 const collectionViewCache = {
   collectionSearch: "",
-  sortBy: "date_added" as "date_added" | "name" | "progress",
-  sortOrder: "desc" as "asc" | "desc",
   hideCompleted: false,
 };
 
 export function clearCollectionViewCache() {
   collectionViewCache.collectionSearch = "";
-  collectionViewCache.sortBy = "date_added";
-  collectionViewCache.sortOrder = "desc";
   collectionViewCache.hideCompleted = false;
 }
 
@@ -93,19 +89,24 @@ export default function CollectionView({
     return () => ro.disconnect();
   }, []);
 
-  // Sort state
-  const [sortBy, setSortBy] = useState<"date_added" | "name" | "progress">(() => collectionViewCache.sortBy);
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(() => collectionViewCache.sortOrder);
+  // Sort state — persisted via localStorage (like viewMode) so it survives
+  // hard refreshes, unlike the module-level cache below.
+  const [sortBy, setSortBy] = useLocalStorage<"date_added" | "name" | "progress">(
+    "mediaCollectionSortBy",
+    "date_added",
+  );
+  const [sortOrder, setSortOrder] = useLocalStorage<"asc" | "desc">(
+    "mediaCollectionSortOrder",
+    "desc",
+  );
   const [hideCompleted, setHideCompleted] = useState(() => collectionViewCache.hideCompleted);
   const [collectionSearch, setCollectionSearch] = useState(() => collectionViewCache.collectionSearch);
 
   // ── Sync state → module-level cache so it survives SPA navigation ──
   useEffect(() => {
     collectionViewCache.collectionSearch = collectionSearch;
-    collectionViewCache.sortBy = sortBy;
-    collectionViewCache.sortOrder = sortOrder;
     collectionViewCache.hideCompleted = hideCompleted;
-  }, [collectionSearch, sortBy, sortOrder, hideCompleted]);
+  }, [collectionSearch, hideCompleted]);
 
   // Sort & filter collections
   const sortedCollections = useMemo(() => {

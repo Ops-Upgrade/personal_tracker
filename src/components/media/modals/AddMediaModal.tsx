@@ -14,6 +14,14 @@ import MediaCard from "@/components/media/MediaCard";
 import SearchBar from "@/components/common/SearchBar";
 const DEBOUNCE_MS = 400;
 
+// ── Module-level cache: survives the parent's key-based remount so the
+//    discover search query + results persist across modal close/reopen ──
+
+const addMediaModalCache = {
+  query: "",
+  results: [] as TmdbSearchResult[],
+};
+
 type Mode = "select_source" | "tracked" | "discover";
 
 interface AddMediaModalProps {
@@ -30,10 +38,18 @@ export default function AddMediaModal({
   allMedia,
 }: AddMediaModalProps) {
   const [mode, setMode] = useState<Mode>("select_source");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [discoverResults, setDiscoverResults] = useState<TmdbSearchResult[]>([]);
+  const [searchQuery, setSearchQuery] = useState(() => addMediaModalCache.query);
+  const [discoverResults, setDiscoverResults] = useState<TmdbSearchResult[]>(
+    () => addMediaModalCache.results,
+  );
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Sync state → module-level cache so it survives modal remounts ──
+  useEffect(() => {
+    addMediaModalCache.query = searchQuery;
+    addMediaModalCache.results = discoverResults;
+  }, [searchQuery, discoverResults]);
 
   const { loading: searching, execute: retryExecute, cancel: cancelRetry } = useTmdbRetry();
 

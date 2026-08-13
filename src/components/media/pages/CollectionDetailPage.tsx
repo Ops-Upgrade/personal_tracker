@@ -362,6 +362,13 @@ export default function CollectionDetailPage({
     fallbackRoute: `${ROUTES.MEDIA}?tab=manager&subtab=collections`,
   });
 
+  // Forward navigation to media detail pages carries the collection context
+  // (?from=collection&colId=…) so the detail page's Back button returns here.
+  const handleNavigateToMedia = useCallback(
+    (url: string) => navigateTo(`${url}?from=collection&colId=${collectionId}`),
+    [navigateTo, collectionId],
+  );
+
   // ── Delete ──
 
   async function handleDelete() {
@@ -539,7 +546,7 @@ export default function CollectionDetailPage({
                 isUnsaved={(m) => pendingAdds.some((p) => p.id === m.id)}
                 onReorder={(newOrder) => setDisplayOrder(newOrder.map((m) => m.id))}
                 onRemove={handleRemoveItem}
-                onNavigateItem={navigateTo}
+                onNavigateItem={handleNavigateToMedia}
                 appendElement={<AddMediaTile viewMode={viewMode} onClick={() => setIsAddModalOpen(true)} />}
               />
             )}

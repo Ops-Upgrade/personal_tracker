@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { ROUTES } from "@/routes/paths";
 import { searchMedia, getDiscoverMedia } from "@/api/media";
 import { useTmdbRetry } from "@/hooks/useTmdbRetry";
 import type {
@@ -337,8 +338,8 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   // ── Navigation ──
 
   const handleCardClick = (item: TmdbSearchResult) => {
-    const prefix = item.type === "movie" ? "movie" : "tv";
-    router.push(`/media/${prefix}/${item.tmdb_id}`);
+    // ?from=discover lets the detail page's Back button return to Discover
+    router.push(`${ROUTES.MEDIA_DETAIL(item.tmdb_id, item.type)}?from=discover`);
   };
 
   const isSearching = query.trim().length > 0;
