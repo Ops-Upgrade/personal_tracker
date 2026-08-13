@@ -16,7 +16,7 @@ interface BulkActionBarProps {
  */
 export default function BulkActionBar({ selectedCount, onClear, children }: BulkActionBarProps) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-y-3 gap-x-2 sm:gap-2 sm:flex-nowrap">
       <span className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
         {selectedCount} selected
       </span>

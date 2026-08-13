@@ -97,9 +97,15 @@ export default function EducationAllPage() {
     })).filter((g) => g.items.length > 0);
   }, [educationsForYear]);
 
-  // Priority view groups by priority already, so drop the redundant column.
+  // Priority view groups by priority already, so drop the redundant column
+  // and redistribute its freed span to Program Name to keep the 12-col grid.
   const priorityViewColumns = useMemo(
-    () => EDUCATION_COLUMNS.filter((c) => c.key !== "priority"),
+    () => {
+      const filtered = EDUCATION_COLUMNS.filter((c) => c.key !== "priority");
+      return filtered.map(c =>
+        c.key === "name" ? { ...c, colSpan: (c.colSpan || 2) + 1 } : c
+      );
+    },
     []
   );
 

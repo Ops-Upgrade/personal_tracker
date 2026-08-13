@@ -78,7 +78,7 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
   {
     key: "date",
     header: "Date",
-    colSpan: 2,
+    colSpan: 3,
     sortColumn: "date",
     mobileBehavior: "fixed",
     render: (exp) => (
@@ -90,7 +90,7 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
   {
     key: "reason",
     header: "Reason",
-    colSpan: 2,
+    colSpan: 1,
     sortColumn: "reason",
     mobileBehavior: "truncate",
     render: (exp) => (

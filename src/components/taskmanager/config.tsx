@@ -51,7 +51,7 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
   {
     key: "priority",
     header: "Priority",
-    colSpan: 2,
+    colSpan: 1,
     sortColumn: "priority",
     mobileBehavior: "fixed",
     align: "center",
@@ -60,7 +60,7 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
   {
     key: "due_date",
     header: "Due Date",
-    colSpan: 2,
+    colSpan: 3,
     sortColumn: "due_date",
     mobileBehavior: "fixed",
     render: (t) => (
@@ -96,7 +96,7 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
     header: "Status",
     colSpan: 2,
     sortColumn: "is_completed",
-    mobileBehavior: "fixed",
+    mobileBehavior: "truncate",
     render: (t) => (
       <span
         className={`text-[10px] sm:text-xs ${

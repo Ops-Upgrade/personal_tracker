@@ -99,7 +99,7 @@ export default function NotesPage() {
       {
         key: "note",
         header: "Note",
-        colSpan: 5,
+        colSpan: 4,
         mobileBehavior: "truncate",
         render: (item) =>
           item.type === "note" ? (
@@ -116,7 +116,7 @@ export default function NotesPage() {
       {
         key: "date",
         header: "Date Added",
-        colSpan: 2,
+        colSpan: 3,
         mobileBehavior: "fixed",
         render: (item) => (
           <div className="text-zinc-500 dark:text-zinc-400">

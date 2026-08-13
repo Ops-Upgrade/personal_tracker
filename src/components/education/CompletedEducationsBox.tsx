@@ -39,8 +39,8 @@ export default function CompletedEducationsBox({
     <div className="grid grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
       <div className="col-span-3 min-w-0 truncate">Program Name</div>
       <div className="col-span-3 min-w-0 truncate">Provider</div>
-      <div className="col-span-2 text-center">Priority</div>
-      <div className="col-span-2">Date</div>
+      <div className="col-span-1 text-center">Priority</div>
+      <div className="col-span-3">Date</div>
       <div className="col-span-2 text-right">Files</div>
     </div>
   );
@@ -68,10 +68,10 @@ export default function CompletedEducationsBox({
             <div className="col-span-3 min-w-0 truncate text-zinc-600 dark:text-zinc-300">
               {trunc(edu.provider, 20)}
             </div>
-            <div className="col-span-2 flex items-center justify-center">
+            <div className="col-span-1 flex items-center justify-center">
               {edu.priority ? <PriorityBadge priority={edu.priority} /> : "-"}
             </div>
-            <div className="col-span-2 shrink-0 whitespace-nowrap overflow-hidden text-zinc-600 dark:text-zinc-300">
+            <div className="col-span-3 shrink-0 whitespace-nowrap text-zinc-600 dark:text-zinc-300">
               {formatShortDate(edu.completed_at)}
             </div>
             <div className="col-span-2 text-right">

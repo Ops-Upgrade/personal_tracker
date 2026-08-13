@@ -81,7 +81,7 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
   {
     key: "priority",
     header: "Priority",
-    colSpan: 2,
+    colSpan: 1,
     sortColumn: "priority",
     mobileBehavior: "fixed",
     align: "center",
@@ -102,7 +102,7 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
   {
     key: "description",
     header: "Description",
-    colSpan: 1,
+    colSpan: 2,
     mobileBehavior: "truncate",
     render: (e) => (
       <span className="text-zinc-500 dark:text-zinc-400">

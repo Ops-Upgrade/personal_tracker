@@ -62,7 +62,7 @@ export default function ActiveTasksBox({
         cols.push({
           key: "priority",
           header: "Priority",
-          colSpan: 2,
+          colSpan: 1,
           mobileBehavior: "fixed",
           align: "center",
           render: (task) => <PriorityBadge priority={task.priority} />,
@@ -72,7 +72,7 @@ export default function ActiveTasksBox({
       cols.push({
         key: "due_date",
         header: "Due Date",
-        colSpan: isPriorityView ? 4 : 3,
+        colSpan: 4,
         mobileBehavior: "fixed",
         render: (task) => (
           <span className="text-zinc-600 dark:text-zinc-300">
