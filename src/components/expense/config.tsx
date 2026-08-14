@@ -1,8 +1,7 @@
 import type { Expense } from "@/types/expense";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
 import type { FieldDef } from "@/components/common/GenericDomainModal";
-import { PaperClipIcon } from "@/components/common/Icons";
-import { trunc } from "@/lib/viewHelpers";
+import { colDate, colRichtext, colFiles } from "@/components/common/columns";
 
 // ── Modal form fields ──
 
@@ -28,96 +27,65 @@ export const SORT_CONFIGS = [
   { column: "reason" as const, extractor: (exp: Expense) => exp.reason.replace(/<[^>]*>/g, "").trim().toLowerCase() },
 ];
 
-// ── Date formatting ──
+// ── Shared column atoms ──
 
-export function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
-}
+export const EXPENSE_DATE: ColumnDef<Expense, SortColumn> = colDate<Expense, SortColumn>(
+  { key: "date", header: "Date", accessor: (exp) => exp.date },
+  { sortColumn: "date" },
+);
+
+export const EXPENSE_REASON: ColumnDef<Expense, SortColumn> = colRichtext<Expense, SortColumn>(
+  { key: "reason", header: "Reason", accessor: (exp) => exp.reason, weight: 1 },
+  { sortColumn: "reason" },
+);
+
+export const EXPENSE_FILES: ColumnDef<Expense, SortColumn> = colFiles<Expense, SortColumn>({
+  getCount: (exp) => exp.document_ids?.length ?? 0,
+  iconColorClass: "text-emerald-500",
+});
 
 // ── Column definitions for the "all" view ──
 
+// Sizing model: "fixed" columns get max-content tracks (cost, dates, files
+// always fit their content); "flex" columns share the remaining space and
+// truncate gracefully via CSS — no breakpoint math anywhere.
 export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
   {
     key: "item",
     header: "Item",
-    colSpan: 2,
+    sizing: "flex",
+    weight: 2,
     sortColumn: "item",
-    mobileBehavior: "truncate",
     render: (exp) => (
       <span className="font-medium text-zinc-800 dark:text-zinc-100">
-        {trunc(exp.item, 24) || "—"}
+        {exp.item || "—"}
       </span>
     ),
   },
   {
     key: "seller",
     header: "Seller",
-    colSpan: 2,
+    sizing: "flex",
+    weight: 1,
     sortColumn: "seller",
-    mobileBehavior: "truncate",
     render: (exp) => (
       <span className="text-zinc-600 dark:text-zinc-300">
-        {trunc(exp.seller, 20) || "—"}
+        {exp.seller || "—"}
       </span>
     ),
   },
   {
     key: "cost",
     header: "Cost",
-    colSpan: 2,
+    sizing: "fixed",
     sortColumn: "cost",
-    mobileBehavior: "fixed",
     render: (exp) => (
       <span className="text-zinc-700 dark:text-zinc-200">
         ₹ {exp.cost.toLocaleString("en-IN")}
       </span>
     ),
   },
-  {
-    key: "date",
-    header: "Date",
-    colSpan: 3,
-    sortColumn: "date",
-    mobileBehavior: "fixed",
-    render: (exp) => (
-      <span className="text-zinc-600 dark:text-zinc-300">
-        {formatDate(exp.date)}
-      </span>
-    ),
-  },
-  {
-    key: "reason",
-    header: "Reason",
-    colSpan: 1,
-    sortColumn: "reason",
-    mobileBehavior: "truncate",
-    render: (exp) => (
-      <span className="text-zinc-500 dark:text-zinc-400">
-        {trunc(exp.reason, 20) || "—"}
-      </span>
-    ),
-  },
-  {
-    key: "files",
-    header: "Files",
-    colSpan: 2,
-    mobileBehavior: "fixed",
-    render: (exp) => {
-      const count = exp.document_ids?.length ?? 0;
-      return count > 0 ? (
-        <span
-          className="inline-flex items-center justify-center gap-1 text-emerald-500"
-          title={`${count} document(s) attached`}
-        >
-          <PaperClipIcon className="h-4 w-4" />
-          <span className="text-zinc-600 dark:text-zinc-300">
-            ({count})
-          </span>
-        </span>
-      ) : (
-        <span className="text-zinc-400">—</span>
-      );
-    },
-  },
+  EXPENSE_DATE,
+  EXPENSE_REASON,
+  EXPENSE_FILES,
 ];

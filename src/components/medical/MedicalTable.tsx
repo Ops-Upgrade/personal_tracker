@@ -1,6 +1,7 @@
 "use client";
 
 import { trunc } from "@/lib/viewHelpers";
+import { formatShortDate } from "@/lib/format";
 import SortableHeader from "@/components/common/SortableHeader";
 import { PaperClipIcon } from "@/components/common/Icons";
 import { useTableSort, type SortConfig } from "@/hooks/useTableSort";
@@ -119,7 +120,7 @@ export default function MedicalTable({
                 {trunc(record.clinic, 20) || "—"}
               </td>
               <td className="py-2 pr-3 text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
-                {formatDate(record.date)}
+                {formatShortDate(record.date)}
               </td>
               <td className="py-2 pr-3 text-zinc-500 dark:text-zinc-400 truncate max-w-[120px]">
                 {trunc(record.diagnosis_timeline, 28) || "—"}
@@ -140,9 +141,4 @@ export default function MedicalTable({
       </table>
     </div>
   );
-}
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
 }

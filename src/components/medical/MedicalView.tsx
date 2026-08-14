@@ -11,7 +11,7 @@ import { useLocalStorage } from "@/lib/useLocalStorage";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import { List, LayoutGrid, Table } from "lucide-react";
-import { FolderIcon, PaperClipIcon } from "@/components/common/Icons";
+import { FolderIcon } from "@/components/common/Icons";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import GenericDomainPage from "@/components/common/GenericDomainPage";
 import type { DomainPageContext } from "@/components/common/GenericDomainPage";
@@ -19,17 +19,12 @@ import type { ColumnDef } from "@/components/common/GenericViewPage";
 import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 import { useMedicalActions } from "@/hooks/useMedicalActions";
 import { useMedicalData } from "@/hooks/useMedicalData";
+import { MEDICAL_DATE, MEDICAL_DIAGNOSIS, MEDICAL_FILES } from "./config";
 import MedicalTable from "./MedicalTable";
 import GenericMonthRow from "@/components/common/GenericMonthRow";
 import YearDropdown from "@/components/common/YearDropdown";
-import { trunc } from "@/lib/viewHelpers";
 
 type MedicalViewMode = "all" | "single" | "multi";
-
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
-}
 
 /** SVG icon symbols for the medical view toggle */
 const MEDICAL_VIEW_OPTIONS: readonly ViewToggleOption<MedicalViewMode>[] = [
@@ -104,70 +99,35 @@ export default function MedicalView() {
   const totalRecords = recordsForSelectedYear.length;
 
   // ── Column definitions for month preview rows ──
+  // Fixed tracks size themselves to content; flex tracks share the rest.
 
   const medicalColumns: ColumnDef<MedicalRecord>[] = useMemo(
     () => [
       {
         key: "name",
         header: "Name",
-        colSpan: 3,
-        mobileBehavior: "truncate",
+        sizing: "flex",
+        weight: 2,
         render: (rec) => (
           <span className="font-medium text-zinc-800 dark:text-zinc-100">
-            {trunc(rec.name, 24) || "—"}
+            {rec.name || "—"}
           </span>
         ),
       },
       {
         key: "clinic",
         header: "Clinic",
-        colSpan: 2,
-        mobileBehavior: "truncate",
+        sizing: "flex",
+        weight: 1,
         render: (rec) => (
           <span className="text-zinc-600 dark:text-zinc-300">
-            {trunc(rec.clinic, 20) || "—"}
+            {rec.clinic || "—"}
           </span>
         ),
       },
-      {
-        key: "date",
-        header: "Date",
-        colSpan: 3,
-        mobileBehavior: "fixed",
-        render: (rec) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {formatShortDate(rec.date)}
-          </span>
-        ),
-      },
-      {
-        key: "diagnosis",
-        header: "Diagnosis",
-        colSpan: 2,
-        mobileBehavior: "truncate",
-        render: (rec) => (
-          <span className="text-zinc-500 dark:text-zinc-400">
-            {trunc(rec.diagnosis_timeline, 28) || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "files",
-        header: "Files",
-        colSpan: 2,
-        mobileBehavior: "fixed",
-        render: (rec) => {
-          const count = rec.document_ids?.length ?? 0;
-          return count > 0 ? (
-            <span className="inline-flex items-center justify-center gap-1 text-rose-500" title={`${count} document(s) attached`}>
-              <PaperClipIcon className="h-4 w-4" />
-              <span className="text-zinc-600 dark:text-zinc-300">({count})</span>
-            </span>
-          ) : (
-            <span className="text-zinc-400">—</span>
-          );
-        },
-      },
+      MEDICAL_DATE,
+      MEDICAL_DIAGNOSIS,
+      MEDICAL_FILES,
     ],
     [],
   );

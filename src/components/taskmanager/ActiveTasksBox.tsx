@@ -9,7 +9,9 @@ import type { ColumnDef } from "@/components/common/GenericViewPage";
 import PriorityBadge from "@/components/common/PriorityBadge";
 import Button from "@/components/common/Button";
 import { ROUTES } from "@/routes/paths";
-import { formatShortDate, getPriorityColor, trunc } from "./helpers";
+import { TASK_PRIORITY, TASK_DUE_DATE } from "./config";
+import { colRichtext } from "@/components/common/columns";
+import { getPriorityColor } from "./helpers";
 
 const TASK_VIEW_OPTIONS: readonly ViewToggleOption<TaskView>[] = [
   { value: "months", label: "Months" },
@@ -39,7 +41,9 @@ export default function ActiveTasksBox({
   onSelectTask,
   onMarkComplete,
 }: ActiveTasksBoxProps) {
-  // ── Column definitions (view-dependent for priority/due-date column) ──
+  // ── Column definitions (Priority hidden in the priority view) ──
+  // Fixed tracks size themselves to content; flex tracks share the rest.
+  // No breakpoint math: track widths emerge from content + available space.
 
   const taskColumns: ColumnDef<Task>[] = useMemo(
     () => {
@@ -48,62 +52,38 @@ export default function ActiveTasksBox({
         {
           key: "name",
           header: "Task Name",
-          colSpan: 3,
-          mdColSpan: isPriorityView ? 3 : 2,
-          mobileBehavior: "truncate",
+          sizing: "flex",
+          weight: 2,
           render: (task) => (
             <span className="font-semibold text-zinc-800 dark:text-zinc-100">
-              {trunc(task.name, 34)}
+              {task.name}
             </span>
           ),
         },
       ];
 
       if (!isPriorityView) {
-        cols.push({
-          key: "priority",
-          header: "Priority",
-          colSpan: 1,
-          mdColSpan: 2,
-          mobileBehavior: "fixed",
-          align: "center",
-          render: (task) => <PriorityBadge priority={task.priority} />,
-        });
+        cols.push(TASK_PRIORITY);
       }
 
-      cols.push({
-        key: "due_date",
-        header: "Due Date",
-        colSpan: 4,
-        mobileBehavior: "fixed",
-        render: (task) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {formatShortDate(task.due_date)}
-          </span>
-        ),
-      });
+      cols.push(TASK_DUE_DATE);
 
       cols.push(
         {
           key: "mode",
           header: "Mode",
-          colSpan: 2,
-          mobileBehavior: "truncate",
+          sizing: "fixed",
           render: (task) => (
             <span className="text-zinc-600 dark:text-zinc-300">{task.mode}</span>
           ),
         },
-        {
+        colRichtext<Task>({
           key: "description",
           header: "Description",
-          colSpan: isPriorityView ? 3 : 2,
-          mobileBehavior: "truncate",
-          render: (task) => (
-            <span className="text-zinc-700 dark:text-zinc-200">
-              {trunc(task.description, 38)}
-            </span>
-          ),
-        },
+          accessor: (task) => task.description,
+          weight: 2,
+          className: "text-zinc-700 dark:text-zinc-200",
+        }),
       );
 
       return cols;
@@ -125,7 +105,10 @@ export default function ActiveTasksBox({
         variant="success"
         size="sm"
         className="w-[85px]"
-        onClick={() => onMarkComplete(task)}
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          onMarkComplete(task);
+        }}
       >
         Complete
       </Button>

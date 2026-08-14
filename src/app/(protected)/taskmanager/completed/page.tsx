@@ -10,16 +10,14 @@ import { PRIORITIES } from "@/types/common";
 import type { SortState } from "@/components/common/SortableHeader";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import PriorityBadge from "@/components/common/PriorityBadge";
 import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
 import type { ColumnDef, MonthGroup, PriorityGroup } from "@/components/common/GenericViewPage";
+import { colPriority, colDate } from "@/components/common/columns";
 import {
   byPriority,
   completedByMonths,
   sortByCompletedDesc,
-  formatShortDate,
   getPriorityColor,
-  trunc,
 } from "@/components/taskmanager/helpers";
 import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 
@@ -152,23 +150,13 @@ export default function CompletedTasksPage() {
 
   const renderTaskName = (task: Task) => (
     <span className="font-semibold text-zinc-800 dark:text-zinc-100">
-      {trunc(task.name, 42)}
+      {task.name}
     </span>
-  );
-
-  const renderTaskPriority = (task: Task) => (
-    <PriorityBadge priority={task.priority} />
   );
 
   const renderTaskMode = (task: Task) => (
     <span className="text-xs capitalize text-zinc-500 dark:text-zinc-400">
       {task.mode}
-    </span>
-  );
-
-  const renderTaskDate = (task: Task) => (
-    <span className="text-zinc-600 dark:text-zinc-300">
-      {formatShortDate(task.completed_at)}
     </span>
   );
 
@@ -188,37 +176,26 @@ export default function CompletedTasksPage() {
 
   const completionColumns: ColumnDef<Task, "name" | "date">[] = useMemo(
     () => [
-      { key: "name",     header: "Name",     colSpan: 3, sortColumn: "name", mobileBehavior: "truncate", render: renderTaskName },
-      { key: "priority", header: "Priority", colSpan: 1, mobileBehavior: "fixed",    align: "center", render: renderTaskPriority },
-      { key: "mode",     header: "Mode",     colSpan: 2, mobileBehavior: "truncate", render: renderTaskMode },
-      { key: "date",     header: "Date",     colSpan: 3, sortColumn: "date", mobileBehavior: "fixed",    render: renderTaskDate },
-      { key: "actions",  header: "Actions",  colSpan: 3, mobileBehavior: "fixed",    align: "right",  render: renderReopenAction },
+      { key: "name",    header: "Name",    sizing: "flex",  weight: 2, sortColumn: "name", render: renderTaskName },
+      colPriority<Task, "name" | "date">(),
+      { key: "mode",    header: "Mode",    sizing: "fixed", render: renderTaskMode },
+      colDate<Task, "name" | "date">(
+        { key: "date", header: "Date", accessor: (task) => task.completed_at },
+        { sortColumn: "date" },
+      ),
+      { key: "actions", header: "Actions", sizing: "fixed", align: "right", render: renderReopenAction },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // Sorting is disabled in the months view (headers render as plain text), so
+  // it reuses the completion columns as-is.
+  const monthsViewColumns = completionColumns;
 
   const priorityViewColumns: ColumnDef<Task>[] = useMemo(
-    () => [
-      { key: "name",    header: "Name",    colSpan: 4, mobileBehavior: "truncate", render: renderTaskName },
-      { key: "mode",    header: "Mode",    colSpan: 2, mobileBehavior: "truncate", render: renderTaskMode },
-      { key: "date",    header: "Date",    colSpan: 3, mobileBehavior: "fixed",    render: renderTaskDate },
-      { key: "actions", header: "Actions", colSpan: 3, mobileBehavior: "fixed",    align: "right",  render: renderReopenAction },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-
-  const monthsViewColumns: ColumnDef<Task>[] = useMemo(
-    () => [
-      { key: "name",     header: "Name",     colSpan: 3, mobileBehavior: "truncate", render: renderTaskName },
-      { key: "priority", header: "Priority", colSpan: 1, mobileBehavior: "fixed",    align: "center", render: renderTaskPriority },
-      { key: "mode",     header: "Mode",     colSpan: 2, mobileBehavior: "truncate", render: renderTaskMode },
-      { key: "date",     header: "Date",     colSpan: 3, mobileBehavior: "fixed",    render: renderTaskDate },
-      { key: "actions",  header: "Actions",  colSpan: 3, mobileBehavior: "fixed",    align: "right",  render: renderReopenAction },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    () => completionColumns.filter((col) => col.key !== "priority"),
+    [completionColumns],
   );
 
   const taskRowClass = (task: Task) => {

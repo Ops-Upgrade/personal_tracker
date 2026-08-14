@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Quick reference
 
 - **Dev server:** `npm run dev` (uses `--webpack` for Next.js 16 Webpack fallback)
-- **Build:** `npm run build`
+- **Build:** `npm run build` (also `--webpack` — Next 16 Turbopack dev mode does not emit Tailwind variant rules, so the Webpack fallback is mandatory for both)
 - **Lint:** `npm run lint` (ESLint 9 with `eslint-config-next`)
 - **No test suite** yet — verify changes manually by driving the UI (`npm run dev`).
 
@@ -64,6 +64,9 @@ File uploads (expense invoices, certificates) are client-side encrypted with DEK
 - `useLocalStorage` hook for persisting UI preferences (view modes, sort state).
 - All pages must be responsive — use Tailwind breakpoints (`sm`, `md`, `lg`), no fixed-width layouts.
 - Theme: `@wrksz/themes` with `.dark` class selector; `ThemeSwitcher` in Navbar.
+- Data tables: `GenericDataGrid` renders all domain tables. Column widths come from `ColumnDef.sizing` — `"fixed"` gets a `minmax(max-content, weightFr)` track (content-fit floor; dates, badges, files, actions, short mode labels never clip) and `"flex"` gets `minmax(0, weightFr)` (names, descriptions, providers; CSS ellipsis truncates). Every column takes `weight` shares of leftover space, so width spreads proportionally — never leave a single flex column to absorb all remaining space. Header and rows are CSS Grid **subgrids** of one outer grid, so tracks are sized across all rows at once and can never drift. Never hand-roll `grid-cols-12`/`col-span-*` math for tables — there is no breakpoint arithmetic to maintain.
+- Richtext cells: description/reason/diagnosis columns store Tiptap HTML. Always render them through `stripHtml()` from `@/lib/viewHelpers` so tags like `<p>` never leak into table cells; CSS ellipsis (not `trunc()`) handles length.
+- Column factories: shared column concepts (priority badge, files count, richtext, date) are built ONLY in `src/components/common/columns.tsx` (`colPriority`, `colFiles`, `colRichtext`, `colDate`). Domain configs export atoms composed from them (e.g. `TASK_PRIORITY`), and widgets/pages assemble per-view arrays from atoms — never re-declare a column's render/sizing/align inline. Date rendering goes through `formatShortDate` from `@/lib/format` (the only date formatter in the codebase).
 
 ### Date handling
 
@@ -100,3 +103,13 @@ Use `getServerDateIST()` from `src/api/serverDate.ts` to get current IST date fr
 4. Ensure the folder is in the `allowedFolders` list in `src/app/api/storage/upload/route.ts`.
 5. Update `docs/schema.md` with the folder structure.
 6. No RLS policies needed — access control is enforced by the Next.js API routes via `getAuthenticatedUserId()`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

@@ -7,12 +7,12 @@ import { PRIORITIES } from "@/types/common";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import GenericActiveBox from "@/components/common/GenericActiveBox";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
-import Button from "@/components/common/Button";
 import PriorityBadge from "@/components/common/PriorityBadge";
+import Button from "@/components/common/Button";
 import { getPriorityColor } from "@/lib/priorityColors";
-import { PaperClipIcon } from "@/components/common/Icons";
+import { EDU_PRIORITY, EDU_DUE_DATE } from "./config";
+import { colRichtext, colFiles } from "@/components/common/columns";
 import { ROUTES } from "@/routes/paths";
-import { formatShortDate, trunc } from "./helpers";
 
 const EDUCATION_VIEW_OPTIONS: readonly ViewToggleOption<EducationViewMode>[] = [
   { value: "months", label: "Months" },
@@ -54,7 +54,9 @@ export default function ActiveEducationsBox({
     return map;
   }, [documents]);
 
-  // ── Column definitions (view-dependent: Priority hidden in priority view, Due Date always present) ──
+  // ── Column definitions (Priority hidden in the priority view) ──
+  // Fixed tracks size themselves to content; flex tracks share the rest.
+  // No breakpoint math: track widths emerge from content + available space.
 
   const educationColumns: ColumnDef<Education>[] = useMemo(
     () => {
@@ -63,86 +65,45 @@ export default function ActiveEducationsBox({
         {
           key: "name",
           header: "Program Name",
-          colSpan: isPriorityView ? 3 : 2,
-          mdColSpan: isPriorityView ? 4 : 2,
-          mobileBehavior: "truncate",
+          sizing: "flex",
+          weight: 2,
           render: (edu) => (
             <span className="font-semibold text-zinc-800 dark:text-zinc-100">
-              {trunc(edu.name, 34)}
+              {edu.name}
             </span>
           ),
         },
         {
           key: "provider",
           header: "Provider",
-          colSpan: 2,
-          mobileBehavior: "truncate",
+          sizing: "flex",
+          weight: 1,
           render: (edu) => (
             <span className="text-zinc-600 dark:text-zinc-300">
-              {trunc(edu.provider, 24)}
+              {edu.provider}
             </span>
           ),
         },
       ];
 
       if (!isPriorityView) {
-        cols.push({
-          key: "priority",
-          header: "Priority",
-          colSpan: 1,
-          mdColSpan: 2,
-          mobileBehavior: "fixed",
-          render: (edu) =>
-            edu.priority ? (
-              <PriorityBadge priority={edu.priority} />
-            ) : (
-              <span className="text-zinc-400">—</span>
-            ),
-        });
+        cols.push(EDU_PRIORITY);
       }
 
-      cols.push({
-        key: "due_date",
-        header: "Due Date",
-        colSpan: 4,
-        mdColSpan: 3,
-        mobileBehavior: "fixed",
-        render: (edu) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {formatShortDate(edu.due_date)}
-          </span>
-        ),
-      });
+      cols.push(EDU_DUE_DATE);
 
       cols.push(
-        {
+        colRichtext<Education>({
           key: "description",
           header: "Description",
-          colSpan: 1,
-          mobileBehavior: "truncate",
-          render: (edu) => (
-            <span className="text-zinc-700 dark:text-zinc-200">
-              {trunc(edu.description, 38)}
-            </span>
-          ),
-        },
-        {
-          key: "files",
-          header: "Files",
-          colSpan: 2,
-          mobileBehavior: "fixed",
-          render: (edu) => {
-            const count = docCountsByEdu.get(edu.id) ?? 0;
-            return count > 0 ? (
-              <span className="inline-flex items-center gap-1 text-amber-500" title={`${count} document(s) attached`}>
-                <PaperClipIcon className="h-4 w-4" />
-                <span className="text-zinc-600 dark:text-zinc-300">({count})</span>
-              </span>
-            ) : (
-              <span className="text-zinc-400 dark:text-zinc-600">—</span>
-            );
-          },
-        },
+          accessor: (edu) => edu.description,
+          weight: 2,
+          className: "text-zinc-700 dark:text-zinc-200",
+        }),
+        colFiles<Education>({
+          getCount: (edu) => docCountsByEdu.get(edu.id) ?? 0,
+          iconColorClass: "text-amber-500",
+        }),
       );
 
       return cols;
@@ -166,7 +127,10 @@ export default function ActiveEducationsBox({
         variant="success"
         size="sm"
         className="w-[85px]"
-        onClick={() => onMarkComplete(edu)}
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          onMarkComplete(edu);
+        }}
       >
         Complete
       </Button>

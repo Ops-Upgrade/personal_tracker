@@ -120,7 +120,8 @@ src/
 │   │   ├── GenericViewPage.tsx # Generic "View All" page (sortable data grids)
 │   │   ├── GenericDomainPage.tsx # Generic domain shell (header, layout, loading state)
 │   │   ├── GenericDomainModal.tsx # Schema-driven modal replacing all domain modals
-│   │   ├── GenericDataGrid.tsx # Generic data grid component
+│   │   ├── GenericDataGrid.tsx # Data grid with auto-sizing tracks + subgrid alignment
+│   │   ├── columns.tsx         # Shared column factories (colPriority, colFiles, colRichtext, colDate)
 │   │   ├── GenericMonthRow.tsx # 5-item preview row for month-grouped data
 │   │   └── store/              # Global Document Store components
 │   │       ├── GenericStorePage.tsx # Generic wrapper for document/record stores
@@ -282,6 +283,7 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-07-15 | Media Tracker feature completed: `/media` route, `media` + `media_collections` tables (HLD documented in schema.md), 4 TMDB proxy routes (`/api/tmdb/*`), encrypted CRUD API layer (`src/api/media/`), 12 UI components (MediaView orchestrator, DefaultView with Watching/Unwatched/Watched lanes, CollectionView, DiscoverView with TMDB search, MoviePage, TvSeriesPage with episode matrix, EpisodePage, CollectionDetailPage, MediaCard with inline status/rating, CollectionModal with color picker, CollectionFilterBar, TmdbAttribution), dashboard tile integration (violet), `next.config.ts` TMDB image domain + CSP update, StarRating common component. |
 | 2026-07-24 | Vault feature completed: `/vault` route with PIN-protected access, server-side Argon2id PIN hashing with brute-force protection (10 attempts / 10-min sliding window, permanent DB-persisted lockout), 4 sub-sections (Personal Records, Password Manager, Bank Manager, Document Vault), `vault_entries` encrypted table + RLS, vault storage bucket folder, 2×2 gray-themed dashboard tile replacing Analytics placeholder, 30-second navigation-away grace period. |
 | 2026-08-09 | Global Architecture Refactor: Eliminated structural duplication by standardizing list views, store views, main domain shells, media details, and modals into generic composable components (`GenericViewPage`, `GenericStorePage`, `GenericDomainPage`, `GenericMediaPage`, `GenericDomainModal`). Replaced domain-specific modals and duplicate list pages. Added `/all` query-param-driven routes for Task Manager, Education, Expense, and Medical domains. |
+| 2026-08-15 | Column Definition Deduplication (per `plans/note-column-deduplication.md`): Added shared column factories in `common/columns.tsx` (`colPriority`, `colFiles`, `colRichtext`, `colDate`); domain configs export atomic columns (`TASK_PRIORITY`, `EDU_FILES`, …) composed from them; all widgets/pages assemble per-view arrays from atoms. Date formatting consolidated into a single timezone-safe `formatShortDate` in `lib/format.ts`; local `formatDate`/`formatShortDate` copies deleted everywhere. `taskmanager/completed` months view reuses the completion columns (sorting is inert there). |
 
 ---
 
@@ -295,6 +297,7 @@ Applied via `next.config.ts` `headers()` on all routes:
 ## Production Deployment Checklist
 
 - [ ] Set env vars on Vercel (`PUBLISHABLE_KEY`, `COOKIE_DOMAIN=.ops-upgrade.com`)
+- [ ] Set Build Command to `npm run build` in Vercel project settings (pins `next build --webpack`; Vercel's preset otherwise runs Turbopack, which works but diverges from local dev)
 - [ ] Add redirect URLs in Supabase Auth settings for each subdomain
 - [ ] Add custom domain(s) in Vercel project settings
 - [ ] Create user accounts in Supabase dashboard (no signup flow)

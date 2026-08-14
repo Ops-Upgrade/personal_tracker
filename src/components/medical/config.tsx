@@ -1,7 +1,6 @@
 import type { MedicalRecord } from "@/types/medical";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
-import { PaperClipIcon } from "@/components/common/Icons";
-import { trunc } from "@/lib/viewHelpers";
+import { colDate, colRichtext, colFiles } from "@/components/common/columns";
 
 // ── Sort column type ──
 
@@ -15,83 +14,53 @@ export const SORT_CONFIGS = [
   { column: "date" as const, extractor: (rec: MedicalRecord) => new Date(rec.date + "T00:00:00").getTime() },
 ];
 
-// ── Date formatting ──
+// ── Shared column atoms ──
 
-export function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
-}
+export const MEDICAL_DATE: ColumnDef<MedicalRecord, SortColumn> = colDate<MedicalRecord, SortColumn>(
+  { key: "date", header: "Date", accessor: (rec) => rec.date },
+  { sortColumn: "date" },
+);
+
+export const MEDICAL_DIAGNOSIS: ColumnDef<MedicalRecord, SortColumn> = colRichtext<MedicalRecord, SortColumn>(
+  { key: "diagnosis", header: "Diagnosis", accessor: (rec) => rec.diagnosis_timeline, weight: 1 },
+);
+
+export const MEDICAL_FILES: ColumnDef<MedicalRecord, SortColumn> = colFiles<MedicalRecord, SortColumn>({
+  getCount: (rec) => rec.document_ids?.length ?? 0,
+  iconColorClass: "text-rose-500",
+});
 
 // ── Column definitions for the "all" view ──
 
+// Sizing model: "fixed" columns get max-content tracks (dates, files always
+// fit their content); "flex" columns share the remaining space and truncate
+// gracefully via CSS — no breakpoint math anywhere.
 export const MEDICAL_COLUMNS: ColumnDef<MedicalRecord, SortColumn>[] = [
   {
     key: "name",
     header: "Name",
-    colSpan: 3,
+    sizing: "flex",
+    weight: 2,
     sortColumn: "name",
-    mobileBehavior: "truncate",
     render: (rec) => (
       <span className="font-medium text-zinc-800 dark:text-zinc-100">
-        {trunc(rec.name, 24) || "—"}
+        {rec.name || "—"}
       </span>
     ),
   },
   {
     key: "clinic",
     header: "Clinic",
-    colSpan: 2,
+    sizing: "flex",
+    weight: 1,
     sortColumn: "clinic",
-    mobileBehavior: "truncate",
     render: (rec) => (
       <span className="text-zinc-600 dark:text-zinc-300">
-        {trunc(rec.clinic, 20) || "—"}
+        {rec.clinic || "—"}
       </span>
     ),
   },
-  {
-    key: "date",
-    header: "Date",
-    colSpan: 3,
-    sortColumn: "date",
-    mobileBehavior: "fixed",
-    render: (rec) => (
-      <span className="text-zinc-600 dark:text-zinc-300">
-        {formatDate(rec.date)}
-      </span>
-    ),
-  },
-  {
-    key: "diagnosis",
-    header: "Diagnosis",
-    colSpan: 2,
-    mobileBehavior: "truncate",
-    render: (rec) => (
-      <span className="text-zinc-500 dark:text-zinc-400">
-        {trunc(rec.diagnosis_timeline, 28) || "—"}
-      </span>
-    ),
-  },
-  {
-    key: "files",
-    header: "Files",
-    colSpan: 2,
-    mobileBehavior: "fixed",
-    render: (rec) => {
-      const count = rec.document_ids?.length ?? 0;
-      return count > 0 ? (
-        <span
-          className="inline-flex items-center justify-center gap-1 text-rose-500"
-          title={`${count} document(s) attached`}
-        >
-          <PaperClipIcon className="h-4 w-4" />
-          <span className="text-zinc-600 dark:text-zinc-300">
-            ({count})
-          </span>
-        </span>
-      ) : (
-        <span className="text-zinc-400">—</span>
-      );
-    },
-  },
+  MEDICAL_DATE,
+  MEDICAL_DIAGNOSIS,
+  MEDICAL_FILES,
 ];

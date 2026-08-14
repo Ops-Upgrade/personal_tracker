@@ -35,49 +35,59 @@ export interface GenericDataGridProps<T, C extends string = string> {
   rowAction?: (item: T) => ReactNode;
   /** Per-row CSS class modifier (e.g. priority-colored left border). */
   getItemClassName?: (item: T) => string;
-
-  // ── Action column ──
-  /** Width of the spacer for the rowAction column in the header. Defaults to "85px". */
-  actionColumnWidth?: string;
 }
 
 // ── Helpers ──
 
-const getColSpanClass = (n: number, md?: number): string => {
-  const spans: Record<number, string> = {
-    1: "col-span-1",
-    2: "col-span-2",
-    3: "col-span-3",
-    4: "col-span-4",
-    5: "col-span-5",
-    6: "col-span-6",
-    7: "col-span-7",
-    8: "col-span-8",
-    9: "col-span-9",
-    10: "col-span-10",
-    11: "col-span-11",
-    12: "col-span-12",
-  };
-  const base = spans[n] || "col-span-1";
-  return md !== undefined ? `${base} md:${spans[md] || "col-span-1"}` : base;
-};
+/**
+ * Builds a shared `grid-template-columns` value from the column definitions,
+ * plus a trailing `max-content` track when a per-row action is rendered.
+ *
+ * Every column participates in `fr` distribution so leftover space spreads
+ * proportionally across the row instead of pooling in a single flex column:
+ * - `"fixed"` → `minmax(max-content, weightFr)`: never narrower than its
+ *   content (badges, dates, actions never clip), grows by `weight` shares.
+ * - `"flex"`  → `minmax(0, weightFr)`: may shrink to zero (CSS ellipsis
+ *   truncates), grows by `weight` shares.
+ *
+ * The same template is applied once on the outer grid; the header and every
+ * row are subgrids, so all tracks are sized across the full column at once —
+ * header/row alignment holds at any viewport width with no breakpoint math.
+ */
+function buildGridTemplate<T>(columns: ColumnDef<T>[], hasAction: boolean): string {
+  const tracks = columns.map((col) => {
+    const weight = col.weight ?? 1;
+    return col.sizing === "fixed"
+      ? `minmax(max-content, ${weight}fr)`
+      : `minmax(0, ${weight}fr)`;
+  });
+  if (hasAction) tracks.push("max-content");
+  return tracks.join(" ");
+}
 
 const HEADER_CLASSES =
   "text-xs font-semibold text-zinc-500 uppercase tracking-wider";
 
-const getMobileBehaviorClass = (b?: "truncate" | "fixed"): string => {
-  if (b === "truncate") return "min-w-0 truncate";
-  if (b === "fixed") return "shrink-0 min-w-max whitespace-nowrap overflow-hidden";
-  return "min-w-0";
+const getAlignClass = (align?: "left" | "center" | "right"): string => {
+  if (align === "center") return "justify-center text-center";
+  if (align === "right") return "justify-end text-right";
+  return "justify-start text-left";
 };
 
 // ── Component ──
 
 /**
- * Unified 12-column CSS Grid for rendering items with column headers.
- * Extracted from GenericViewPage's renderGrid and GenericActiveBox's renderItemGrid.
+ * Unified data grid with auto-sizing CSS Grid tracks and subgrid alignment.
  *
- * Used by: GenericViewPage (all/months/priority views), GenericActiveBox (priority sections, month fallback).
+ * One outer grid defines `grid-template-columns` from the ColumnDefs; the
+ * column header and each item row are `grid-template-columns: subgrid`
+ * children spanning all tracks. Track sizing is therefore computed across
+ * every row at once, so headers and cells can never drift apart — and
+ * `max-content` tracks guarantee fixed columns (badges, dates, actions)
+ * always fit their content instead of overflowing at narrow widths.
+ *
+ * Used by: GenericViewPage (all/months/priority views), GenericActiveBox,
+ * GenericCompletedBox.
  */
 export default function GenericDataGrid<T, C extends string = string>({
   items,
@@ -91,113 +101,121 @@ export default function GenericDataGrid<T, C extends string = string>({
   rowClassName,
   rowAction,
   getItemClassName,
-  actionColumnWidth = "85px",
 }: GenericDataGridProps<T, C>) {
   const resolveRowClass = (item: T): string => {
     if (typeof rowClassName === "function") return rowClassName(item);
     return rowClassName ?? "";
   };
 
-  const getAlignClass = (align?: "left" | "center" | "right"): string => {
-    if (align === "center") return "justify-center text-center";
-    if (align === "right") return "justify-end text-right";
-    return "justify-start text-left";
-  };
+  if (items.length === 0) {
+    return (
+      <div className="px-2 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+        <p>{emptyMessage}</p>
+        {emptySubMessage && (
+          <p className="mt-1 text-xs">{emptySubMessage}</p>
+        )}
+      </div>
+    );
+  }
+
+  const template = buildGridTemplate(columns, !!rowAction);
 
   return (
-    <>
-      {items.length === 0 ? (
-        <div className="px-2 py-3 text-sm text-zinc-500 dark:text-zinc-400">
-          <p>{emptyMessage}</p>
-          {emptySubMessage && (
-            <p className="mt-1 text-xs">{emptySubMessage}</p>
-          )}
-        </div>
-      ) : (
-        <>
-          {/* Column headers — always visible */}
-          <div className="flex items-center gap-2 px-2 pb-2 border-b border-zinc-200 dark:border-zinc-700">
-            <div className="grid flex-1 gap-2 grid-cols-12 pl-[3px] items-center">
-              {columns.map((col) => {
-                const spanClass = getColSpanClass(col.colSpan, col.mdColSpan);
-                const alignClass = getAlignClass(col.align);
-                if (col.sortColumn && sortState !== undefined && onSortChange) {
-                  return (
-                    <div key={col.key} className={`min-w-0 truncate ${spanClass} ${alignClass}`}>
-                      <SortableHeader
-                        as="div"
-                        column={col.sortColumn}
-                        label={col.header}
-                        sortState={sortState}
-                        onSort={onSortChange}
-                        align={col.align}
-                      />
-                    </div>
-                  );
-                }
-                return (
-                  <div
-                    key={col.key}
-                    className={`flex items-center min-w-0 ${HEADER_CLASSES} ${spanClass} ${alignClass}`}
-                    title={col.header}
-                  >
-                    <span className="truncate">{col.header}</span>
-                  </div>
-                );
-              })}
+    <div
+      className="grid items-stretch"
+      style={{
+        gridTemplateColumns: template,
+        columnGap: "0.5rem",
+        rowGap: "0.5rem",
+      }}
+    >
+      {/* Column headers — one subgrid row spanning all tracks */}
+      <div
+        className="col-span-full grid grid-cols-subgrid items-center gap-x-2 border-b border-zinc-200 px-2 pb-2 pl-[3px] dark:border-zinc-700"
+        style={{ gridTemplateColumns: "subgrid" }}
+      >
+        {columns.map((col) => {
+          const alignClass = getAlignClass(col.align);
+          if (col.sortColumn && sortState !== undefined && onSortChange) {
+            return (
+              <div key={col.key} className={`min-w-0 truncate ${alignClass}`}>
+                <SortableHeader
+                  as="div"
+                  column={col.sortColumn}
+                  label={col.header}
+                  sortState={sortState}
+                  onSort={onSortChange}
+                  align={col.align}
+                />
+              </div>
+            );
+          }
+          return (
+            <div
+              key={col.key}
+              className={`flex items-center min-w-0 ${HEADER_CLASSES} ${alignClass}`}
+              title={col.header}
+            >
+              <span className="truncate">{col.header}</span>
             </div>
-            {rowAction && <div style={{ width: actionColumnWidth }} />}
-          </div>
+          );
+        })}
+        {/* Placeholder cell so the header spans the row-action track too. */}
+        {rowAction && <div aria-hidden="true" />}
+      </div>
 
-          {/* Item rows */}
-          <div className="space-y-2">
-            {items.map((item, i) => {
-              const extraClass = resolveRowClass(item) + (getItemClassName ? ` ${getItemClassName(item)}` : "");
-              const clickable = !!onRowClick;
+      {/* Item rows — each is a subgrid row spanning all tracks */}
+      {items.map((item, i) => {
+        const extraClass =
+          resolveRowClass(item) +
+          (getItemClassName ? ` ${getItemClassName(item)}` : "");
+        const clickable = !!onRowClick;
+        return (
+          <div
+            key={getItemKey(item) || i}
+            role={clickable ? "button" : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onClick={clickable ? () => onRowClick!(item) : undefined}
+            onKeyDown={
+              clickable
+                ? (e: React.KeyboardEvent) => {
+                    // Ignore events bubbling from inner controls (e.g. rowAction
+                    // buttons) so activating them doesn't also trigger the row.
+                    if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) {
+                      return;
+                    }
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onRowClick!(item);
+                    }
+                  }
+                : undefined
+            }
+            className={`group col-span-full grid grid-cols-subgrid items-center gap-x-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60 ${
+              clickable ? "cursor-pointer" : ""
+            } ${extraClass}`}
+            style={{ gridTemplateColumns: "subgrid" }}
+          >
+            {columns.map((col) => {
+              const alignClass = col.align ? `text-${col.align}` : "";
+              const content = col.render(item);
               return (
                 <div
-                  key={getItemKey(item) || i}
-                  className={`group flex items-center justify-between gap-2 rounded-md border border-zinc-200 px-2 py-1.5 transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60 ${extraClass}`}
+                  key={col.key}
+                  className={col.sizing === "flex" ? `min-w-0 ${alignClass}` : `whitespace-nowrap ${alignClass}`}
                 >
-                  <div
-                    role={clickable ? "button" : undefined}
-                    tabIndex={clickable ? 0 : undefined}
-                    onClick={
-                      clickable ? () => onRowClick!(item) : undefined
-                    }
-                    onKeyDown={
-                      clickable
-                        ? (e: React.KeyboardEvent) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              onRowClick!(item);
-                            }
-                          }
-                        : undefined
-                    }
-                    className={`grid flex-1 gap-2 text-left text-sm grid-cols-12 items-center ${clickable ? "cursor-pointer" : ""}`}
-                  >
-                    {columns.map((col) => {
-                      const alignClass = col.align ? `text-${col.align}` : "";
-                      const content = col.render(item);
-                      return (
-                        <div key={col.key} className={`${getMobileBehaviorClass(col.mobileBehavior)} ${getColSpanClass(col.colSpan, col.mdColSpan)} ${alignClass}`}>
-                          {col.mobileBehavior === "truncate" ? (
-                            <div className="w-full truncate block">{content}</div>
-                          ) : (
-                            content
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {rowAction && rowAction(item)}
+                  {col.sizing === "flex" ? (
+                    <div className="w-full truncate">{content}</div>
+                  ) : (
+                    content
+                  )}
                 </div>
               );
             })}
+            {rowAction && rowAction(item)}
           </div>
-        </>
-      )}
-    </>
+        );
+      })}
+    </div>
   );
 }

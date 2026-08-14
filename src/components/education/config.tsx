@@ -2,9 +2,8 @@ import type { Education } from "@/types/education";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
 import type { FieldDef } from "@/components/common/GenericDomainModal";
 import PriorityBadge from "@/components/common/PriorityBadge";
-import { PaperClipIcon } from "@/components/common/Icons";
 import { PRIORITIES } from "@/types/common";
-import { trunc } from "@/lib/viewHelpers";
+import { colPriority, colDate, colRichtext, colFiles } from "@/components/common/columns";
 
 // ── Form schema for all education modals ──
 
@@ -43,95 +42,67 @@ export const SORT_CONFIGS = [
   { column: "due_date" as const, extractor: (e: Education) => (e.due_date ? new Date(e.due_date + "T00:00:00").getTime() : 0) },
 ];
 
-// ── Date formatting ──
+// ── Shared column atoms ──
 
-export function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "—";
-  const d = new Date(dateStr + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
-}
+export const EDU_PRIORITY: ColumnDef<Education, SortColumn> = colPriority<Education, SortColumn>(
+  {
+    // Legacy rows may lack a priority — fall back to a dash.
+    render: (e) =>
+      e.priority ? (
+        <PriorityBadge priority={e.priority} />
+      ) : (
+        <span className="text-zinc-400">—</span>
+      ),
+    sortColumn: "priority",
+  },
+);
+
+export const EDU_DUE_DATE: ColumnDef<Education, SortColumn> = colDate<Education, SortColumn>(
+  { key: "due_date", header: "Due Date", accessor: (e) => e.due_date },
+  { sortColumn: "due_date" },
+);
+
+export const EDU_DESCRIPTION: ColumnDef<Education, SortColumn> = colRichtext<Education, SortColumn>(
+  { key: "description", header: "Description", accessor: (e) => e.description, weight: 1 },
+);
+
+export const EDU_FILES: ColumnDef<Education, SortColumn> = colFiles<Education, SortColumn>({
+  getCount: (e) => e.document_ids?.length ?? 0,
+  iconColorClass: "text-amber-500",
+});
 
 // ── Column definitions for the "all" view ──
 
+// Sizing model: "fixed" columns get max-content tracks (badges, dates, files
+// always fit their content); "flex" columns share the remaining space and
+// truncate gracefully via CSS — no breakpoint math anywhere.
 export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
   {
     key: "name",
     header: "Program Name",
-    colSpan: 2,
+    sizing: "flex",
+    weight: 2,
     sortColumn: "name",
-    mobileBehavior: "truncate",
     render: (e) => (
       <span className="font-medium text-zinc-800 dark:text-zinc-100">
-        {trunc(e.name, 24) || "—"}
+        {e.name || "—"}
       </span>
     ),
   },
   {
     key: "provider",
     header: "Provider",
-    colSpan: 2,
+    sizing: "flex",
+    weight: 1,
     sortColumn: "provider",
-    mobileBehavior: "truncate",
     render: (e) => (
       <span className="text-zinc-600 dark:text-zinc-300">
-        {trunc(e.provider, 20) || "—"}
+        {e.provider || "—"}
       </span>
     ),
   },
-  {
-    key: "priority",
-    header: "Priority",
-    colSpan: 1,
-    mdColSpan: 2,
-    sortColumn: "priority",
-    mobileBehavior: "fixed",
-    align: "center",
-    render: (e) => <PriorityBadge priority={e.priority} />,
-  },
-  {
-    key: "due_date",
-    header: "Due Date",
-    colSpan: 3,
-    mdColSpan: 2,
-    sortColumn: "due_date",
-    mobileBehavior: "fixed",
-    render: (e) => (
-      <span className="text-zinc-600 dark:text-zinc-300">
-        {formatDate(e.due_date)}
-      </span>
-    ),
-  },
-  {
-    key: "description",
-    header: "Description",
-    colSpan: 2,
-    mobileBehavior: "truncate",
-    render: (e) => (
-      <span className="text-zinc-500 dark:text-zinc-400">
-        {trunc(e.description, 24) || "—"}
-      </span>
-    ),
-  },
-  {
-    key: "files",
-    header: "Files",
-    colSpan: 2,
-    mobileBehavior: "fixed",
-    render: (e) => {
-      const count = e.document_ids?.length ?? 0;
-      return count > 0 ? (
-        <span
-          className="inline-flex items-center justify-center gap-1 text-amber-500"
-          title={`${count} document(s) attached`}
-        >
-          <PaperClipIcon className="h-4 w-4" />
-          <span className="text-zinc-600 dark:text-zinc-300">
-            ({count})
-          </span>
-        </span>
-      ) : (
-        <span className="text-zinc-400">—</span>
-      );
-    },
-  },
+  EDU_PRIORITY,
+  EDU_DUE_DATE,
+  EDU_DESCRIPTION,
+  EDU_FILES,
 ];

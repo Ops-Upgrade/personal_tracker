@@ -3,10 +3,11 @@
 import { useMemo } from "react";
 import type { Education } from "@/types/education";
 import type { Document } from "@/types/document";
+import type { ColumnDef } from "@/components/common/GenericViewPage";
 import GenericCompletedBox from "@/components/common/GenericCompletedBox";
-import PriorityBadge from "@/components/common/PriorityBadge";
-import { PaperClipIcon } from "@/components/common/Icons";
-import { formatShortDate, sortByCompletedDesc, trunc } from "./helpers";
+import { EDU_PRIORITY } from "./config";
+import { colDate, colFiles } from "@/components/common/columns";
+import { sortByCompletedDesc } from "./helpers";
 
 interface CompletedEducationsBoxProps {
   educations: Education[];
@@ -35,14 +36,46 @@ export default function CompletedEducationsBox({
     return map;
   }, [documents]);
 
-  const listHeader = (
-    <div className="grid grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-      <div className="col-span-3 md:col-span-2 min-w-0 truncate">Program Name</div>
-      <div className="col-span-3 min-w-0 truncate">Provider</div>
-      <div className="col-span-1 md:col-span-2 truncate text-center">Priority</div>
-      <div className="col-span-3">Date</div>
-      <div className="col-span-2 text-right">Files</div>
-    </div>
+  // Fixed tracks size themselves to content; flex tracks share the rest.
+  const columns: ColumnDef<Education>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Program Name",
+        sizing: "flex",
+        weight: 2,
+        render: (edu) => (
+          <span className="font-semibold text-zinc-800 dark:text-zinc-100">
+            {edu.name}
+          </span>
+        ),
+      },
+      {
+        key: "provider",
+        header: "Provider",
+        sizing: "flex",
+        weight: 1,
+        render: (edu) => (
+          <span className="text-zinc-600 dark:text-zinc-300">
+            {edu.provider}
+          </span>
+        ),
+      },
+      EDU_PRIORITY,
+      colDate<Education>({
+        key: "date",
+        header: "Date",
+        accessor: (edu) => edu.completed_at,
+      }),
+      colFiles<Education>(
+        {
+          getCount: (edu) => docCountsByEdu.get(edu.id) ?? 0,
+          iconColorClass: "text-amber-500",
+        },
+        { align: "right" },
+      ),
+    ],
+    [docCountsByEdu],
   );
 
   return (
@@ -50,43 +83,8 @@ export default function CompletedEducationsBox({
       items={sorted}
       isLoading={isLoading}
       onOpenExpanded={onOpenExpanded}
-      listHeader={listHeader}
-      renderItem={(edu) => {
-        const docCount = docCountsByEdu.get(edu.id) ?? 0;
-        return (
-          <div
-            key={edu.id}
-            role="button"
-            tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); onSelectEducation(edu); }}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectEducation(edu); } }}
-            className="grid grid-cols-12 items-center gap-2 rounded-md border border-zinc-200 px-2 py-1.5 text-sm cursor-pointer dark:border-zinc-700"
-          >
-            <span className="col-span-3 md:col-span-2 min-w-0 truncate font-semibold text-zinc-800 dark:text-zinc-100">
-              {trunc(edu.name, 24)}
-            </span>
-            <div className="col-span-3 min-w-0 truncate text-zinc-600 dark:text-zinc-300">
-              {trunc(edu.provider, 20)}
-            </div>
-            <div className="col-span-1 md:col-span-2 flex items-center justify-center">
-              {edu.priority ? <PriorityBadge priority={edu.priority} /> : "-"}
-            </div>
-            <div className="col-span-3 shrink-0 whitespace-nowrap text-zinc-600 dark:text-zinc-300">
-              {formatShortDate(edu.completed_at)}
-            </div>
-            <div className="col-span-2 text-right">
-              {docCount > 0 ? (
-                <span className="inline-flex items-center justify-center gap-1 text-amber-500" title={`${docCount} document(s) attached`}>
-                  <PaperClipIcon className="h-4 w-4" />
-                  <span className="text-zinc-600 dark:text-zinc-300">({docCount})</span>
-                </span>
-              ) : (
-                <span className="text-xs text-zinc-400">—</span>
-              )}
-            </div>
-          </div>
-        );
-      }}
+      columns={columns}
+      onRowClick={onSelectEducation}
     />
   );
 }
