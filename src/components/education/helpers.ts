@@ -8,8 +8,6 @@ export {
   trunc,
 } from "@/lib/viewHelpers";
 
-export { formatShortDate } from "@/lib/format";
-
 import { byPriority as sharedByPriority } from "@/lib/viewHelpers";
 
 export function byPriority(educations: Education[]): Record<Priority, Education[]> {

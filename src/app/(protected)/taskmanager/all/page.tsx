@@ -14,6 +14,7 @@ import { useTableSort } from "@/hooks/useTableSort";
 import { useTaskActions } from "@/hooks/useTaskActions";
 import { TASK_COLUMNS, SORT_CONFIGS } from "@/components/taskmanager/config";
 import { byPriority } from "@/components/taskmanager/helpers";
+import PriorityBadge from "@/components/common/PriorityBadge";
 import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 
 const TASK_FIELDS: FieldDef[] = [
@@ -135,19 +136,26 @@ export default function TaskManagerAllPage() {
     })).filter((g) => g.items.length > 0);
   }, [tasksForYear]);
 
-  // Priority view groups by priority already, so drop the redundant column
-  // and redistribute its freed span(s) to Task Name to keep the 12-col grid
-  // balanced on mobile and desktop.
+  // Priority view groups by priority already, so drop the redundant Priority
+  // column and render its badge inline in the Task Name cell instead.
   const priorityViewColumns = useMemo(
     () => {
-      const priorityCol = TASK_COLUMNS.find((c) => c.key === "priority");
       const filtered = TASK_COLUMNS.filter((c) => c.key !== "priority");
       return filtered.map((c) =>
         c.key === "name"
           ? {
               ...c,
-              colSpan: (c.colSpan || 2) + (priorityCol?.colSpan ?? 1),
-              mdColSpan: (c.mdColSpan ?? c.colSpan ?? 2) + (priorityCol?.mdColSpan ?? 0),
+              weight: 3,
+              render: (t: Task) => (
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="truncate font-medium text-zinc-800 dark:text-zinc-100">
+                    {t.name || "—"}
+                  </span>
+                  <span className="shrink-0">
+                    <PriorityBadge priority={t.priority} />
+                  </span>
+                </span>
+              ),
             }
           : c
       );

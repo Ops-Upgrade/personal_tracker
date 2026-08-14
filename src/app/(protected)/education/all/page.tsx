@@ -16,6 +16,7 @@ import GenericDomainModal from "@/components/common/GenericDomainModal";
 import { normalizeDateForInput } from "@/lib/utils";
 import { EDUCATION_COLUMNS, SORT_CONFIGS, EDUCATION_FIELDS, EDUCATION_LAYOUT } from "@/components/education/config";
 import { byPriority } from "@/components/education/helpers";
+import PriorityBadge from "@/components/common/PriorityBadge";
 
 export default function EducationAllPage() {
   const router = useRouter();
@@ -97,19 +98,26 @@ export default function EducationAllPage() {
     })).filter((g) => g.items.length > 0);
   }, [educationsForYear]);
 
-  // Priority view groups by priority already, so drop the redundant column
-  // and redistribute its freed span(s) to Program Name to keep the 12-col
-  // grid balanced on mobile and desktop.
+  // Priority view groups by priority already, so drop the redundant Priority
+  // column and render its badge inline in the Program Name cell instead.
   const priorityViewColumns = useMemo(
     () => {
-      const priorityCol = EDUCATION_COLUMNS.find((c) => c.key === "priority");
       const filtered = EDUCATION_COLUMNS.filter((c) => c.key !== "priority");
       return filtered.map((c) =>
         c.key === "name"
           ? {
               ...c,
-              colSpan: (c.colSpan || 2) + (priorityCol?.colSpan ?? 1),
-              mdColSpan: (c.mdColSpan ?? c.colSpan ?? 2) + (priorityCol?.mdColSpan ?? 0),
+              weight: 3,
+              render: (e: Education) => (
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="truncate font-medium text-zinc-800 dark:text-zinc-100">
+                    {e.name || "—"}
+                  </span>
+                  <span className="shrink-0">
+                    <PriorityBadge priority={e.priority} />
+                  </span>
+                </span>
+              ),
             }
           : c
       );

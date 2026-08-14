@@ -56,18 +56,22 @@ export interface ColumnDef<T, C extends string = string> {
   key: string;
   /** Column header text. Must be a plain string when sortColumn is set. */
   header: string;
-  /** Grid column span out of 12. */
-  colSpan: number;
-  /** Grid column span on `md:` screens and up (defaults to `colSpan`). */
-  mdColSpan?: number;
+  /**
+   * Track sizing for this column (no breakpoint math — widths are emergent).
+   * `"fixed"` → `minmax(max-content, weightFr)`: never narrower than its
+   *             content (dates, badges, files, actions, short mode labels)
+   *             and grows by `weight` shares of leftover space.
+   * `"flex"`  → `minmax(0, weightFr)`: shares leftover space with the other
+   *             columns and truncates gracefully at any width.
+   *             Use for names, descriptions, providers.
+   */
+  sizing: "fixed" | "flex";
+  /** Relative space share for flex columns. Default: 1. Higher = more space. */
+  weight?: number;
   /** When set, this column renders a SortableHeader with this sort key. */
   sortColumn?: C;
   /** Render the cell contents for a given item. */
   render: (item: T) => ReactNode;
-  /** Controls responsive truncation on mobile.
-   *  `"truncate"` collapses the column with `text-overflow: ellipsis`.
-   *  `"fixed"` prevents shrinking so badges, dates, and action buttons stay legible. */
-  mobileBehavior?: "truncate" | "fixed";
   /** Horizontal alignment of the column content. Defaults to left. */
   align?: "left" | "center" | "right";
 }

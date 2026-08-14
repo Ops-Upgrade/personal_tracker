@@ -13,22 +13,16 @@ import { useExpenseData } from "@/hooks/useExpenseData";
 import ViewToggle from "@/components/common/ViewToggle";
 import type { ViewToggleOption } from "@/components/common/ViewToggle";
 import { List, LayoutGrid } from "lucide-react";
-import { FolderIcon, PaperClipIcon } from "@/components/common/Icons";
+import { FolderIcon } from "@/components/common/Icons";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import GenericDomainPage from "@/components/common/GenericDomainPage";
 import type { DomainPageContext } from "@/components/common/GenericDomainPage";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
 import GenericDomainModal from "@/components/common/GenericDomainModal";
 import { normalizeDateForInput } from "@/lib/utils";
-import { EXPENSE_FIELDS } from "./config";
+import { EXPENSE_FIELDS, EXPENSE_DATE, EXPENSE_REASON, EXPENSE_FILES } from "./config";
 import GenericMonthRow from "@/components/common/GenericMonthRow";
 import YearDropdown from "@/components/common/YearDropdown";
-import { trunc } from "@/lib/viewHelpers";
-
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
-}
 
 /** SVG icon symbols for the expense view toggle */
 const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
@@ -102,81 +96,45 @@ export default function ExpenseView() {
   }, [expensesByMonth]);
 
   // ── Column definitions for month preview rows ──
+  // Fixed tracks size themselves to content; flex tracks share the rest.
 
   const expenseColumns: ColumnDef<Expense>[] = useMemo(
     () => [
       {
         key: "item",
         header: "Item",
-        colSpan: 2,
-        mobileBehavior: "truncate",
+        sizing: "flex",
+        weight: 2,
         render: (exp) => (
           <span className="font-medium text-zinc-800 dark:text-zinc-100">
-            {trunc(exp.item, 24) || "—"}
+            {exp.item || "—"}
           </span>
         ),
       },
       {
         key: "seller",
         header: "Seller",
-        colSpan: 2,
-        mobileBehavior: "truncate",
+        sizing: "flex",
+        weight: 1,
         render: (exp) => (
           <span className="text-zinc-600 dark:text-zinc-300">
-            {trunc(exp.seller, 20) || "—"}
+            {exp.seller || "—"}
           </span>
         ),
       },
       {
         key: "cost",
         header: "Cost",
-        colSpan: 2,
-        mobileBehavior: "fixed",
+        sizing: "fixed",
         render: (exp) => (
           <span className="text-zinc-700 dark:text-zinc-200">
             ₹ {exp.cost.toLocaleString("en-IN")}
           </span>
         ),
       },
-      {
-        key: "date",
-        header: "Date",
-        colSpan: 3,
-        mobileBehavior: "fixed",
-        render: (exp) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {formatShortDate(exp.date)}
-          </span>
-        ),
-      },
-      {
-        key: "reason",
-        header: "Reason",
-        colSpan: 1,
-        mobileBehavior: "truncate",
-        render: (exp) => (
-          <span className="text-zinc-500 dark:text-zinc-400">
-            {trunc(exp.reason, 20) || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "files",
-        header: "Files",
-        colSpan: 2,
-        mobileBehavior: "fixed",
-        render: (exp) => {
-          const count = exp.document_ids?.length ?? 0;
-          return count > 0 ? (
-            <span className="inline-flex items-center justify-center gap-1 text-emerald-500" title={`${count} document(s) attached`}>
-              <PaperClipIcon className="h-4 w-4" />
-              <span className="text-zinc-600 dark:text-zinc-300">({count})</span>
-            </span>
-          ) : (
-            <span className="text-zinc-400">—</span>
-          );
-        },
-      },
+      EXPENSE_DATE,
+      EXPENSE_REASON,
+      EXPENSE_FILES,
     ],
     [],
   );

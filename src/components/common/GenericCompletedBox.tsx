@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import Button from "@/components/common/Button";
 import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
+import type { ColumnDef } from "./GenericViewPage";
+import GenericDataGrid from "./GenericDataGrid";
 
 /**
  * Minimum shape for a completed item in a summary box.
@@ -16,12 +18,14 @@ interface GenericCompletedBoxProps<T extends CompletedSummaryItem> {
   isLoading: boolean;
   onOpenExpanded: () => void;
   title?: string;
-  /** Render a single item row. */
-  renderItem: (item: T) => ReactNode;
+  /** Column definitions rendered via GenericDataGrid (shared header/row tracks). */
+  columns: ColumnDef<T>[];
+  /** Stable unique key for each item. Defaults to `item.id`. */
+  getItemKey?: (item: T) => string;
+  /** When set, the entire row becomes clickable. */
+  onRowClick?: (item: T) => void;
   /** Optional actions to render next to the title (e.g. + Add button) */
   headerActions?: ReactNode;
-  /** Optional column headers rendered above the item list (only when items exist) */
-  listHeader?: ReactNode;
 }
 
 export default function GenericCompletedBox<T extends CompletedSummaryItem>({
@@ -29,9 +33,10 @@ export default function GenericCompletedBox<T extends CompletedSummaryItem>({
   isLoading,
   onOpenExpanded,
   title = "Completed",
-  renderItem,
+  columns,
+  getItemKey,
+  onRowClick,
   headerActions,
-  listHeader,
 }: GenericCompletedBoxProps<T>) {
   return (
     <BoxContainer>
@@ -60,9 +65,15 @@ export default function GenericCompletedBox<T extends CompletedSummaryItem>({
         {!isLoading && items.length === 0 && (
           <div className="text-sm text-zinc-500 dark:text-zinc-400">None</div>
         )}
-        {!isLoading && items.length > 0 && listHeader}
-        {!isLoading &&
-          items.map((item) => renderItem(item))}
+        {!isLoading && items.length > 0 && (
+          <GenericDataGrid
+            items={items}
+            columns={columns}
+            getItemKey={getItemKey ?? ((item) => item.id)}
+            emptyMessage="None"
+            onRowClick={onRowClick}
+          />
+        )}
       </div>
     </BoxContainer>
   );

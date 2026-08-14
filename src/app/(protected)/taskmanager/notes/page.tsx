@@ -24,18 +24,13 @@ import {
   getUnifiedNotes,
   type UnifiedNoteRecord,
 } from "@/components/taskmanager/helpers";
-import { trunc } from "@/lib/viewHelpers";
-import { formatShortDate } from "@/lib/format";
+import { colRichtext, colDate } from "@/components/common/columns";
 import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
 
 const NOTE_FIELDS: FieldDef[] = [
   { key: "name", type: "text", label: "Name", placeholder: "Note title" },
   { key: "content", type: "richtext", label: "Content", minHeight: "10rem" },
 ];
-
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, "").trim();
-}
 
 export default function NotesPage() {
   const router = useRouter();
@@ -87,8 +82,8 @@ export default function NotesPage() {
       {
         key: "name",
         header: "Name",
-        colSpan: 3,
-        mobileBehavior: "truncate",
+        sizing: "flex",
+        weight: 2,
         render: (item) =>
           item.type === "note" ? (
             <div className="truncate font-medium">{getNoteTitle(item.data)}</div>
@@ -96,39 +91,26 @@ export default function NotesPage() {
             <div className="text-zinc-400 dark:text-zinc-500">—</div>
           ),
       },
-      {
+      colRichtext<UnifiedNoteRecord>({
         key: "note",
         header: "Note",
-        colSpan: 4,
-        mobileBehavior: "truncate",
-        render: (item) =>
-          item.type === "note" ? (
-            <div className="truncate text-zinc-500 dark:text-zinc-400">
-              {(() => {
-                const stripped = stripHtml(item.data.content || "");
-                return stripped ? trunc(stripped, 60) : "—";
-              })()}
-            </div>
-          ) : (
-            <div className="text-zinc-400 dark:text-zinc-500">—</div>
-          ),
-      },
-      {
+        accessor: (item) => (item.type === "note" ? item.data.content : ""),
+        weight: 3,
+      }),
+      colDate<UnifiedNoteRecord>({
         key: "date",
         header: "Date Added",
-        colSpan: 3,
-        mobileBehavior: "fixed",
-        render: (item) => (
-          <div className="text-zinc-500 dark:text-zinc-400">
-            {formatShortDate(item.dateStr)}
-          </div>
-        ),
-      },
+        accessor: (item) => item.dateStr,
+        className: "text-zinc-500 dark:text-zinc-400",
+      }),
       {
         key: "files",
         header: "Files",
-        colSpan: 2,
-        mobileBehavior: "truncate",
+        // Flex (not fixed): the document branch renders a variable-length
+        // label in this column, so it must be able to truncate.
+        sizing: "flex",
+        weight: 1,
+        align: "right",
         render: (item) =>
           item.type === "note" ? (
             item.attachedDocs.length > 0 ? (

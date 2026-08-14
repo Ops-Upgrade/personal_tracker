@@ -1,11 +1,11 @@
 "use client";
 
+import { useMemo } from "react";
 import type { Document } from "@/types/document";
+import type { ColumnDef } from "@/components/common/GenericViewPage";
 import type { UnifiedNoteRecord } from "./helpers";
 import { getNoteTitle } from "./helpers";
-import { PaperClipIcon } from "@/components/common/Icons";
-import { trunc } from "@/lib/viewHelpers";
-import { formatShortDate } from "@/lib/format";
+import { colRichtext, colDate, colFiles } from "@/components/common/columns";
 import Button from "@/components/common/Button";
 import GenericCompletedBox from "@/components/common/GenericCompletedBox";
 
@@ -18,10 +18,6 @@ interface NotesBoxProps {
   onSelectDocument: (doc: Document) => void;
 }
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, "").trim();
-}
-
 export default function NotesBox({
   items,
   isLoading,
@@ -30,13 +26,45 @@ export default function NotesBox({
   onSelectNote,
   onSelectDocument,
 }: NotesBoxProps) {
-  const listHeader = (
-    <div className="grid grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-      <div className="col-span-3 min-w-0 truncate">Name</div>
-      <div className="col-span-4 min-w-0 truncate">Note</div>
-      <div className="col-span-3">Date Added</div>
-      <div className="col-span-2 text-right">Files</div>
-    </div>
+  // Fixed tracks size themselves to content; flex tracks share the rest.
+  // Cells branch on item.type (note vs attached document).
+  const columns: ColumnDef<UnifiedNoteRecord>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Name",
+        sizing: "flex",
+        weight: 2,
+        render: (item) => (
+          <span className="font-medium">
+            {item.type === "note"
+              ? getNoteTitle(item.data)
+              : item.data.label || "Unnamed"}
+          </span>
+        ),
+      },
+      colRichtext<UnifiedNoteRecord>({
+        key: "note",
+        header: "Note",
+        accessor: (item) => (item.type === "note" ? item.data.content : ""),
+        weight: 3,
+      }),
+      colDate<UnifiedNoteRecord>({
+        key: "date",
+        header: "Date Added",
+        accessor: (item) => item.data.created_at,
+        className: "text-zinc-500 dark:text-zinc-400",
+      }),
+      colFiles<UnifiedNoteRecord>(
+        {
+          getCount: (item) => (item.type === "note" ? item.attachedDocs.length : 1),
+          iconColorClass: "text-sky-500",
+          countClass: "text-zinc-500 dark:text-zinc-400",
+        },
+        { align: "right" },
+      ),
+    ],
+    [],
   );
 
   return (
@@ -45,65 +73,14 @@ export default function NotesBox({
       isLoading={isLoading}
       onOpenExpanded={onOpenExpanded}
       title="Notes"
-      listHeader={listHeader}
-      renderItem={(item) => (
-        <button
-          key={item.id}
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (item.type === "note") {
-              onSelectNote(item);
-            } else {
-              onSelectDocument(item.data);
-            }
-          }}
-          className="grid grid-cols-12 items-center gap-2 w-full rounded-md border border-zinc-200 px-2 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 cursor-pointer"
-        >
-          {item.type === "note" ? (
-            <>
-              <div className="col-span-3 min-w-0 truncate font-medium">
-                {getNoteTitle(item.data)}
-              </div>
-              <div className="col-span-4 min-w-0 truncate text-zinc-500 dark:text-zinc-400">
-                {(() => {
-                  const stripped = stripHtml(item.data.content || "");
-                  return stripped ? trunc(stripped, 60) : "—";
-                })()}
-              </div>
-              <div className="col-span-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
-                {formatShortDate(item.data.created_at)}
-              </div>
-              <div className="col-span-2 text-right">
-                {item.attachedDocs.length > 0 ? (
-                  <span className="inline-flex items-center gap-1 text-sky-500" title={`${item.attachedDocs.length} document(s) attached`}>
-                    <PaperClipIcon className="h-4 w-4" />
-                    <span className="text-zinc-500 dark:text-zinc-400">({item.attachedDocs.length})</span>
-                  </span>
-                ) : (
-                  <span className="text-zinc-400">—</span>
-                )}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="col-span-3 min-w-0 truncate font-medium">
-                {item.data.label || "Unnamed"}
-              </div>
-              <div className="col-span-4 text-zinc-400 dark:text-zinc-500">—</div>
-              <div className="col-span-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
-                {formatShortDate(item.data.created_at)}
-              </div>
-              <div className="col-span-2 text-right">
-                <span className="inline-flex items-center gap-1 text-sky-500" title="1 document attached">
-                  <PaperClipIcon className="h-4 w-4" />
-                  <span className="text-zinc-500 dark:text-zinc-400">(1)</span>
-                </span>
-              </div>
-            </>
-          )}
-        </button>
-      )}
+      columns={columns}
+      onRowClick={(item) => {
+        if (item.type === "note") {
+          onSelectNote(item);
+        } else {
+          onSelectDocument(item.data);
+        }
+      }}
       headerActions={
         <Button
           variant="secondary"

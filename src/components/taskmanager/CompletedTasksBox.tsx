@@ -1,10 +1,13 @@
 "use client";
 
+import { useMemo } from "react";
 import type { Task } from "@/types/taskmanager";
+import type { ColumnDef } from "@/components/common/GenericViewPage";
 import GenericCompletedBox from "@/components/common/GenericCompletedBox";
 import Button from "@/components/common/Button";
-import PriorityBadge from "@/components/common/PriorityBadge";
-import { formatShortDate, sortByCompletedDesc, trunc } from "./helpers";
+import { TASK_PRIORITY } from "./config";
+import { colDate } from "@/components/common/columns";
+import { sortByCompletedDesc } from "./helpers";
 
 interface CompletedTasksBoxProps {
   tasks: Task[];
@@ -23,14 +26,52 @@ export default function CompletedTasksBox({
 }: CompletedTasksBoxProps) {
   const sorted = [...tasks].sort(sortByCompletedDesc);
 
-  const listHeader = (
-    <div className="grid grid-cols-12 gap-2 px-2 pb-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 border-b border-zinc-200 dark:border-zinc-700">
-      <div className="col-span-3 md:col-span-2 min-w-0 truncate">Name</div>
-      <div className="col-span-1 md:col-span-2 truncate text-center">Priority</div>
-      <div className="col-span-2">Mode</div>
-      <div className="col-span-3">Date</div>
-      <div className="col-span-3 text-right">Actions</div>
-    </div>
+  // Fixed tracks size themselves to content; flex tracks share the rest.
+  const columns: ColumnDef<Task>[] = useMemo(
+    () => [
+      {
+        key: "name",
+        header: "Name",
+        sizing: "flex",
+        weight: 2,
+        render: (task) => (
+          <span className="font-semibold text-zinc-800 dark:text-zinc-100">
+            {task.name}
+          </span>
+        ),
+      },
+      TASK_PRIORITY,
+      {
+        key: "mode",
+        header: "Mode",
+        sizing: "fixed",
+        render: (task) => (
+          <span className="text-xs capitalize text-zinc-500 dark:text-zinc-400">
+            {task.mode}
+          </span>
+        ),
+      },
+      colDate<Task>({ key: "date", header: "Date", accessor: (task) => task.completed_at }),
+      {
+        key: "actions",
+        header: "Actions",
+        sizing: "fixed",
+        align: "right",
+        render: (task) => (
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation();
+              onReopenTask(task);
+            }}
+          >
+            Reopen
+          </Button>
+        ),
+      },
+    ],
+    [onReopenTask],
   );
 
   return (
@@ -38,41 +79,8 @@ export default function CompletedTasksBox({
       items={sorted}
       isLoading={isLoading}
       onOpenExpanded={onOpenExpanded}
-      listHeader={listHeader}
-      renderItem={(task) => {
-        return (
-          <div
-            key={task.id}
-            role="button"
-            tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); onSelectTask(task); }}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelectTask(task); } }}
-            className="grid grid-cols-12 items-center gap-2 w-full rounded-md border border-zinc-200 px-2 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100 cursor-pointer dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            <span className="col-span-3 md:col-span-2 min-w-0 truncate font-semibold text-zinc-800 dark:text-zinc-100">
-              {trunc(task.name, 44)}
-            </span>
-            <div className="col-span-1 md:col-span-2 flex items-center justify-center">
-              <PriorityBadge priority={task.priority} />
-            </div>
-            <span className="col-span-2 text-xs capitalize text-zinc-500 dark:text-zinc-400 flex items-center min-w-0 truncate">
-              {task.mode}
-            </span>
-            <span className="col-span-3 whitespace-nowrap text-zinc-600 dark:text-zinc-300">
-              {formatShortDate(task.completed_at)}
-            </span>
-            <div className="col-span-3 flex justify-end items-center">
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={(e: React.MouseEvent) => { e.stopPropagation(); onReopenTask(task); }}
-              >
-                Reopen
-              </Button>
-            </div>
-          </div>
-        );
-      }}
+      columns={columns}
+      onRowClick={onSelectTask}
     />
   );
 }

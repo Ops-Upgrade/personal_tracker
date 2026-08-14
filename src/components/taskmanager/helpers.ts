@@ -13,8 +13,6 @@ export {
 // Re-export trunc (imported above for local use in getNoteTitle)
 export { trunc };
 
-export { formatShortDate } from "@/lib/format";
-
 // Re-export priority colors from shared location
 export { getPriorityColor } from "@/lib/priorityColors";
 

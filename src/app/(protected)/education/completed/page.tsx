@@ -3,19 +3,16 @@
 import { useCallback, useMemo, useState } from "react";
 import { ROUTES } from "@/routes/paths";
 import type { Education } from "@/types/education";
-import type { Priority } from "@/types/common";
 import { PRIORITIES } from "@/types/common";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import PriorityBadge from "@/components/common/PriorityBadge";
 import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
 import type { ColumnDef, MonthGroup, PriorityGroup } from "@/components/common/GenericViewPage";
-import { PaperClipIcon } from "@/components/common/Icons";
+import { colFiles } from "@/components/common/columns";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useEducationActions } from "@/hooks/useEducationActions";
 import { useEducationData } from "@/hooks/useEducationData";
 import { useTableSort, type SortConfig } from "@/hooks/useTableSort";
-import { trunc } from "@/lib/viewHelpers";
 import {
   completedByMonths,
   byPriority,
@@ -23,7 +20,13 @@ import {
 } from "@/lib/viewHelpers";
 import GenericDomainModal from "@/components/common/GenericDomainModal";
 import { normalizeDateForInput } from "@/lib/utils";
-import { EDUCATION_FIELDS, EDUCATION_LAYOUT } from "@/components/education/config";
+import {
+  EDUCATION_FIELDS,
+  EDUCATION_LAYOUT,
+  EDU_PRIORITY,
+  EDU_DUE_DATE,
+  EDU_DESCRIPTION,
+} from "@/components/education/config";
 
 // ── Sort helpers ──
 
@@ -53,11 +56,6 @@ const SORT_CONFIGS: SortConfig<SortColumn, Education>[] = [
       edu.completed_at ? new Date(edu.completed_at).getTime() : 0,
   },
 ];
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr.includes("T") ? dateStr : dateStr + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
-}
 
 export default function CompletedEducationsPage() {
   const { userId, nowYear, nowMonth, isLoading, error, refreshData, educations, documents } =
@@ -129,84 +127,34 @@ export default function CompletedEducationsPage() {
       {
         key: "name",
         header: "Program Name",
-        colSpan: 2,
+        sizing: "flex",
+        weight: 2,
         sortColumn: "name",
-        mobileBehavior: "truncate",
         render: (edu) => (
           <span className="font-medium text-zinc-800 dark:text-zinc-100">
-            {trunc(edu.name, 28) || "—"}
+            {edu.name || "—"}
           </span>
         ),
       },
       {
         key: "provider",
         header: "Provider",
-        colSpan: 2,
+        sizing: "flex",
+        weight: 1,
         sortColumn: "provider",
-        mobileBehavior: "truncate",
         render: (edu) => (
           <span className="text-zinc-600 dark:text-zinc-300">
-            {trunc(edu.provider, 22) || "—"}
+            {edu.provider || "—"}
           </span>
         ),
       },
-      {
-        key: "priority",
-        header: "Priority",
-        colSpan: 1,
-        sortColumn: "priority",
-        mobileBehavior: "fixed",
-        align: "center",
-        render: (edu) =>
-          edu.priority ? (
-            <PriorityBadge priority={edu.priority as Priority} />
-          ) : (
-            <span className="text-zinc-400">—</span>
-          ),
-      },
-      {
-        key: "due_date",
-        header: "Due Date",
-        colSpan: 3,
-        sortColumn: "due_date",
-        mobileBehavior: "fixed",
-        render: (edu) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {edu.due_date ? formatDate(edu.due_date) : "—"}
-          </span>
-        ),
-      },
-      {
-        key: "description",
-        header: "Description",
-        colSpan: 2,
-        mobileBehavior: "truncate",
-        render: (edu) => (
-          <span className="text-zinc-500 dark:text-zinc-400">
-            {trunc(edu.description, 24) || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "files",
-        header: "Files",
-        colSpan: 2,
-        mobileBehavior: "fixed",
-        render: (edu) => {
-          const docCount = docCountsByEdu.get(edu.id) ?? 0;
-          return docCount > 0 ? (
-            <span
-              className="inline-flex items-center justify-center gap-1 text-amber-500"
-              title={`${docCount} document(s) attached`}
-            >
-              <PaperClipIcon className="h-4 w-4" />
-              <span className="text-zinc-600 dark:text-zinc-300">({docCount})</span>
-            </span>
-          ) : (
-            <span className="text-zinc-400">—</span>
-          );
-        },
-      },
+      EDU_PRIORITY,
+      EDU_DUE_DATE,
+      EDU_DESCRIPTION,
+      colFiles<Education, SortColumn>({
+        getCount: (edu) => docCountsByEdu.get(edu.id) ?? 0,
+        iconColorClass: "text-amber-500",
+      }),
     ],
     [docCountsByEdu],
   );

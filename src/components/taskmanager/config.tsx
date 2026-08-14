@@ -1,7 +1,6 @@
 import type { Task } from "@/types/taskmanager";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
-import PriorityBadge from "@/components/common/PriorityBadge";
-import { trunc } from "@/lib/viewHelpers";
+import { colPriority, colDate, colRichtext } from "@/components/common/columns";
 
 // ── Sort column type ──
 
@@ -25,81 +24,57 @@ export const SORT_CONFIGS = [
   { column: "is_completed" as const, extractor: (t: Task) => (t.is_completed ? 1 : 0) },
 ];
 
-// ── Date formatting ──
+// ── Shared column atoms ──
 
-export function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "—";
-  const d = new Date(dateStr + "T00:00:00");
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear().toString().slice(-2)}`;
-}
+export const TASK_PRIORITY: ColumnDef<Task, SortColumn> = colPriority<Task, SortColumn>({
+  sortColumn: "priority",
+});
+
+export const TASK_DUE_DATE: ColumnDef<Task, SortColumn> = colDate<Task, SortColumn>(
+  { key: "due_date", header: "Due Date", accessor: (t) => t.due_date },
+  { sortColumn: "due_date" },
+);
+
+export const TASK_DESCRIPTION: ColumnDef<Task, SortColumn> = colRichtext<Task, SortColumn>(
+  { key: "description", header: "Description", accessor: (t) => t.description, weight: 1 },
+  { sortColumn: "description" },
+);
 
 // ── Column definitions for the "all" view ──
 
+// Sizing model: "fixed" columns get max-content tracks (badges, dates, mode,
+// status always fit their content); "flex" columns share the remaining space
+// and truncate gracefully via CSS — no breakpoint math anywhere.
 export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
   {
     key: "name",
     header: "Task Name",
-    colSpan: 2,
-    mdColSpan: 2,
+    sizing: "flex",
+    weight: 2,
     sortColumn: "name",
-    mobileBehavior: "truncate",
     render: (t) => (
       <span className="font-medium text-zinc-800 dark:text-zinc-100">
-        {trunc(t.name, 24) || "—"}
+        {t.name || "—"}
       </span>
     ),
   },
-  {
-    key: "priority",
-    header: "Priority",
-    colSpan: 1,
-    mdColSpan: 2,
-    sortColumn: "priority",
-    mobileBehavior: "fixed",
-    align: "center",
-    render: (t) => <PriorityBadge priority={t.priority} />,
-  },
-  {
-    key: "due_date",
-    header: "Due Date",
-    colSpan: 3,
-    mdColSpan: 2,
-    sortColumn: "due_date",
-    mobileBehavior: "fixed",
-    render: (t) => (
-      <span className="text-zinc-600 dark:text-zinc-300">
-        {formatDate(t.due_date)}
-      </span>
-    ),
-  },
+  TASK_PRIORITY,
+  TASK_DUE_DATE,
   {
     key: "mode",
     header: "Mode",
-    colSpan: 2,
+    sizing: "fixed",
     sortColumn: "mode",
-    mobileBehavior: "truncate",
     render: (t) => (
       <span className="text-zinc-600 dark:text-zinc-300">{t.mode}</span>
     ),
   },
-  {
-    key: "description",
-    header: "Description",
-    colSpan: 2,
-    sortColumn: "description",
-    mobileBehavior: "truncate",
-    render: (t) => (
-      <span className="text-zinc-500 dark:text-zinc-400">
-        {trunc(t.description, 28) || "—"}
-      </span>
-    ),
-  },
+  TASK_DESCRIPTION,
   {
     key: "is_completed",
     header: "Status",
-    colSpan: 2,
+    sizing: "fixed",
     sortColumn: "is_completed",
-    mobileBehavior: "truncate",
     render: (t) => (
       <span
         className={`text-[10px] sm:text-xs ${
