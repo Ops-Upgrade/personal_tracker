@@ -154,7 +154,7 @@ export default function ActiveEducationsBox({
       nowMonth={nowMonth}
       onViewChange={(v) => onViewChange(v as EducationViewMode)}
       onAdd={onAdd}
-      title="Active Educations"
+      title="Education"
       viewOptions={EDUCATION_VIEW_OPTIONS}
       priorities={PRIORITIES}
       getPriorityColor={(p) => getPriorityColor(p as "low" | "medium" | "high" | "critical")}

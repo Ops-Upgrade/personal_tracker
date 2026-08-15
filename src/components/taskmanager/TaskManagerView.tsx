@@ -125,7 +125,7 @@ export default function TaskManagerView() {
         />
       }
       miscSlot={
-        <div className="flex flex-col gap-4 h-full">
+        <div className="flex flex-col gap-4 h-full min-w-0">
           <Link
             href={ROUTES.TASK_MANAGER_STORE}
             className="flex items-center justify-center gap-2 w-full rounded-xl border border-zinc-200 bg-white p-4 shadow-sm font-semibold text-zinc-800 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800/80 transition-colors"

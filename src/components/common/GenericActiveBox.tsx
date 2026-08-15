@@ -34,7 +34,7 @@ interface GenericActiveBoxProps<T extends ActiveItem> {
   priorities: readonly string[];
   getPriorityColor: (priority: string) => { border: string; bg: string };
   renderPriorityBadge: (priority: string) => ReactNode;
-  /** Optional className override for the outer BoxContainer (defaults to "lg:col-span-2") */
+  /** Optional className override for the outer BoxContainer */
   className?: string;
   /** Subtitle rendered in each GenericMonthRow (used in months view only). */
   getSubtitle?: (items: T[]) => ReactNode;
@@ -112,12 +112,9 @@ export default function GenericActiveBox<T extends ActiveItem>({
   }, [view, isLoading]);
 
   return (
-    <BoxContainer className={className ?? "lg:col-span-2"}>
-      <header className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-            {title}
-          </h2>
+    <BoxContainer className={className}>
+      <header className="mb-3 flex items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <ViewToggle
             value={view}
             onChange={onViewChange}
@@ -126,7 +123,7 @@ export default function GenericActiveBox<T extends ActiveItem>({
             hideContainerOnMobile={false}
           />
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="secondary"
             size="md"

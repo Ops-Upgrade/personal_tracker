@@ -122,9 +122,9 @@ export default function GenericDomainPage({
 
         {/* Body: left (renderBody) + right (store + completed + misc) */}
         <section className="grid gap-4 lg:grid-cols-3">
-          <div className="min-w-0">{renderBody(ctx)}</div>
+          <div className="min-w-0 lg:col-span-2">{renderBody(ctx)}</div>
 
-          <div className="grid gap-4 lg:grid-rows-[auto_auto_1fr]">
+          <div className="grid gap-4 lg:grid-rows-[auto_auto_1fr] min-w-0">
             {storeHref && (
               <StoreLink
                 href={storeHref}

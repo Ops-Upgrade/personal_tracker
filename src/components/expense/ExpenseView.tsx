@@ -226,9 +226,6 @@ export default function ExpenseView() {
         <BoxContainer>
           <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                Months
-              </h2>
               <ViewToggle
                 value={viewMode}
                 onChange={setViewMode}

@@ -124,8 +124,9 @@ export default function GenericDataGrid<T, C extends string = string>({
   const template = buildGridTemplate(columns, !!rowAction);
 
   return (
-    <div
-      className="grid items-stretch w-full min-w-0"
+    <div className="w-full overflow-x-auto pb-2 -mb-2">
+      <div
+        className="grid items-stretch w-full min-w-0"
       style={{
         gridTemplateColumns: template,
         columnGap: "0.5rem",
@@ -219,6 +220,7 @@ export default function GenericDataGrid<T, C extends string = string>({
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
