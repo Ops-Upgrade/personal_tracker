@@ -48,8 +48,8 @@ export interface GenericDataGridProps<T, C extends string = string> {
  *   growth) and expanded by one `fr` share from the `md` breakpoint up, so
  *   leftover space spreads evenly between every column instead of pooling
  *   in the flex tracks.
- * - `"flex"`  → `minmax(1ch, weightFr)`: never shrinks below a single
- *   character so the column can't vanish on narrow screens (CSS ellipsis
+ * - `"flex"`  → `minmax(6rem, weightFr)`: never shrinks below a readable
+ *   minimum so text stays visible on narrow screens (CSS ellipsis
  *   truncates), grows by `weight` shares of the leftover space.
  *
  * The same template is applied once on the outer grid; the header and every
@@ -62,7 +62,7 @@ function buildGridTemplate<T>(columns: ColumnDef<T>[], hasAction: boolean): stri
     if (col.sizing === "fixed") {
       return "minmax(max-content, var(--fixed-expand))";
     }
-    return `minmax(1ch, ${weight}fr)`;
+    return `minmax(6rem, ${weight}fr)`;
   });
   if (hasAction) tracks.push("max-content");
   return tracks.join(" ");

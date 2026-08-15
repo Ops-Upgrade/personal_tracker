@@ -63,9 +63,9 @@ export interface ColumnDef<T, C extends string = string> {
    *             mode labels never clip or overflow), expands by one `fr`
    *             share from the `md` breakpoint up so leftover space spreads
    *             evenly between every column.
-   * `"flex"`  → `minmax(1ch, weightFr)`: takes leftover space by `weight`
+   * `"flex"`  → `minmax(6rem, weightFr)`: takes leftover space by `weight`
    *             share, truncates gracefully, and never shrinks below a
-   *             single character. Use for names, descriptions, providers.
+   *             readable minimum. Use for names, descriptions, providers.
    */
   sizing: "fixed" | "flex";
   /** Relative space share for flex columns. Default: 1. Higher = more space. */
