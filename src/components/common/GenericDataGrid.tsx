@@ -47,7 +47,8 @@ export interface GenericDataGridProps<T, C extends string = string> {
  * proportionally across the row instead of pooling in a single flex column:
  * - `"fixed"` → `minmax(max-content, weightFr)`: never narrower than its
  *   content (badges, dates, actions never clip), grows by `weight` shares.
- * - `"flex"`  → `minmax(0, weightFr)`: may shrink to zero (CSS ellipsis
+ * - `"flex"`  → `minmax(1ch, weightFr)`: never shrinks below a single
+ *   character so the column can't vanish on narrow screens (CSS ellipsis
  *   truncates), grows by `weight` shares.
  *
  * The same template is applied once on the outer grid; the header and every
@@ -59,7 +60,7 @@ function buildGridTemplate<T>(columns: ColumnDef<T>[], hasAction: boolean): stri
     const weight = col.weight ?? 1;
     return col.sizing === "fixed"
       ? `minmax(max-content, ${weight}fr)`
-      : `minmax(0, ${weight}fr)`;
+      : `minmax(1ch, ${weight}fr)`;
   });
   if (hasAction) tracks.push("max-content");
   return tracks.join(" ");
@@ -122,7 +123,7 @@ export default function GenericDataGrid<T, C extends string = string>({
 
   return (
     <div
-      className="grid items-stretch"
+      className="grid items-stretch w-full min-w-0"
       style={{
         gridTemplateColumns: template,
         columnGap: "0.5rem",
@@ -179,21 +180,20 @@ export default function GenericDataGrid<T, C extends string = string>({
             onKeyDown={
               clickable
                 ? (e: React.KeyboardEvent) => {
-                    // Ignore events bubbling from inner controls (e.g. rowAction
-                    // buttons) so activating them doesn't also trigger the row.
-                    if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) {
-                      return;
-                    }
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onRowClick!(item);
-                    }
+                  // Ignore events bubbling from inner controls (e.g. rowAction
+                  // buttons) so activating them doesn't also trigger the row.
+                  if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) {
+                    return;
                   }
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onRowClick!(item);
+                  }
+                }
                 : undefined
             }
-            className={`group col-span-full grid grid-cols-subgrid items-center gap-x-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60 ${
-              clickable ? "cursor-pointer" : ""
-            } ${extraClass}`}
+            className={`group col-span-full grid grid-cols-subgrid items-center gap-x-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60 ${clickable ? "cursor-pointer" : ""
+              } ${extraClass}`}
             style={{ gridTemplateColumns: "subgrid" }}
           >
             {columns.map((col) => {
