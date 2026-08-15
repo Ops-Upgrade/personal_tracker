@@ -8,6 +8,21 @@
   --foreground: #171717;
 }
 
+/* ── Fixed table column expansion ──
+   Fixed columns (badges, dates, mode, actions) clamp strictly to their
+   content on mobile (`0fr` share = no growth, no overflow) and expand by
+   one `fr` share from the `md` breakpoint up, so leftover space spreads
+   evenly between every column instead of pooling in the flex tracks. */
+:root {
+  --fixed-expand: 0fr;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --fixed-expand: 1fr;
+  }
+}
+
 .dark {
   --background: #09090b;
   --foreground: #ededed;

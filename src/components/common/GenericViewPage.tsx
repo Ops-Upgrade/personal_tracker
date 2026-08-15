@@ -58,12 +58,14 @@ export interface ColumnDef<T, C extends string = string> {
   header: string;
   /**
    * Track sizing for this column (no breakpoint math — widths are emergent).
-   * `"fixed"` → `minmax(max-content, weightFr)`: never narrower than its
-   *             content (dates, badges, files, actions, short mode labels)
-   *             and grows by `weight` shares of leftover space.
-   * `"flex"`  → `minmax(0, weightFr)`: shares leftover space with the other
-   *             columns and truncates gracefully at any width.
-   *             Use for names, descriptions, providers.
+   * `"fixed"` → `minmax(max-content, var(--fixed-expand))`: sized to its
+   *             content on mobile (dates, badges, files, actions, short
+   *             mode labels never clip or overflow), expands by one `fr`
+   *             share from the `md` breakpoint up so leftover space spreads
+   *             evenly between every column.
+   * `"flex"`  → `minmax(1ch, weightFr)`: takes leftover space by `weight`
+   *             share, truncates gracefully, and never shrinks below a
+   *             single character. Use for names, descriptions, providers.
    */
   sizing: "fixed" | "flex";
   /** Relative space share for flex columns. Default: 1. Higher = more space. */
@@ -232,7 +234,7 @@ export default function GenericViewPage<T, C extends string = string>({
   return (
     <BoxContainer>
       {hasHeaderBar && (
-        <header className="mb-3 flex items-center justify-between gap-3">
+        <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             {views && onViewChange && !disableMonthToggle && (
               <ViewToggle
@@ -244,7 +246,7 @@ export default function GenericViewPage<T, C extends string = string>({
               />
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {monthFilter && (
               <MonthDropdown
                 selectedMonth={monthFilter.selectedMonth}

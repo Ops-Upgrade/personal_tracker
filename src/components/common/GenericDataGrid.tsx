@@ -43,13 +43,14 @@ export interface GenericDataGridProps<T, C extends string = string> {
  * Builds a shared `grid-template-columns` value from the column definitions,
  * plus a trailing `max-content` track when a per-row action is rendered.
  *
- * Every column participates in `fr` distribution so leftover space spreads
- * proportionally across the row instead of pooling in a single flex column:
- * - `"fixed"` → `minmax(max-content, weightFr)`: never narrower than its
- *   content (badges, dates, actions never clip), grows by `weight` shares.
+ * - `"fixed"` → `minmax(max-content, var(--fixed-expand))`: sized to its
+ *   content on mobile (badges, dates, actions never clip — `0fr` means no
+ *   growth) and expanded by one `fr` share from the `md` breakpoint up, so
+ *   leftover space spreads evenly between every column instead of pooling
+ *   in the flex tracks.
  * - `"flex"`  → `minmax(1ch, weightFr)`: never shrinks below a single
  *   character so the column can't vanish on narrow screens (CSS ellipsis
- *   truncates), grows by `weight` shares.
+ *   truncates), grows by `weight` shares of the leftover space.
  *
  * The same template is applied once on the outer grid; the header and every
  * row are subgrids, so all tracks are sized across the full column at once —
@@ -58,9 +59,10 @@ export interface GenericDataGridProps<T, C extends string = string> {
 function buildGridTemplate<T>(columns: ColumnDef<T>[], hasAction: boolean): string {
   const tracks = columns.map((col) => {
     const weight = col.weight ?? 1;
-    return col.sizing === "fixed"
-      ? `minmax(max-content, ${weight}fr)`
-      : `minmax(1ch, ${weight}fr)`;
+    if (col.sizing === "fixed") {
+      return "minmax(max-content, var(--fixed-expand))";
+    }
+    return `minmax(1ch, ${weight}fr)`;
   });
   if (hasAction) tracks.push("max-content");
   return tracks.join(" ");
@@ -199,12 +201,13 @@ export default function GenericDataGrid<T, C extends string = string>({
             {columns.map((col) => {
               const alignClass = col.align ? `text-${col.align}` : "";
               const content = col.render(item);
+              const isTruncating = col.sizing !== "fixed";
               return (
                 <div
                   key={col.key}
-                  className={col.sizing === "flex" ? `min-w-0 ${alignClass}` : `whitespace-nowrap ${alignClass}`}
+                  className={isTruncating ? `min-w-0 ${alignClass}` : `whitespace-nowrap ${alignClass}`}
                 >
-                  {col.sizing === "flex" ? (
+                  {isTruncating ? (
                     <div className="w-full truncate">{content}</div>
                   ) : (
                     content
