@@ -180,21 +180,20 @@ export default function GenericDataGrid<T, C extends string = string>({
             onKeyDown={
               clickable
                 ? (e: React.KeyboardEvent) => {
-                    // Ignore events bubbling from inner controls (e.g. rowAction
-                    // buttons) so activating them doesn't also trigger the row.
-                    if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) {
-                      return;
-                    }
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onRowClick!(item);
-                    }
+                  // Ignore events bubbling from inner controls (e.g. rowAction
+                  // buttons) so activating them doesn't also trigger the row.
+                  if ((e.target as HTMLElement).closest("button, a, input, select, textarea")) {
+                    return;
                   }
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onRowClick!(item);
+                  }
+                }
                 : undefined
             }
-            className={`group col-span-full grid grid-cols-subgrid items-center gap-x-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60 ${
-              clickable ? "cursor-pointer" : ""
-            } ${extraClass}`}
+            className={`group col-span-full grid grid-cols-subgrid items-center gap-x-2 rounded-md border border-zinc-200 px-2 py-1.5 text-left text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800/60 ${clickable ? "cursor-pointer" : ""
+              } ${extraClass}`}
             style={{ gridTemplateColumns: "subgrid" }}
           >
             {columns.map((col) => {
