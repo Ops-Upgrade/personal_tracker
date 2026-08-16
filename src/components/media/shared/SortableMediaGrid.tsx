@@ -30,6 +30,12 @@ export interface SortableMediaGridProps {
   viewMode: "detail" | "tile";
   /** Per-item unsaved flag — called for each item to determine badge visibility. */
   isUnsaved: (item: Media) => boolean;
+  /**
+   * Per-item "New Season" flag — called for each item so the grid-level
+   * `useNewSeasonChecks` result map can reach every card without any
+   * per-card fetching.
+   */
+  hasNewSeason?: (item: Media) => boolean;
   /** Fired after a drag completes with the re-ordered items array. */
   onReorder: (newItems: Media[]) => void;
   /** Optional remove handler forwarded to each item. */
@@ -61,6 +67,7 @@ export default function SortableMediaGrid({
   itemIds,
   viewMode,
   isUnsaved,
+  hasNewSeason,
   onReorder,
   onRemove,
   appendElement,
@@ -110,6 +117,7 @@ export default function SortableMediaGrid({
                 media={m}
                 onRemove={onRemove}
                 isUnsaved={isUnsaved(m)}
+                hasNewSeason={hasNewSeason?.(m)}
                 onNavigate={onNavigateItem}
               />
             ))}
@@ -123,6 +131,7 @@ export default function SortableMediaGrid({
                 media={m}
                 onRemove={onRemove}
                 isUnsaved={isUnsaved(m)}
+                hasNewSeason={hasNewSeason?.(m)}
                 onNavigate={onNavigateItem}
               />
             ))}

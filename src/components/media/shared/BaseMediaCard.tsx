@@ -19,6 +19,12 @@ export interface BaseMediaCardProps {
   collectionName?: string;
   showTrackingChip?: boolean;
   isTracked?: boolean;
+  /**
+   * Show the "New Season" chip (TV shows where TMDB lists a season added
+   * since the last "watched" save). Computed by the grid-level
+   * `useNewSeasonChecks` hook — this tile stays passive.
+   */
+  hasNewSeason?: boolean;
   /** Priority loading for the poster Image. */
   priority?: boolean;
 
@@ -57,6 +63,7 @@ const BaseMediaCard = forwardRef<HTMLDivElement, BaseMediaCardProps>(
       collectionName,
       showTrackingChip,
       isTracked,
+      hasNewSeason = false,
       priority = false,
       topLeftSlot,
       topRightSlot,
@@ -115,6 +122,11 @@ const BaseMediaCard = forwardRef<HTMLDivElement, BaseMediaCardProps>(
             {showTrackingChip && isTracked && (
               <span className="rounded bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider">
                 Tracking
+              </span>
+            )}
+            {hasNewSeason && (
+              <span className="rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider">
+                New Season
               </span>
             )}
           </div>

@@ -11,6 +11,7 @@ import type {
 import { DISCOVER_GENRE_IDS, DISCOVER_ERA_DATES, GENRE_OPTIONS } from "@/types/media";
 import MediaGrid from "@/components/media/MediaGrid";
 import MediaCard from "@/components/media/MediaCard";
+import { useNewSeasonChecks } from "@/hooks/useNewSeasonChecks";
 import { Chip } from "@/components/common/Chip";
 import SearchBar from "@/components/common/SearchBar";
 import { FilterLabel } from "@/components/media/shared/FilterLabel";
@@ -169,6 +170,10 @@ export default function DefaultView({
     "all",
   );
   const [mobileDropdown, setMobileDropdown] = useState<MobileDropdown>(null);
+
+  // New-season badges: one centralized batch of TMDB checks for the whole
+  // grid (watched TV only) — cards stay passive.
+  const newSeasonMap = useNewSeasonChecks(mediaItems);
 
   const activeFilterCount = filterCount(filters, statusFilter);
 
@@ -563,6 +568,9 @@ export default function DefaultView({
                 priority={index < 10}
                 onStatusChange={onStatusChange}
                 onRatingChange={onRatingChange}
+                hasNewSeason={
+                  media.tmdb_id ? !!newSeasonMap[media.tmdb_id] : false
+                }
               />
             ))}
           </MediaGrid>

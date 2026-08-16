@@ -17,6 +17,7 @@ import { computeProgress } from "@/components/media/utils";
 import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import SortableMediaGrid from "@/components/media/shared/SortableMediaGrid";
 import StickyActionBar from "@/components/media/shared/StickyActionBar";
+import { useNewSeasonChecks } from "@/hooks/useNewSeasonChecks";
 import ViewToggle from "@/components/common/ViewToggle";
 import Toast from "@/components/common/Toast";
 import type { ToastType } from "@/components/common/Toast";
@@ -146,6 +147,12 @@ export default function NewCollectionPage() {
     const idToItem = new Map(localItems.map((m) => [m.id, m]));
     return displayOrder.map((id) => idToItem.get(id)).filter(Boolean) as Media[];
   }, [localItems, displayOrder]);
+
+  // New-season badges for the staged grid. Staged items are created as
+  // "unwatched", so the hook currently self-filters everything out — wired
+  // here so the badge follows automatically if staged items ever carry real
+  // tracking status (e.g. an "add tracked shows as-is" flow).
+  const newSeasonMap = useNewSeasonChecks(orderedItems);
 
   const isDirty =
     name.trim() !== "" ||
@@ -383,6 +390,7 @@ export default function NewCollectionPage() {
             itemIds={displayOrder}
             viewMode={viewMode}
             isUnsaved={() => true}
+            hasNewSeason={(m) => (m.tmdb_id ? !!newSeasonMap[m.tmdb_id] : false)}
             onReorder={(newOrder) => setDisplayOrder(newOrder.map((m) => m.id))}
             onRemove={handleRemoveItem}
             onNavigateItem={navigateTo}

@@ -5,6 +5,9 @@ import { fetchTmdb } from "@/lib/tmdb/fetchTmdb";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";
 
+/** Data-Cache lifetime for upstream TMDB details responses (12h in seconds). */
+const TMDB_DETAILS_CACHE_TTL_S = 43_200;
+
 export async function POST(request: Request) {
   try {
     const userId = await getAuthenticatedUserId();
@@ -43,7 +46,14 @@ export async function POST(request: Request) {
         ...TMDB_HEADERS,
         Authorization: `Bearer ${apiKey}`,
       },
-    });
+      // Opt this TMDB GET into Next's Data Cache for 12h. Grid-level
+      // new-season checks (useNewSeasonChecks) fetch one details request per
+      // watched show, so without this a single user's grid visit fans out to
+      // hundreds of identical upstream calls. The cache key covers the URL
+      // (tmdb_id + type), so every user shares one upstream response per
+      // title. Only 200 responses are stored — failures bypass the cache.
+      next: { revalidate: TMDB_DETAILS_CACHE_TTL_S },
+    } as RequestInit);
 
     if (tmdbResult.kind !== "ok") {
       console.error("TMDB details error:", tmdbResult.error);
@@ -79,6 +89,7 @@ export async function POST(request: Request) {
       first_air_date?: string;
       number_of_episodes?: number;
       number_of_seasons?: number;
+      seasons?: Array<{ season_number: number; episode_count: number }>;
       overview?: string;
       genres?: Array<{ id: number; name: string }>;
       runtime?: number;
@@ -120,6 +131,12 @@ export async function POST(request: Request) {
         : undefined,
       number_of_seasons: type === "tv"
         ? d.number_of_seasons
+        : undefined,
+      seasons: type === "tv"
+        ? d.seasons?.map((s) => ({
+            season_number: s.season_number,
+            episode_count: s.episode_count,
+          }))
         : undefined,
       overview: d.overview ?? "",
       genres: d.genres ?? [],

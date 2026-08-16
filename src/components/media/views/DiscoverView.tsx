@@ -22,6 +22,7 @@ import { FilterLabel } from "@/components/media/shared/FilterLabel";
 import { MobileFilterBar } from "@/components/media/shared/MobileFilterBar";
 import { FilterSidebar } from "@/components/media/shared/FilterSidebar";
 import MediaCard from "@/components/media/MediaCard";
+import { useNewSeasonChecks } from "@/hooks/useNewSeasonChecks";
 const DEBOUNCE_MS = 400;
 const TMDB_PAGE_SIZE = 20;
 const TMDB_MAX_PAGE = 500;
@@ -106,6 +107,10 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
   const [filters, setFilters] = useState<DiscoverFilters>(() => discoverCache.filters);
   const [hasMore, setHasMore] = useState(() => discoverCache.results.length > 0);
   const [mobileDropdown, setMobileDropdown] = useState<MobileDropdown>(null);
+
+  // New-season badges for tracked results: one centralized batch of TMDB
+  // checks over the library (watched TV only) — result cards stay passive.
+  const newSeasonMap = useNewSeasonChecks(mediaItems);
 
   const {
     loading,
@@ -525,6 +530,9 @@ export default function DiscoverView({ mediaItems }: { mediaItems: Media[] }) {
                   showTrackingChip
                   showOverview
                   trackingData={localMedia}
+                  hasNewSeason={
+                    localMedia?.tmdb_id ? !!newSeasonMap[localMedia.tmdb_id] : false
+                  }
                   priority={index < 10}
                   onClick={() => handleCardClick(item)}
                 />
