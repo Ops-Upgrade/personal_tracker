@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Image from "next/image";
-import { Trash2 } from "lucide-react";
+import { X } from "lucide-react";
 import { ROUTES } from "@/routes/paths";
 import BackButton from "@/components/common/BackButton";
 import ErrorBanner from "@/components/common/ErrorBanner";
@@ -20,19 +20,16 @@ import {
   getMediaDetails,
   getSeasonDetails,
   getMediaByTmdbId,
-  listMedia,
-  createMedia,
-  updateMedia,
-  findDuplicate,
-  formatEpisodeKey,
-  computeShowStatus,
+  saveEpisode,
+  deleteEpisodeRecord,
+  formatSeasonKey,
+  formatEpisodeKeyShort,
   getEffectiveEpisodeStatus,
 } from "@/api/media";
 import type {
   TmdbDetails,
   TmdbSeasonDetails,
   Media,
-  MediaPlaintext,
   EpisodeTracking,
 } from "@/types/media";
 
@@ -62,7 +59,8 @@ export default function EpisodePage({
   const [saving, setSaving] = useState(false);
   const [showRemove, setShowRemove] = useState(false);
 
-  const episodeKey = formatEpisodeKey(seasonNumber, episodeNumber);
+  const seasonKey = formatSeasonKey(seasonNumber);
+  const episodeKeyShort = formatEpisodeKeyShort(episodeNumber);
   const episode = seasonData?.episodes?.find(
     (e) => e.episode_number === episodeNumber
   );
@@ -115,10 +113,12 @@ export default function EpisodePage({
 
           if (existing) {
             setLocalMedia(existing);
-            const epData = existing.episodes?.[episodeKey];
+            const epData = existing.seasons?.[seasonKey]?.episodes?.[episodeKeyShort];
             const { status: effectiveStatus } = getEffectiveEpisodeStatus(
               existing.status,
+              existing.seasons?.[seasonKey]?.status,
               epData?.status,
+              seasonNumber === 1 && episodeNumber === 1,
             );
             setStatus(effectiveStatus as EpisodeTracking["status"]);
             setRating(epData?.rating ?? 0);
@@ -139,10 +139,10 @@ export default function EpisodePage({
       }
     };
     loadData();
-  }, [execute, tmdbId, seasonNumber, userId, episodeKey, retryCount]);
+  }, [execute, tmdbId, seasonNumber, episodeNumber, userId, seasonKey, episodeKeyShort, retryCount]);
 
   // ── isDirty ──
-  const hasEpisodeRecord = localMedia?.episodes?.[episodeKey] !== undefined;
+  const hasEpisodeRecord = localMedia?.seasons?.[seasonKey]?.episodes?.[episodeKeyShort] !== undefined;
 
   const isDirty = useMemo(() => {
     if (!originalEpisode) {
@@ -236,111 +236,28 @@ export default function EpisodePage({
         review_notes: reviewNotes || undefined,
       };
 
-      if (localMedia) {
-        // Update existing parent show
-        const updatedEpisodes = {
-          ...(localMedia.episodes ?? {}),
-          [episodeKey]: episodeEntry,
-        };
-        const parentPatch: Partial<MediaPlaintext> = { episodes: updatedEpisodes };
+      // Persist via the extracted handler (updates the tracked parent with
+      // override-breaking + status bubbling, or auto-creates the parent with
+      // status "watching" for an untracked show).
+      const updated = await saveEpisode({
+        userId,
+        tmdbId,
+        seasonNumber,
+        episodeNumber,
+        episodeEntry,
+        existingMedia: localMedia ?? undefined,
+        showData: showData ?? undefined,
+      });
+      setLocalMedia(updated);
 
-        // Bubble up to "watching" if parent is unwatched
-        if (
-          localMedia.status === "unwatched" &&
-          (episodeEntry.status !== "unwatched" || episodeEntry.rating || episodeEntry.review_notes)
-        ) {
-          parentPatch.status = "watching";
-        }
-
-        // Check if this interaction completes the show
-        const totalEpisodes = showData?.number_of_episodes ?? 0;
-        const computedParentStatus = computeShowStatus(updatedEpisodes, totalEpisodes);
-        if (computedParentStatus) {
-          const isDowngradeFromWatched =
-            localMedia.status === "watched" && computedParentStatus !== "watched";
-          if (isDowngradeFromWatched) {
-            // INVARIANT: Any explicit non-watched status breaks the umbrella.
-            if (episodeEntry.status && episodeEntry.status !== "watched") {
-              parentPatch.status = "watching";
-            }
-          } else {
-            parentPatch.status = computedParentStatus;
-          }
-        }
-
-        const updated = await updateMedia(userId, localMedia.id, parentPatch);
-        setLocalMedia(updated);
-
-        // Update original snapshot so isDirty becomes false
-        const epData = updated.episodes?.[episodeKey];
-        setOriginalEpisode({
-          status: epData?.status ?? "unwatched",
-          rating: epData?.rating ?? 0,
-          watched_on: epData?.watched_on ?? "",
-          review_notes: epData?.review_notes ?? "",
-        });
-      } else {
-        // Auto-create parent — read from cache (instant, no network)
-        const mediaList = await listMedia(userId);
-        const dup = findDuplicate(tmdbId, "tv", mediaList);
-
-        if (dup) {
-          // Parent exists but wasn't in localMedia (race or stale cache)
-          const updatedEpisodes = { ...(dup.episodes ?? {}), [episodeKey]: episodeEntry };
-          const parentPatch: Partial<MediaPlaintext> = { episodes: updatedEpisodes };
-
-          if (
-            dup.status === "unwatched" &&
-            (episodeEntry.status !== "unwatched" || episodeEntry.rating || episodeEntry.review_notes)
-          ) {
-            parentPatch.status = "watching";
-          }
-
-          const totalEpisodes = showData?.number_of_episodes ?? 0;
-          const computedParentStatus = computeShowStatus(updatedEpisodes, totalEpisodes);
-          if (computedParentStatus) {
-            const isDowngradeFromWatched =
-              dup.status === "watched" && computedParentStatus !== "watched";
-            if (isDowngradeFromWatched) {
-              // INVARIANT: Any explicit non-watched status breaks the umbrella.
-              if (episodeEntry.status && episodeEntry.status !== "watched") {
-                parentPatch.status = "watching";
-              }
-            } else {
-              parentPatch.status = computedParentStatus;
-            }
-          }
-
-          const updated = await updateMedia(userId, dup.id, parentPatch);
-          setLocalMedia(updated);
-
-          const epData = updated.episodes?.[episodeKey];
-          setOriginalEpisode({
-            status: epData?.status ?? "unwatched",
-            rating: epData?.rating ?? 0,
-            watched_on: epData?.watched_on ?? "",
-            review_notes: epData?.review_notes ?? "",
-          });
-        } else {
-          // Brand-new parent show
-          const newMedia = await createMedia(userId, {
-            tmdb_id: tmdbId,
-            type: "tv",
-            title: showData?.name ?? "TV Series",
-            status: "watching",
-            episodes: { [episodeKey]: episodeEntry },
-          });
-          setLocalMedia(newMedia);
-
-          const epData = newMedia.episodes?.[episodeKey];
-          setOriginalEpisode({
-            status: epData?.status ?? "unwatched",
-            rating: epData?.rating ?? 0,
-            watched_on: epData?.watched_on ?? "",
-            review_notes: epData?.review_notes ?? "",
-          });
-        }
-      }
+      // Update original snapshot so isDirty becomes false
+      const epData = updated.seasons?.[seasonKey]?.episodes?.[episodeKeyShort];
+      setOriginalEpisode({
+        status: epData?.status ?? "unwatched",
+        rating: epData?.rating ?? 0,
+        watched_on: epData?.watched_on ?? "",
+        review_notes: epData?.review_notes ?? "",
+      });
 
       triggerToast("✓ Progress saved", "success");
       onRefresh?.();
@@ -358,25 +275,17 @@ export default function EpisodePage({
     setSaving(true);
     try {
       const currentMedia = localMedia;
-      const updatedEpisodes = { ...(currentMedia.episodes ?? {}) };
 
-      // Delete only this specific episode's tracking record
-      delete updatedEpisodes[episodeKey];
-
-      const parentPatch: Partial<MediaPlaintext> = { episodes: updatedEpisodes };
-
-      // Recalculate parent status in case removing this episode changes completion.
-      // DESIGN: When computeShowStatus returns null (0 episodes remaining), we
-      // intentionally skip the parent status update — the umbrella status
-      // ("Watching" or "Watched") is preserved while the virtual fallback in
-      // getEffectiveEpisodeStatus correctly presents the inherited state.
-      const totalEpisodes = showData?.number_of_episodes ?? 0;
-      const computedParentStatus = computeShowStatus(updatedEpisodes, totalEpisodes);
-      if (computedParentStatus) {
-        parentPatch.status = computedParentStatus;
-      }
-
-      const updated = await updateMedia(userId, currentMedia.id, parentPatch);
+      // Delete only this specific episode's tracking record, prune the
+      // season if it's now empty, and recalculate the parent status
+      // (an emptied show drops to "unwatched" — no ghost umbrella status).
+      const updated = await deleteEpisodeRecord({
+        userId,
+        seasonNumber,
+        episodeNumber,
+        existingMedia: currentMedia,
+        showData: showData ?? undefined,
+      });
       setLocalMedia(updated);
 
       // Reset the local UI state back to default
@@ -473,8 +382,8 @@ export default function EpisodePage({
             onClick={() => setShowRemove(true)}
             className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm border-none transition-colors text-sm"
           >
-            <Trash2 size={16} />
-            Delete Episode Record
+            <X size={16} />
+            Untrack this Episode
           </button>
         )}
       </div>

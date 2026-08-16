@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { encryptField, decryptField } from "@/lib/crypto";
-import type { Media, MediaPlaintext, EpisodeTracking } from "@/types/media";
+import type { Media, MediaPlaintext, EpisodeTracking, SeasonTracking } from "@/types/media";
 
 // ── In-memory session cache ──
 // Because tmdb_id lives inside an encrypted blob, Supabase cannot filter by it.
@@ -52,6 +52,11 @@ export async function listMedia(userId: string): Promise<Media[]> {
         status: raw.status ?? "unwatched",
         ...raw,
       };
+      // Legacy read-time migration: nest the flat `episodes` map into `seasons`
+      // in memory. Nothing is written back — the next save persists the new shape.
+      if (parsed.episodes && !parsed.seasons) {
+        parsed.seasons = migrateEpisodeData(parsed.episodes);
+      }
       return { id: row.id, created_at: row.created_at, ...parsed };
     }),
   );
@@ -297,6 +302,24 @@ export function formatEpisodeKey(season: number, episode: number): string {
 }
 
 /**
+ * Format a season number into a zero-padded key (e.g. "S01").
+ * Must be used at EVERY write site to prevent key format drift in the seasons map.
+ */
+export function formatSeasonKey(season: number): string {
+  return `S${String(season).padStart(2, "0")}`;
+}
+
+/**
+ * Format an episode number into a zero-padded key (e.g. "E01").
+ * Must be used at EVERY write site to prevent key format drift inside a season's episodes map.
+ */
+export function formatEpisodeKeyShort(episode: number): string {
+  return `E${String(episode).padStart(2, "0")}`;
+}
+
+/**
+ * @deprecated - use computeShowStatusFromSeasons
+ *
  * Compute the parent show status from its episode map.
  * Returns null if no episodes are tracked (signals auto-untrack).
  *
@@ -327,19 +350,106 @@ export function computeShowStatus(
 }
 
 /**
+ * Convert the legacy flat `episodes` map ("S01E01" keys) into the nested
+ * `seasons` structure ("S01" → "E01" keys). Pure read-time migration —
+ * nothing is written back to the DB.
+ */
+export function migrateEpisodeData(
+  oldEpisodes: Record<string, EpisodeTracking>
+): Record<string, SeasonTracking> {
+  const seasons: Record<string, SeasonTracking> = {};
+  for (const [key, data] of Object.entries(oldEpisodes)) {
+    const match = key.match(/^S(\d+)E(\d+)$/);
+    if (!match) continue;
+    const seasonKey = `S${match[1]}`;
+    const episodeKey = `E${match[2]}`;
+    if (!seasons[seasonKey]) seasons[seasonKey] = {};
+    if (!seasons[seasonKey].episodes) seasons[seasonKey].episodes = {};
+    seasons[seasonKey].episodes![episodeKey] = data;
+  }
+  return seasons;
+}
+
+/**
+ * Delete any season key that has neither an explicit status nor any
+ * episode records. Mutates the map in place.
+ */
+export function pruneEmptySeasons(seasons: Record<string, SeasonTracking>): void {
+  for (const key of Object.keys(seasons)) {
+    const season = seasons[key];
+    if (!season.status && Object.keys(season.episodes ?? {}).length === 0) {
+      delete seasons[key];
+    }
+  }
+}
+
+/**
+ * Compute a season's status from its episode map.
+ * Returns null if no episodes are tracked.
+ */
+export function computeSeasonStatus(
+  episodes: Record<string, EpisodeTracking> | undefined,
+  totalEpsInSeason: number
+): "watched" | "unwatched" | "watching" | null {
+  const entries = Object.values(episodes ?? {});
+  if (entries.length === 0) return null;
+  const allWatched = entries.every((e) => e.status === "watched");
+  const allUnwatched = entries.every((e) => e.status === "unwatched");
+  if (entries.length >= totalEpsInSeason && totalEpsInSeason > 0 && allWatched) return "watched";
+  if (allUnwatched && !entries.some((e) => e.status === "watched")) return "unwatched";
+  return "watching";
+}
+
+/**
+ * Compute the parent show status from its nested seasons map.
+ * Returns null if no seasons are tracked (signals auto-untrack).
+ */
+export function computeShowStatusFromSeasons(
+  seasons: Record<string, SeasonTracking>,
+  totalSeasonCount: number,
+  seasonEpisodeCounts: Record<string, number>
+): "watched" | "unwatched" | "watching" | null {
+  const seasonKeys = Object.keys(seasons);
+  if (seasonKeys.length === 0) return null;
+
+  const effectiveStatuses = seasonKeys.map((key) => {
+    const s = seasons[key];
+    if (s.status) return s.status;
+    return computeSeasonStatus(s.episodes, seasonEpisodeCounts[key] ?? 0) ?? "unwatched";
+  });
+  const allWatched = effectiveStatuses.every((s) => s === "watched");
+  const allUnwatched = effectiveStatuses.every((s) => s === "unwatched");
+
+  if (allWatched && seasonKeys.length >= totalSeasonCount) return "watched";
+  if (allUnwatched) return "unwatched";
+  return "watching";
+}
+
+/**
  * Calculate the effective display status for an episode, distinguishing
- * explicit DB records from virtual projections inherited from the parent show.
+ * explicit DB records from virtual projections inherited from season and
+ * parent show state.
  *
- * - If the episode has its own tracked status → real (isVirtual: false)
- * - If parent is "watched" and no episode record → virtual "watched"
- * - Otherwise → virtual "unwatched" (covers "unwatched", "watching", and
- *   undefined parent states where no episode record exists)
+ * Priority (top to bottom):
+ * 1. Explicit episode record → real (isVirtual: false)
+ * 2. Season override ("watched"/"unwatched") → virtual
+ * 3. Parent "watched" → virtual "watched"
+ * 4. Parent "watching" + first episode of the show → virtual "watching"
+ * 5. Otherwise → virtual "unwatched"
  */
 export function getEffectiveEpisodeStatus(
   parentStatus?: string,
-  epStatus?: string
+  seasonStatus?: string,
+  epStatus?: string,
+  isFirstEpisodeOfShow?: boolean
 ): { status: string; isVirtual: boolean } {
   if (epStatus) return { status: epStatus, isVirtual: false };
+  if (seasonStatus === "watched" || seasonStatus === "unwatched") {
+    return { status: seasonStatus, isVirtual: true };
+  }
   if (parentStatus === "watched") return { status: "watched", isVirtual: true };
+  if (parentStatus === "watching" && isFirstEpisodeOfShow) {
+    return { status: "watching", isVirtual: true };
+  }
   return { status: "unwatched", isVirtual: true };
 }

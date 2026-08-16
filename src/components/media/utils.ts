@@ -5,6 +5,10 @@ import type { Media } from "@/types/media";
  *
  * Callers are responsible for pre-filtering items (e.g. by collection membership).
  * Items with "watching" status count as 50 % watched runtime.
+ *
+ * TV shows with nested `seasons` data are season-aware: each season owns
+ * 1 / total_seasons of the show's runtime, and seasons with an explicit
+ * "watched" override count fully while "watching" seasons count 50 %.
  */
 export function computeProgress(items: Media[]): {
   percent: number;
@@ -21,8 +25,38 @@ export function computeProgress(items: Media[]): {
   for (const item of items) {
     const rt = item.runtime || 0;
     totalMins += rt;
-    if (item.status === "watched") watchedMins += rt;
-    if (item.status === "watching") watchedMins += rt * 0.5;
+
+    if (
+      item.type === "tv" &&
+      item.seasons &&
+      item.total_seasons &&
+      item.total_seasons > 0
+    ) {
+      const rtPerSeason = rt / item.total_seasons;
+      let watchedCount = 0;
+      let watchingCount = 0;
+
+      for (const s of Object.values(item.seasons)) {
+        let eff = s.status;
+        if (!eff) {
+          // No per-season TMDB episode totals available in this context, so
+          // a season with tracked episodes but no explicit override can't be
+          // proven "watched" — treat it as "watching".
+          const eps = Object.values(s.episodes ?? {});
+          eff = eps.length > 0 ? "watching" : "unwatched";
+        }
+
+        if (eff === "watched") watchedCount += 1;
+        else if (eff === "watching") watchingCount += 1;
+      }
+
+      watchedMins += watchedCount * rtPerSeason;
+      watchedMins += watchingCount * rtPerSeason * 0.5; // "watching" = 50 %
+    } else {
+      // Movie or legacy TV without seasons data — top-level status
+      if (item.status === "watched") watchedMins += rt;
+      if (item.status === "watching") watchedMins += rt * 0.5;
+    }
   }
 
   const percent = totalMins === 0 ? 0 : Math.round((watchedMins / totalMins) * 100);
