@@ -49,6 +49,7 @@ export default function ReviewSection({
                 width={40}
                 height={40}
                 className="w-10 h-10 rounded-full object-cover"
+                unoptimized
               />
             ) : (
               <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-zinc-200 dark:bg-zinc-700">

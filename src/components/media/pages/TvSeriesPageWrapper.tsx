@@ -665,6 +665,7 @@ export default function TvSeriesPageWrapper({
                             fill
                             sizes="192px"
                             className="object-cover"
+                            unoptimized
                           />
                         ) : (
                           <div className="flex h-full items-center justify-center text-zinc-400 text-xs">
@@ -756,6 +757,7 @@ export default function TvSeriesPageWrapper({
                               fill
                               sizes="192px"
                               className="object-cover"
+                              unoptimized
                             />
                           ) : (
                             <div className="flex h-full items-center justify-center text-zinc-400 text-xs">
