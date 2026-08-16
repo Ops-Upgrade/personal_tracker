@@ -44,7 +44,14 @@ export default function CollectionDetailPage({
   const router = useRouter();
   const [allMedia, setAllMedia] = useState<Media[]>([]);
   const [collection, setCollection] = useState<MediaCollection | null>(null);
-  const [viewMode, setViewMode] = useLocalStorage<"detail" | "tile">("mediaCollectionDetailLayout", "detail");
+  const [viewPreferences, setViewPreferences] = useLocalStorage<Record<string, "detail" | "tile">>(
+    "mediaCollectionDetailPreferences",
+    {}
+  );
+  const viewMode = viewPreferences[collectionId] || "detail";
+  const setViewMode = (mode: "detail" | "tile") => {
+    setViewPreferences((prev) => ({ ...prev, [collectionId]: mode }));
+  };
 
   // Inline editing state
   const [name, setName] = useState("");
