@@ -8,6 +8,7 @@ import ErrorBanner from "@/components/common/ErrorBanner";
 import Toast from "@/components/common/Toast";
 import type { ToastType } from "@/components/common/Toast";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
+import { useLocalStorage } from "@/lib/useLocalStorage";
 import {
   listMedia,
   updateMedia,
@@ -22,22 +23,19 @@ import TmdbAttribution from "./TmdbAttribution";
 type TopTab = "manager" | "discover";
 type SubTab = "default" | "collections";
 
-// ── Module-level cache: survives SPA navigation so a bare /media visit
-//    restores the last sub-tab instead of always defaulting to "Media" ──
-
-const mediaViewCache = {
-  subtab: "default" as SubTab,
-};
-
 export default function MediaView() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mediaItems, setMediaItems] = useState<Media[]>([]);
   const [collections, setCollections] = useState<MediaCollection[]>([]);
 
-  // Tab state is derived from URL search params, with a module-level cache as
-  // fallback when the sub-tab param is absent (e.g. bare /media navigation).
+  // Tab state is derived from URL search params, with a localStorage-persisted
+  // value as fallback when the sub-tab param is absent (e.g. bare /media navigation).
   // switchTopTab / switchSubTab update the URL, which triggers a re-render with fresh searchParams.
+  const [persistedSubTab, setPersistedSubTab] = useLocalStorage<SubTab>(
+    "mediaManagerSubTab",
+    "default",
+  );
   const activeTopTab: TopTab = searchParams.get("tab") === "discover" ? "discover" : "manager";
   const urlSubtab = searchParams.get("subtab");
   const activeSubTab: SubTab =
@@ -45,7 +43,7 @@ export default function MediaView() {
       ? "collections"
       : urlSubtab === "default"
         ? "default"
-        : mediaViewCache.subtab;
+        : persistedSubTab;
 
   // ── Toast / popup state ──
   const [toastConfig, setToastConfig] = useState<{
@@ -78,13 +76,13 @@ export default function MediaView() {
     router.replace(`?${params.toString()}`, { scroll: false });
   }, [router, activeTopTab]);
 
-  // Keep the module cache in sync whenever the URL explicitly sets a sub-tab.
+  // Keep the persisted value in sync whenever the URL explicitly sets a sub-tab.
   useEffect(() => {
     const param = searchParams.get("subtab");
     if (param === "default" || param === "collections") {
-      mediaViewCache.subtab = param;
+      setPersistedSubTab(param);
     }
-  }, [searchParams]);
+  }, [searchParams, setPersistedSubTab]);
 
   const loadAllData = useCallback(async (uid: string) => {
     const [media, cols] = await Promise.all([

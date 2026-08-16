@@ -578,28 +578,6 @@ export default function CollectionDetailPage({
         {/* ── Bottom Action Bar ── */}
         {!isLoading && !error && (
           <>
-            {showDeleteConfirm && (
-              <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900/60 dark:bg-red-950/30">
-                <span className="text-xs text-red-700 dark:text-red-400 flex-1">
-                  This collection will be deleted, but it will not affect your ratings, reviews, or watched data on the individual movies and shows.
-                </span>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                >
-                  {deleting ? "Deleting…" : "Confirm Delete"}
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowDeleteConfirm(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
             <StickyActionBar
               onSave={handleSaveAll}
               onCancel={handleCancel}
@@ -641,6 +619,18 @@ export default function CollectionDetailPage({
           cancelLabel="Keep Editing"
           onConfirm={handleDiscardAndNavigate}
           onCancel={closeUnsavedDialog}
+        />
+      )}
+
+      {/* ── Delete Collection Dialog ── */}
+      {showDeleteConfirm && (
+        <ConfirmDialog
+          title="Delete Collection?"
+          description="This collection will be deleted, but it will not affect your ratings, reviews, or watched data on the individual movies and shows."
+          confirmLabel={deleting ? "Deleting…" : "Delete"}
+          cancelLabel="Cancel"
+          onConfirm={handleDelete}
+          onCancel={() => setShowDeleteConfirm(false)}
         />
       )}
 

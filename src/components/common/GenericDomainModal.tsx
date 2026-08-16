@@ -252,6 +252,9 @@ export default function GenericDomainModal({
   // =========================================================================
   // Form state (schema-driven)
   // =========================================================================
+  // Baseline for dirty checking: tracks the last-known-saved values so the
+  // dirty check resets after a successful save (initialData stays stale).
+  const [baselineData, setBaselineData] = useState<Record<string, unknown>>(initialData);
   const [formData, setFormData] =
     useState<Record<string, unknown>>(initialData);
 
@@ -260,6 +263,7 @@ export default function GenericDomainModal({
   const [prevDataKey, setPrevDataKey] = useState(initialDataKey);
   if (initialDataKey !== prevDataKey) {
     setPrevDataKey(initialDataKey);
+    setBaselineData({ ...initialData });
     setFormData({ ...initialData });
   }
 
@@ -481,15 +485,15 @@ export default function GenericDomainModal({
   // Normalize richtext fields for dirty comparison: empty HTML like
   // "<p><br></p>" or "<p></p>" is equivalent to an empty string.
   const isFormDirty = useMemo(() => {
-    const keys = new Set([...Object.keys(formData), ...Object.keys(initialData)]);
+    const keys = new Set([...Object.keys(formData), ...Object.keys(baselineData)]);
     for (const key of keys) {
       const field = fields.find((f) => f.key === key);
       const a = field?.type === "richtext" ? normaliseRichtext(formData[key]) : (formData[key] ?? "");
-      const b = field?.type === "richtext" ? normaliseRichtext(initialData[key]) : (initialData[key] ?? "");
+      const b = field?.type === "richtext" ? normaliseRichtext(baselineData[key]) : (baselineData[key] ?? "");
       if (JSON.stringify(a) !== JSON.stringify(b)) return true;
     }
     return false;
-  }, [formData, initialData, fields]);
+  }, [formData, baselineData, fields]);
 
   const isFileDirty =
     newFiles.length > 0 ||
@@ -749,6 +753,7 @@ export default function GenericDomainModal({
 
       // Sync formData with trimmed values so dirty check resets
       setFormData(trimmedFormData);
+      setBaselineData(trimmedFormData);
 
       // Clear file state on success
       resetFileState();
