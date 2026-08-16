@@ -75,7 +75,7 @@ export default function TvSeriesPageWrapper({
   const [seasonData, setSeasonData] = useState<TmdbSeasonDetails | null>(null);
   const [viewMode, setViewMode] = useLocalStorage<"detail" | "tile">(
     "mediaEpisodeLayout",
-    "detail",
+    "tile",
   );
   const [seasonState, setSeasonState] = useState<
     Record<string, SeasonTracking>

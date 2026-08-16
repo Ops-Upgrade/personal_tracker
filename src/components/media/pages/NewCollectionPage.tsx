@@ -67,7 +67,7 @@ export default function NewCollectionPage() {
       setToastConfig((prev) => ({ ...prev, isVisible: false }));
     }, 2000);
   }, []);
-  const [viewMode, setViewMode] = useLocalStorage<"detail" | "tile">("mediaCollectionDetailLayout", "detail");
+  const [viewMode, setViewMode] = useLocalStorage<"detail" | "tile">("mediaCollectionDetailLayout", "tile");
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [trackedMedia, setTrackedMedia] = useState<Media[]>([]);
 

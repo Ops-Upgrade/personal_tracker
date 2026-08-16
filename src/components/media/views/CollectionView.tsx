@@ -74,7 +74,7 @@ export default function CollectionView({
   onCreateCollection,
 }: CollectionViewProps) {
   const router = useRouter();
-  const [viewMode, setViewMode] = useLocalStorage<"single" | "grid">("mediaCollectionLayout", "single");
+  const [viewMode, setViewMode] = useLocalStorage<"single" | "grid">("mediaCollectionLayout", "grid");
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
@@ -166,17 +166,6 @@ export default function CollectionView({
           <div className="hidden md:flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800 rounded-lg p-1">
             <button
               type="button"
-              onClick={() => setViewMode("single")}
-              className={`p-1.5 rounded-md transition-colors ${viewMode === "single"
-                  ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-                }`}
-              aria-label="Single column view"
-            >
-              <List size={16} />
-            </button>
-            <button
-              type="button"
               onClick={() => setViewMode("grid")}
               className={`p-1.5 rounded-md transition-colors ${viewMode === "grid"
                   ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
@@ -185,6 +174,17 @@ export default function CollectionView({
               aria-label="Grid view"
             >
               <LayoutGrid size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("single")}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === "single"
+                  ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
+                }`}
+              aria-label="Single column view"
+            >
+              <List size={16} />
             </button>
           </div>
 
