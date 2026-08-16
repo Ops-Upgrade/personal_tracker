@@ -16,6 +16,7 @@ import SearchBar from "@/components/common/SearchBar";
 import { FilterLabel } from "@/components/media/shared/FilterLabel";
 import { MobileFilterBar } from "@/components/media/shared/MobileFilterBar";
 import { FilterSidebar } from "@/components/media/shared/FilterSidebar";
+import { useLocalStorage } from "@/lib/useLocalStorage";
 
 // ── Local filter types ──
 
@@ -59,13 +60,11 @@ const DEFAULT_LOCAL_FILTERS: LocalFilters = {
 const defaultViewCache = {
   searchQuery: "",
   filters: DEFAULT_LOCAL_FILTERS,
-  statusFilter: "all" as StatusFilter,
 };
 
 export function clearDefaultViewCache() {
   defaultViewCache.searchQuery = "";
   defaultViewCache.filters = DEFAULT_LOCAL_FILTERS;
-  defaultViewCache.statusFilter = "all";
 }
 
 // ── Option definitions ──
@@ -164,7 +163,11 @@ export default function DefaultView({
 }: DefaultViewProps) {
   const [filters, setFilters] = useState<LocalFilters>(() => defaultViewCache.filters);
   const [searchQuery, setSearchQuery] = useState(() => defaultViewCache.searchQuery);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => defaultViewCache.statusFilter);
+  // Persisted via localStorage so the watched/watching filter survives hard refreshes.
+  const [statusFilter, setStatusFilter] = useLocalStorage<StatusFilter>(
+    "mediaDefaultStatusFilter",
+    "all",
+  );
   const [mobileDropdown, setMobileDropdown] = useState<MobileDropdown>(null);
 
   const activeFilterCount = filterCount(filters, statusFilter);
@@ -173,8 +176,7 @@ export default function DefaultView({
   useEffect(() => {
     defaultViewCache.searchQuery = searchQuery;
     defaultViewCache.filters = filters;
-    defaultViewCache.statusFilter = statusFilter;
-  }, [searchQuery, filters, statusFilter]);
+  }, [searchQuery, filters]);
 
   // ── Filter updaters ──
 
