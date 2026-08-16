@@ -11,6 +11,7 @@ import { searchMedia } from "@/api/media";
 import type { Media, TmdbSearchResult } from "@/types/media";
 import { useTmdbRetry } from "@/hooks/useTmdbRetry";
 import MediaCard from "@/components/media/MediaCard";
+import { useNewSeasonChecks } from "@/hooks/useNewSeasonChecks";
 import SearchBar from "@/components/common/SearchBar";
 const DEBOUNCE_MS = 400;
 
@@ -70,6 +71,10 @@ export default function AddMediaModal({
   }, [collectionId, searchQuery, discoverResults]);
 
   const { loading: searching, execute: retryExecute, cancel: cancelRetry } = useTmdbRetry();
+
+  // New-season badges for the tracked-media grid (watched TV only) — the
+  // modal's cards stay passive; the hook owns all TMDB fetching.
+  const newSeasonMap = useNewSeasonChecks(allMedia);
 
   // Esc key to close
   useEffect(() => {
@@ -274,6 +279,9 @@ export default function AddMediaModal({
                           media={media}
                           showStatus
                           showBadges
+                          hasNewSeason={
+                            media.tmdb_id ? !!newSeasonMap[media.tmdb_id] : false
+                          }
                           onClick={() => handleSelectTracked(media)}
                         />
                       ))}

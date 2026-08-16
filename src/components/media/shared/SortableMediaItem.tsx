@@ -22,6 +22,12 @@ export interface SortableMediaItemProps {
   media: Media;
   /** When true, shows "Unsaved" badge instead of status badge. */
   isUnsaved?: boolean;
+  /**
+   * Show the "New Season" chip (watched TV shows with a TMDB season added
+   * since the last "watched" save). Computed at the grid level by
+   * `useNewSeasonChecks` — these items perform no fetching themselves.
+   */
+  hasNewSeason?: boolean;
   /** When provided, shows a remove button. */
   onRemove?: (id: string) => void;
   /**
@@ -37,6 +43,7 @@ export function SortableDetailItem({
   media,
   onRemove,
   isUnsaved,
+  hasNewSeason = false,
   onNavigate,
 }: SortableMediaItemProps) {
   const router = useRouter();
@@ -119,6 +126,11 @@ export function SortableDetailItem({
           <span className="text-[10px] uppercase font-medium text-zinc-400 dark:text-zinc-500">
             {media.type === "movie" ? "Movie" : "TV"}
           </span>
+          {hasNewSeason && (
+            <span className="rounded bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider">
+              New Season
+            </span>
+          )}
           {media.runtime && (
             <span className="text-[10px] text-zinc-400 dark:text-zinc-500">
               {media.runtime >= 60
@@ -171,6 +183,7 @@ export function SortableTileItem({
   media,
   onRemove,
   isUnsaved,
+  hasNewSeason = false,
   onNavigate,
 }: SortableMediaItemProps) {
   const router = useRouter();
@@ -215,6 +228,7 @@ export function SortableTileItem({
       year={year}
       rating={media.rating}
       hasReviewNotes={!!media.review_notes}
+      hasNewSeason={hasNewSeason}
       onClick={handleClick}
       topLeftSlot={
         isUnsaved ? (

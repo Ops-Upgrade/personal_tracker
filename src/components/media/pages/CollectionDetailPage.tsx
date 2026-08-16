@@ -31,6 +31,7 @@ import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import StickyActionBar from "@/components/media/shared/StickyActionBar";
 import SortableMediaGrid from "@/components/media/shared/SortableMediaGrid";
 import ViewToggle from "@/components/common/ViewToggle";
+import { useNewSeasonChecks } from "@/hooks/useNewSeasonChecks";
 
 interface CollectionDetailPageProps {
   collectionId: string;
@@ -174,6 +175,10 @@ export default function CollectionDetailPage({
   }, [effectiveItems, displayOrder]);
 
   const progress = useMemo(() => computeProgress(effectiveItems), [effectiveItems]);
+
+  // New-season badges for this collection's grid (watched TV only) — one
+  // centralized batch of TMDB checks; the sortable items stay passive.
+  const newSeasonMap = useNewSeasonChecks(orderedMedia);
 
   // ── isDirty ──
 
@@ -558,6 +563,7 @@ export default function CollectionDetailPage({
                 itemIds={displayOrder}
                 viewMode={viewMode}
                 isUnsaved={(m) => pendingAdds.some((p) => p.id === m.id)}
+                hasNewSeason={(m) => (m.tmdb_id ? !!newSeasonMap[m.tmdb_id] : false)}
                 onReorder={(newOrder) => setDisplayOrder(newOrder.map((m) => m.id))}
                 onRemove={handleRemoveItem}
                 onNavigateItem={handleNavigateToMedia}

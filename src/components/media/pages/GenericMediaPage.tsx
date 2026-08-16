@@ -8,6 +8,7 @@ import BackButton from "@/components/common/BackButton";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { Media, MediaCollection, MediaPlaintext, TmdbDetails } from "@/types/media";
+import { buildMediaPatch } from "@/api/media";
 import { useNavigationGuard } from "@/hooks/useNavigationGuard";
 import { useMediaTracking } from "@/hooks/useMediaTracking";
 import MediaHeroSection from "@/components/media/shared/MediaHeroSection";
@@ -76,6 +77,22 @@ interface GenericMediaPageProps {
   onHydrate?: (existingMedia: Media | undefined) => void;
   /** Called when TMDB data is available so the TV wrapper can read season count */
   onTmdbReady?: (data: TmdbDetails) => void;
+  /**
+   * Registers a sync function the TV wrapper can call to push a parent status
+   * update into the form (background new-season auto-downgrade, or season-level
+   * recalculation bubbling up to the show status). The sync updates both the
+   * form status and the original snapshot so `isDirty` stays false for writes
+   * the DB already has.
+   */
+  onRegisterStatusSync?: (
+    sync: (status: MediaPlaintext["status"]) => void,
+  ) => void;
+  /**
+   * Called after a successful save so the TV wrapper can refresh its own
+   * original-season snapshot (otherwise its `extraDirty` flag stays true and
+   * the "Discard Changes" guard keeps firing after every save).
+   */
+  onSaveSuccess?: () => void;
 }
 
 /**
@@ -107,6 +124,8 @@ export default function GenericMediaPage({
   onStatusChange,
   onHydrate,
   onTmdbReady,
+  onRegisterStatusSync,
+  onSaveSuccess,
 }: GenericMediaPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -225,6 +244,16 @@ export default function GenericMediaPage({
       onTmdbReady?.(result.details);
     });
   }, [load, tmdbId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Expose a status-sync channel for the TV wrapper (see onRegisterStatusSync).
+  useEffect(() => {
+    onRegisterStatusSync?.((newStatus) => {
+      setStatus(newStatus);
+      setOriginalMedia((prev) =>
+        prev ? { ...prev, status: newStatus } : prev,
+      );
+    });
+  }, [onRegisterStatusSync]);
 
   // ── isDirty ──
   const isDirty = useMemo(() => {
@@ -356,21 +385,22 @@ export default function GenericMediaPage({
     // untouched so the updateMedia merge preserves the record as-is.
     const effectiveStatus = status ?? (!isTracked ? "unwatched" : undefined);
 
-    const patch: Partial<MediaPlaintext> = {
-      status: effectiveStatus,
-      rating: rating || undefined,
-      review_notes: reviewNotes || undefined,
-      collection_ids: collectionIds.length > 0 ? collectionIds : undefined,
-    };
-
-    if (showWatchedOn) {
-      patch.watched_on = watchedOn || undefined;
-    }
-
-    // Merge TV-specific patch fields (e.g. episodes)
-    if (extraPatchFields) {
-      Object.assign(patch, extraPatchFields);
-    }
+    // Patch building lives in the media API layer (buildMediaPatch) so the
+    // integration tests persist through the same production code path.
+    const patch = buildMediaPatch({
+      status,
+      isTracked,
+      rating,
+      reviewNotes,
+      collectionIds,
+      watchedOn,
+      showWatchedOn,
+      // Persist the current TMDB season count on every TV save so collection
+      // progress can stay season-aware (also refreshed when TMDB adds seasons).
+      totalSeasons: tmdbData?.number_of_seasons ?? 0,
+      mediaType,
+      extraPatchFields,
+    });
 
     const genreIds = tmdbData?.genres?.map((g) => g.id) ?? [];
 
@@ -392,6 +422,10 @@ export default function GenericMediaPage({
       status: status || "watched",
       runtime,
     };
+
+    if (mediaType === "tv") {
+      baseCreateFields.total_seasons = tmdbData?.number_of_seasons ?? 0;
+    }
 
     // Merge TV-specific create fields (e.g. episodes)
     const finalCreateFields: Partial<MediaPlaintext> = {
@@ -415,6 +449,7 @@ export default function GenericMediaPage({
         collection_ids:
           collectionIds.length > 0 ? [...collectionIds].sort() : undefined,
       } as MediaPlaintext);
+      onSaveSuccess?.();
     }
   }
 

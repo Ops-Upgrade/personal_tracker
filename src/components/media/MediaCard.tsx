@@ -36,6 +36,12 @@ interface MediaCardProps {
   showOverview?: boolean;
 
   // ── Generic ──
+  /**
+   * Show the "New Season" chip (watched TV shows where TMDB lists a season
+   * added since the last "watched" save). Computed at the grid level by
+   * `useNewSeasonChecks` — this card performs no fetching itself.
+   */
+  hasNewSeason?: boolean;
   priority?: boolean;
   /** Override the default click handler (which navigates to the detail page). */
   onClick?: () => void;
@@ -87,6 +93,7 @@ export default function MediaCard({
   trackingData,
   showTrackingChip,
   showOverview,
+  hasNewSeason = false,
   priority = false,
   onClick,
   className = "",
@@ -130,6 +137,7 @@ export default function MediaCard({
       collectionName={collectionName}
       showTrackingChip={showTrackingChip}
       isTracked={isTracked}
+      hasNewSeason={hasNewSeason}
       priority={priority}
       className={className}
       topLeftSlot={

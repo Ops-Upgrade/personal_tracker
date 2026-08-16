@@ -37,7 +37,7 @@ export default function StatusBadge({ status, className = "", isVirtual = false 
     };
     return (
       <span
-        className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase border bg-transparent ${virtualColors[status as MediaStatus] || ""} ${className}`}
+        className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold uppercase border bg-transparent ${virtualColors[status as MediaStatus] || ""} ${className}`}
       >
         {statusLabels[status as MediaStatus] || status}
       </span>
@@ -46,7 +46,7 @@ export default function StatusBadge({ status, className = "", isVirtual = false 
 
   return (
     <span
-      className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shadow-sm ${statusColors[status as MediaStatus] || ""} ${className}`}
+      className={`whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold uppercase shadow-sm ${statusColors[status as MediaStatus] || ""} ${className}`}
     >
       {statusLabels[status as MediaStatus] || status}
     </span>

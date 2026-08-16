@@ -31,6 +31,7 @@ Target deployment: Vercel with custom domain `personal.ops-upgrade.net`.
 | lucide-react       | ^1.23.0  | Icon library (Sun/Moon for theme toggle, etc.) |
 | Node.js            | 22+      | Required by Next.js 16                       |
 | clsx               | ^2.1.1   | Class name utility                           |
+| vitest             | ^4.1.10  | Test runner — `npm test` (hermetic Tier 1 unit tests); `npm run test:integration` (media Tier 2/3 against the real Supabase project as the dummy test user; gated behind gitignored `.env.test.local`, excluded from `npm test`) |
 
 ---
 
@@ -284,6 +285,7 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-07-24 | Vault feature completed: `/vault` route with PIN-protected access, server-side Argon2id PIN hashing with brute-force protection (10 attempts / 10-min sliding window, permanent DB-persisted lockout), 4 sub-sections (Personal Records, Password Manager, Bank Manager, Document Vault), `vault_entries` encrypted table + RLS, vault storage bucket folder, 2×2 gray-themed dashboard tile replacing Analytics placeholder, 30-second navigation-away grace period. |
 | 2026-08-09 | Global Architecture Refactor: Eliminated structural duplication by standardizing list views, store views, main domain shells, media details, and modals into generic composable components (`GenericViewPage`, `GenericStorePage`, `GenericDomainPage`, `GenericMediaPage`, `GenericDomainModal`). Replaced domain-specific modals and duplicate list pages. Added `/all` query-param-driven routes for Task Manager, Education, Expense, and Medical domains. |
 | 2026-08-15 | Column Definition Deduplication (per `plans/note-column-deduplication.md`): Added shared column factories in `common/columns.tsx` (`colPriority`, `colFiles`, `colRichtext`, `colDate`); domain configs export atomic columns (`TASK_PRIORITY`, `EDU_FILES`, …) composed from them; all widgets/pages assemble per-view arrays from atoms. Date formatting consolidated into a single timezone-safe `formatShortDate` in `lib/format.ts`; local `formatDate`/`formatShortDate` copies deleted everywhere. `taskmanager/completed` months view reuses the completion columns (sorting is inert there). |
+| 2026-08-16 | Media Manager Stage 11 complete: vitest test suite introduced in three tiers. Tier 1 — 29 hermetic pure-function unit tests (`src/api/media/__tests__/media.test.ts`) pinning the status-bubbling / override invariants. Tier 2 — handler logic extracted to `src/api/media/handlers.ts` (pages now call it) + 29 DB integration tests walking Tables A/B/C of the plan matrix with the two known regressions pinned as named tests (`media.integration.test.ts`, dummy test user, gated behind `.env.test.local`, `npm run test:integration`). Tier 3 — 5 collection-independence tests (`collections.integration.test.ts`). Three doc-vs-code deviations documented in PLAN-mediamanager.md Stage 11. |
 
 ---
 

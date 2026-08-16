@@ -3,15 +3,27 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Tv, Star, MessageSquare } from "lucide-react";
+import { Tv, Star, MessageSquare, X } from "lucide-react";
 import ViewToggle from "@/components/common/ViewToggle";
 import ErrorBanner from "@/components/common/ErrorBanner";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import {
   getSeasonDetails,
-  formatEpisodeKey,
+  updateMedia,
+  formatSeasonKey,
+  formatEpisodeKeyShort,
   getEffectiveEpisodeStatus,
+  computeSeasonStatus,
+  recomputeShowStatus,
+  checkNewSeason,
+  countShowOverrideConflicts,
+  computeShowOverrideSeasons,
+  countSeasonOverrideConflicts,
+  applySeasonOverride,
+  clearSeasonOverride,
+  computeSeasonOverrideSeasons,
+  removeSeason,
 } from "@/api/media";
 import type {
   TmdbDetails,
@@ -19,11 +31,13 @@ import type {
   Media,
   MediaCollection,
   MediaPlaintext,
+  SeasonTracking,
   EpisodeTracking,
 } from "@/types/media";
 import { useTmdbRetry } from "@/hooks/useTmdbRetry";
-import { tmdbStillUrl } from "@/components/media/constants";
+import { tmdbStillUrl, chipClasses } from "@/components/media/constants";
 import StatusBadge from "@/components/media/shared/StatusBadge";
+import UntrackConfirmation from "@/components/media/shared/UntrackConfirmation";
 import GenericMediaPage from "@/components/media/pages/GenericMediaPage";
 
 interface TvSeriesPageWrapperProps {
@@ -33,6 +47,8 @@ interface TvSeriesPageWrapperProps {
   userAvatarUrl?: string;
   collections: MediaCollection[];
   onRefresh?: () => void;
+  /** Called after new-season detection auto-downgrades a "watched" show. */
+  onNewSeasonDetected?: (updatedMedia: Media) => void;
 }
 
 /**
@@ -50,6 +66,7 @@ export default function TvSeriesPageWrapper({
   userAvatarUrl,
   collections,
   onRefresh,
+  onNewSeasonDetected,
 }: TvSeriesPageWrapperProps) {
   const router = useRouter();
 
@@ -60,13 +77,13 @@ export default function TvSeriesPageWrapper({
     "mediaEpisodeLayout",
     "detail",
   );
-  const [episodeState, setEpisodeState] = useState<
-    Record<string, EpisodeTracking>
+  const [seasonState, setSeasonState] = useState<
+    Record<string, SeasonTracking>
   >({});
 
-  // Snapshot of original episode state (for dirty check + cancel)
-  const [originalEpisodes, setOriginalEpisodes] = useState<
-    Record<string, EpisodeTracking>
+  // Snapshot of original season state (for dirty check + cancel)
+  const [originalSeasonState, setOriginalSeasonState] = useState<
+    Record<string, SeasonTracking>
   >({});
 
   // Conflict dialog — shown when manually overriding parent status would
@@ -97,6 +114,47 @@ export default function TvSeriesPageWrapper({
   // For the season list, we need number_of_seasons. Let's store it locally.
   const [seasonCount, setSeasonCount] = useState(10);
 
+  // Latest localMedia — GenericMediaPage owns the state, so we mirror it via
+  // handleHydrate to power new-season detection in handleTmdbReady.
+  const localMediaRef = useRef<Media | null>(null);
+
+  // Season numbers added by TMDB since the last "watched" save (sidebar NEW badge)
+  const [newSeasons, setNewSeasons] = useState<number[]>([]);
+
+  // TMDB season metadata captured from handleTmdbReady — used to recompute
+  // the parent show status when season-level overrides change.
+  const tmdbSeasonRef = useRef<{
+    totalSeasons: number;
+    episodeCounts: Record<string, number>;
+  }>({ totalSeasons: 0, episodeCounts: {} });
+
+  // Channel into GenericMediaPage's form state (registered via
+  // onRegisterStatusSync) — lets us push parent-status updates after
+  // background detection or season-level recalculation.
+  const statusSyncRef = useRef<
+    ((status: MediaPlaintext["status"]) => void) | null
+  >(null);
+
+  const handleRegisterStatusSync = useCallback(
+    (sync: (status: MediaPlaintext["status"]) => void) => {
+      statusSyncRef.current = sync;
+    },
+    [],
+  );
+
+  // Recompute the parent show status from the nested seasons map and push it
+  // into GenericMediaPage's form. Falls back to "unwatched" when no seasons
+  // remain tracked so an emptied show can't retain a ghost umbrella status
+  // (resolves the Stage 3 deviation: recomputeShowStatus is used here).
+  const pushShowStatusFromSeasons = useCallback(
+    (seasons: Record<string, SeasonTracking>) => {
+      const { totalSeasons, episodeCounts } = tmdbSeasonRef.current;
+      const computed = recomputeShowStatus(seasons, totalSeasons, episodeCounts);
+      statusSyncRef.current?.(computed);
+    },
+    [],
+  );
+
   // Load season data
   useEffect(() => {
     executeSeason(async (signal) => {
@@ -110,49 +168,110 @@ export default function TvSeriesPageWrapper({
   // ── Hydration / TMDB callbacks ──
   const handleHydrate = useCallback(
     (existingMedia: Media | undefined) => {
+      localMediaRef.current = existingMedia ?? null;
       if (existingMedia) {
-        const eps = existingMedia.episodes ?? {};
-        setEpisodeState(eps);
-        setOriginalEpisodes(eps);
+        const seasons = existingMedia.seasons ?? {};
+        setSeasonState(seasons);
+        setOriginalSeasonState(seasons);
       } else {
-        setEpisodeState({});
-        setOriginalEpisodes({});
+        setSeasonState({});
+        setOriginalSeasonState({});
       }
     },
     [],
   );
 
-  const handleTmdbReady = useCallback((data: TmdbDetails) => {
-    setSeasonCount(data.number_of_seasons ?? 10);
-  }, []);
+  const handleTmdbReady = useCallback(
+    (data: TmdbDetails) => {
+      setSeasonCount(data.number_of_seasons ?? 10);
+
+      const tmdbSeasonCount = data.number_of_seasons ?? 0;
+
+      // Cache TMDB season metadata for show-status recalculation
+      const episodeCounts: Record<string, number> = {};
+      for (const s of data.seasons ?? []) {
+        episodeCounts[formatSeasonKey(s.season_number)] = s.episode_count;
+      }
+      tmdbSeasonRef.current = { totalSeasons: tmdbSeasonCount, episodeCounts };
+
+      const currentMedia = localMediaRef.current;
+      if (currentMedia?.status === "watched") {
+        // Shared with the grid-level badge hook (useNewSeasonChecks) so the
+        // page-load verdict and the grid badge can never disagree.
+        const verdict = checkNewSeason(
+          currentMedia.tracked_season_count,
+          tmdbSeasonCount,
+        );
+        if (verdict === "backfill") {
+          // BACKFILL: pre-existing watched show tracked before this feature.
+          // Set the baseline silently — no badge, no downgrade.
+          updateMedia(userId, currentMedia.id, {
+            tracked_season_count: tmdbSeasonCount,
+          })
+            .then((updated) => {
+              localMediaRef.current = updated;
+            })
+            .catch(() => {
+              /* non-fatal — retries on the next page load */
+            });
+        } else if (verdict === "new") {
+          // TRUE NEW SEASON: auto-downgrade to "watching"
+          updateMedia(userId, currentMedia.id, {
+            status: "watching",
+            tracked_season_count: tmdbSeasonCount,
+          })
+            .then((updated) => {
+              localMediaRef.current = updated;
+              onNewSeasonDetected?.(updated); // external hook for parents
+              // Sync GenericMediaPage's form so the pill flips and the next
+              // save doesn't overwrite the downgrade with a stale status.
+              statusSyncRef.current?.(updated.status);
+            })
+            .catch(() => {
+              /* non-fatal — retries on the next page load */
+            });
+          setNewSeasons(
+            Array.from(
+              { length: tmdbSeasonCount - currentMedia.tracked_season_count! },
+              (_, i) => currentMedia.tracked_season_count! + i + 1,
+            ),
+          );
+        }
+      }
+    },
+    [userId, onNewSeasonDetected],
+  );
 
   // ── Episodes dirty check ──
   const episodesDirty = useMemo(
     () =>
-      JSON.stringify(episodeState) !== JSON.stringify(originalEpisodes),
-    [episodeState, originalEpisodes],
+      JSON.stringify(seasonState) !== JSON.stringify(originalSeasonState),
+    [seasonState, originalSeasonState],
   );
 
   // ── Extra cancel: reset episode state ──
   const handleExtraCancel = useCallback(() => {
-    setEpisodeState({ ...originalEpisodes });
-  }, [originalEpisodes]);
+    setSeasonState({ ...originalSeasonState });
+  }, [originalSeasonState]);
 
   // ── Extra patch / create fields ──
   const extraPatchFields = useMemo<Partial<MediaPlaintext>>(
     () => ({
-      episodes:
-        Object.keys(episodeState).length > 0 ? episodeState : undefined,
+      seasons:
+        Object.keys(seasonState).length > 0 ? seasonState : undefined,
+      episodes: undefined, // Clears the legacy flat map (Stage 2 finding)
     }),
-    [episodeState],
+    [seasonState],
   );
 
   const extraCreateFields = useMemo<Partial<MediaPlaintext>>(
     () => ({
-      episodes:
-        Object.keys(episodeState).length > 0 ? episodeState : ({} as Record<string, EpisodeTracking>),
+      seasons:
+        Object.keys(seasonState).length > 0
+          ? seasonState
+          : ({} as Record<string, SeasonTracking>),
     }),
-    [episodeState],
+    [seasonState],
   );
 
   // ── Status change interceptor (conflict detection) ──
@@ -160,20 +279,11 @@ export default function TvSeriesPageWrapper({
     (newStatus: MediaPlaintext["status"], apply: () => void) => {
       if (!newStatus) return;
 
-      // If the user is forcing the parent to "Watched" / "Unwatched",
-      // find any explicitly tracked episodes that contradict it.
-      let conflictCount = 0;
-      if (newStatus === "watched") {
-        conflictCount = Object.values(episodeState).filter(
-          (ep) => ep.status && ep.status !== "watched",
-        ).length;
-      } else if (newStatus === "unwatched") {
-        conflictCount = Object.values(episodeState).filter(
-          (ep) => ep.status && ep.status !== "unwatched",
-        ).length;
-      }
-      // Note: Transitioning the parent to "watching" inherently allows mixed
-      // episode states, so no conflict check is necessary.
+      // If the user is forcing the parent to a status that contradicts
+      // individual nested tracking, count the conflicting records
+      // ("watched"/"unwatched": any non-matching record; "watching": only
+      // "watched" records — mixed states are legal under that umbrella).
+      const conflictCount = countShowOverrideConflicts(seasonState, newStatus);
 
       if (conflictCount > 0) {
         pendingApplyRef.current = apply;
@@ -188,23 +298,17 @@ export default function TvSeriesPageWrapper({
       // No conflicts — apply immediately
       apply();
     },
-    [episodeState],
+    [seasonState],
   );
 
   function handleConfirmOverride() {
     const targetStatus = overrideConfig.targetStatus;
     if (!targetStatus) return;
 
-    // Atomically: clear conflicting episode records, then apply parent status
-    setEpisodeState((prev) => {
-      const next = { ...prev };
-      for (const key of Object.keys(next)) {
-        if (next[key].status && next[key].status !== targetStatus) {
-          delete next[key];
-        }
-      }
-      return next;
-    });
+    // Atomically: clear conflicting nested records, then apply parent status.
+    setSeasonState((prev) =>
+      computeShowOverrideSeasons(prev, targetStatus as MediaPlaintext["status"]),
+    );
 
     pendingApplyRef.current?.();
     pendingApplyRef.current = null;
@@ -214,6 +318,108 @@ export default function TvSeriesPageWrapper({
   function handleCancelOverride() {
     pendingApplyRef.current = null;
     setOverrideConfig({ show: false, targetStatus: null, conflictCount: 0 });
+  }
+
+  // ── Season-level status override (sidebar controls) ──
+  const [seasonConflictDialog, setSeasonConflictDialog] = useState<{
+    show: boolean;
+    seasonNumber: number;
+    targetStatus: EpisodeTracking["status"];
+    conflictCount: number;
+  } | null>(null);
+
+  // Untrack season confirmation dialog
+  const [showUntrackSeason, setShowUntrackSeason] = useState(false);
+
+  const applySeasonStatusDirect = useCallback(
+    (seasonNumber: number, targetStatus: EpisodeTracking["status"]) => {
+      const seasonKey = formatSeasonKey(seasonNumber);
+      const next = applySeasonOverride(seasonState, seasonKey, targetStatus);
+      setSeasonState(next);
+      pushShowStatusFromSeasons(next);
+    },
+    [seasonState, pushShowStatusFromSeasons],
+  );
+
+  // Explicit season override control: the header chips call this with a
+  // concrete target status, and pass undefined to toggle the override off
+  // when the user re-clicks the currently active chip.
+  const handleSeasonStatusClick = useCallback(
+    (
+      seasonNumber: number,
+      targetStatus: EpisodeTracking["status"] | undefined,
+    ) => {
+      const seasonKey = formatSeasonKey(seasonNumber);
+      const currentStatus = seasonState[seasonKey]?.status;
+
+      // No-op when re-selecting the current override
+      if (currentStatus === targetStatus) return;
+
+      if (!targetStatus) {
+        // Clear the override entirely
+        if (seasonState[seasonKey]) {
+          const next = clearSeasonOverride(seasonState, seasonKey);
+          setSeasonState(next);
+          pushShowStatusFromSeasons(next);
+        }
+        return;
+      }
+
+      // Season-scoped conflict detection:
+      //   watched   → any episode record that isn't "watched"
+      //   unwatched → any episode record that isn't "unwatched"
+      //   watching  → any "watched" episode record
+      const conflictCount = countSeasonOverrideConflicts(
+        seasonState[seasonKey],
+        targetStatus,
+      );
+
+      if (conflictCount > 0) {
+        setSeasonConflictDialog({
+          show: true,
+          seasonNumber,
+          targetStatus,
+          conflictCount,
+        });
+        return;
+      }
+
+      applySeasonStatusDirect(seasonNumber, targetStatus);
+    },
+    [seasonState, applySeasonStatusDirect, pushShowStatusFromSeasons],
+  );
+
+  function handleConfirmSeasonOverride() {
+    if (!seasonConflictDialog) return;
+    const { seasonNumber, targetStatus } = seasonConflictDialog;
+    const seasonKey = formatSeasonKey(seasonNumber);
+
+    // Atomically: clear conflicting episode records in the season, then
+    // apply the season override. Same clearing rule as handleConfirmOverride.
+    if (seasonState[seasonKey]) {
+      const next = computeSeasonOverrideSeasons(
+        seasonState,
+        seasonKey,
+        targetStatus,
+      );
+      setSeasonState(next);
+      pushShowStatusFromSeasons(next);
+    }
+
+    setSeasonConflictDialog(null);
+  }
+
+  function handleCancelSeasonOverride() {
+    setSeasonConflictDialog(null);
+  }
+
+  // ── Untrack season (delete all records for the selected season) ──
+  function handleDeleteSeason() {
+    const seasonKey = formatSeasonKey(selectedSeason);
+    const next = removeSeason(seasonState, seasonKey);
+    setSeasonState(next);
+    pushShowStatusFromSeasons(next);
+    setShowUntrackSeason(false);
   }
 
   // ── Episode card navigation ──
@@ -229,7 +435,27 @@ export default function TvSeriesPageWrapper({
   // ── EpisodeMatrix (rendered inside GenericMediaPage's episodes tab) ──
 
   const renderEpisodeSlot = useCallback(
-    (parentStatus: MediaPlaintext["status"] | undefined) => (
+    (parentStatus: MediaPlaintext["status"] | undefined) => {
+    const selectedSeasonKey = formatSeasonKey(selectedSeason);
+
+    // Effective status of the selected season — same fallback chain as the
+    // sidebar badges (explicit override → parent umbrella → episode density).
+    const headerSeasonOverride = seasonState[selectedSeasonKey]?.status;
+    let headerDisplayStatus = headerSeasonOverride;
+    if (!headerDisplayStatus) {
+      if (parentStatus === "watched") headerDisplayStatus = "watched";
+      else if (parentStatus === "watching" && selectedSeason === 1)
+        headerDisplayStatus = "watching";
+      else {
+        const computed = computeSeasonStatus(
+          seasonState[selectedSeasonKey]?.episodes,
+          tmdbSeasonRef.current.episodeCounts[selectedSeasonKey] ?? 0,
+        );
+        headerDisplayStatus = computed ?? "unwatched";
+      }
+    }
+
+    return (
     <div className="flex flex-col md:flex-row gap-6">
       {/* Sidebar: Seasons */}
       <aside className="w-full md:w-48 shrink-0 md:border-r border-zinc-200 dark:border-zinc-800 md:pr-4">
@@ -237,30 +463,141 @@ export default function TvSeriesPageWrapper({
           Seasons
         </h3>
         <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible pb-2 md:pb-0">
-          {Array.from({ length: seasonCount }, (_, i) => i + 1).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setSelectedSeason(s)}
-              className={`whitespace-nowrap text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                selectedSeason === s
-                  ? "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300"
-                  : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-              }`}
-            >
-              Season {s}
-            </button>
-          ))}
+          {Array.from({ length: seasonCount }, (_, i) => i + 1).map((s) => {
+            const sKey = formatSeasonKey(s);
+            const sStatus = seasonState[sKey]?.status;
+            const isNew = newSeasons.includes(s);
+            // Virtual fallback respects the parent umbrella and episode
+            // density: a "watched" show projects "watched" onto untracked
+            // seasons, and a "watching" show projects "watching" onto Season 1
+            // (parity with getEffectiveEpisodeStatus' first-episode
+            // guardrail); otherwise the centralized computeSeasonStatus
+            // helper derives the status from tracked episodes
+            // (null → "unwatched").
+            let displayStatus = sStatus;
+            if (!displayStatus) {
+              if (parentStatus === "watched") displayStatus = "watched";
+              else if (parentStatus === "watching" && s === 1)
+                displayStatus = "watching";
+              else {
+                const computed = computeSeasonStatus(
+                  seasonState[sKey]?.episodes,
+                  tmdbSeasonRef.current.episodeCounts[sKey] ?? 0,
+                );
+                displayStatus = computed ?? "unwatched";
+              }
+            }
+            return (
+              <div
+                key={s}
+                className={`flex items-center rounded-lg transition-colors ${
+                  selectedSeason === s
+                    ? "bg-violet-100 dark:bg-violet-900/40"
+                    : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSelectedSeason(s)}
+                  className={`flex-1 whitespace-nowrap text-left px-3 py-2 text-sm font-medium ${
+                    selectedSeason === s
+                      ? "text-violet-700 dark:text-violet-300"
+                      : "text-zinc-600 dark:text-zinc-400"
+                  }`}
+                >
+                  Season {s}
+                  {isNew && (
+                    <span className="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-green-700 dark:bg-green-900/40 dark:text-green-400">
+                      New
+                    </span>
+                  )}
+                </button>
+                <div className="pr-3">
+                  <StatusBadge
+                    status={displayStatus}
+                    isVirtual={!sStatus}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </aside>
 
       {/* Main Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Season {selectedSeason}
-          </h3>
-          <ViewToggle value={viewMode} onChange={setViewMode} variant="media" />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+              Season {selectedSeason}
+            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() =>
+                  handleSeasonStatusClick(
+                    selectedSeason,
+                    headerSeasonOverride === "unwatched"
+                      ? undefined
+                      : "unwatched",
+                  )
+                }
+                className={chipClasses(
+                  headerDisplayStatus === "unwatched",
+                  "unwatched",
+                )}
+              >
+                Not Watched
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleSeasonStatusClick(
+                    selectedSeason,
+                    headerSeasonOverride === "watching"
+                      ? undefined
+                      : "watching",
+                  )
+                }
+                className={chipClasses(
+                  headerDisplayStatus === "watching",
+                  "watching",
+                )}
+              >
+                Watching
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleSeasonStatusClick(
+                    selectedSeason,
+                    headerSeasonOverride === "watched"
+                      ? undefined
+                      : "watched",
+                  )
+                }
+                className={chipClasses(
+                  headerDisplayStatus === "watched",
+                  "watched",
+                )}
+              >
+                Watched
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            {seasonState[selectedSeasonKey] && (
+              <button
+                type="button"
+                onClick={() => setShowUntrackSeason(true)}
+                className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm border-none transition-colors text-sm"
+              >
+                <X size={16} />
+                Untrack this Season
+              </button>
+            )}
+            <ViewToggle value={viewMode} onChange={setViewMode} variant="media" />
+          </div>
         </div>
 
         {seasonLoading && (
@@ -289,11 +626,14 @@ export default function TvSeriesPageWrapper({
             }
           >
             {seasonData?.episodes?.map((ep) => {
-              const key = formatEpisodeKey(selectedSeason, ep.episode_number);
-              const rawLocal = episodeState[key];
+              const episodeKeyShort = formatEpisodeKeyShort(ep.episode_number);
+              const rawLocal =
+                seasonState[selectedSeasonKey]?.episodes?.[episodeKeyShort];
               const { status, isVirtual } = getEffectiveEpisodeStatus(
                 parentStatus,
+                seasonState[selectedSeasonKey]?.status,
                 rawLocal?.status,
+                selectedSeason === 1 && ep.episode_number === 1,
               );
               const local = {
                 ...rawLocal,
@@ -305,7 +645,7 @@ export default function TvSeriesPageWrapper({
 
               return (
                 <div
-                  key={key}
+                  key={episodeKeyShort}
                   onClick={() =>
                     navigateToEpisode(selectedSeason, ep.episode_number)
                   }
@@ -480,8 +820,9 @@ export default function TvSeriesPageWrapper({
         )}
       </div>
     </div>
-    ),
-    [seasonCount, selectedSeason, viewMode, setViewMode, seasonLoading, seasonError, seasonData, episodeState, navigateToEpisode, clearSeasonError],
+    );
+    },
+    [seasonCount, selectedSeason, viewMode, setViewMode, seasonLoading, seasonError, seasonData, seasonState, navigateToEpisode, clearSeasonError, newSeasons, handleSeasonStatusClick],
   );
 
   return (
@@ -504,6 +845,8 @@ export default function TvSeriesPageWrapper({
         onStatusChange={handleStatusChange}
         onHydrate={handleHydrate}
         onTmdbReady={handleTmdbReady}
+        onRegisterStatusSync={handleRegisterStatusSync}
+        onSaveSuccess={() => setOriginalSeasonState({ ...seasonState })}
       />
 
       {/* Parent status override conflict dialog */}
@@ -517,6 +860,26 @@ export default function TvSeriesPageWrapper({
           onCancel={handleCancelOverride}
         />
       )}
+
+      {/* Season status override conflict dialog */}
+      {seasonConflictDialog?.show && (
+        <ConfirmDialog
+          title="Override Season Progress?"
+          description={`This will clear tracked progress on ${seasonConflictDialog.conflictCount} episode${seasonConflictDialog.conflictCount !== 1 ? "s" : ""} in Season ${seasonConflictDialog.seasonNumber} you've tracked individually. Continue?`}
+          confirmLabel="Override"
+          cancelLabel="Cancel"
+          onConfirm={handleConfirmSeasonOverride}
+          onCancel={handleCancelSeasonOverride}
+        />
+      )}
+
+      {/* Untrack season confirmation */}
+      <UntrackConfirmation
+        open={showUntrackSeason}
+        mediaType="season"
+        onConfirm={handleDeleteSeason}
+        onCancel={() => setShowUntrackSeason(false)}
+      />
     </>
   );
 }

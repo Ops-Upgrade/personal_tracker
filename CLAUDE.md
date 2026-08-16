@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Dev server:** `npm run dev` (uses `--webpack` for Next.js 16 Webpack fallback)
 - **Build:** `npm run build` (also `--webpack` — Next 16 Turbopack dev mode does not emit Tailwind variant rules, so the Webpack fallback is mandatory for both)
 - **Lint:** `npm run lint` (ESLint 9 with `eslint-config-next`)
-- **No test suite** yet — verify changes manually by driving the UI (`npm run dev`).
+- **Tests:** `npm test` (vitest, config `vitest.config.mts`) — Tier 1 pure-function unit tests (hermetic, `vi.mock`ed Supabase/crypto). `npm run test:integration` (config `vitest.integration.config.mts`) — media Tier 2/3 suites against the REAL Supabase project as the dummy test user (credentials in gitignored `.env.test.local`; fails fast if absent; excluded from `npm test`; per-test teardown wipes only the dummy user's rows). See `docs/plans/PLAN-mediamanager.md` Stage 11. No component tests yet — still verify UI changes manually by driving the UI (`npm run dev`).
 
 ## Essential docs (read first)
 
