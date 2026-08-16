@@ -16,6 +16,7 @@ export interface TmdbDetails {
   release_date?: string;
   number_of_episodes?: number;
   number_of_seasons?: number;
+  seasons?: { season_number: number; episode_count: number }[];
   overview: string;
   genres: { id: number; name: string }[];
   runtime?: number;
@@ -45,7 +46,12 @@ export interface TmdbEpisode {
   vote_average?: number;
 }
 
-// ── Episode tracking (nested inside the media blob) ──
+// ── Episode / season tracking (nested inside the media blob) ──
+
+export interface SeasonTracking {
+  status?: "watching" | "unwatched" | "watched";
+  episodes?: Record<string, EpisodeTracking>;
+}
 
 export interface EpisodeTracking {
   status: "watching" | "unwatched" | "watched";
@@ -70,6 +76,10 @@ export interface MediaPlaintext {
   review_notes?: string;
   watched_on?: string;
   runtime?: number; // Total runtime in minutes (for progress bar calculation)
+  tracked_season_count?: number;
+  total_seasons?: number;
+  seasons?: Record<string, SeasonTracking>;
+  /** @deprecated — read-time migration converts flat episodes to seasons */
   episodes?: Record<string, EpisodeTracking>; // "S01E01" → episode data
 }
 
