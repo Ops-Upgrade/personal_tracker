@@ -48,7 +48,7 @@ export default function CollectionDetailPage({
     "mediaCollectionDetailPreferences",
     {}
   );
-  const viewMode = viewPreferences[collectionId] || "detail";
+  const viewMode = viewPreferences[collectionId] || "tile";
   const setViewMode = (mode: "detail" | "tile") => {
     setViewPreferences((prev) => ({ ...prev, [collectionId]: mode }));
   };

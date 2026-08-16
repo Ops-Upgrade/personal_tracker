@@ -39,8 +39,8 @@ interface ViewToggleProps<T extends string> {
 // ---------- built-in media options ----------
 
 const MEDIA_OPTIONS = [
-  { value: "detail", label: <List size={16} /> },
   { value: "tile", label: <LayoutGrid size={16} /> },
+  { value: "detail", label: <List size={16} /> },
 ] as const;
 
 // ---------- component ----------
