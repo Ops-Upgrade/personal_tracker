@@ -106,6 +106,7 @@ export default function MediaHeroSection({
                       width={32}
                       height={32}
                       className="rounded-md"
+                      unoptimized
                     />
                     <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                       {provider.provider_name}

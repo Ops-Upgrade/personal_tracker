@@ -167,11 +167,10 @@ export default function CollectionView({
             <button
               type="button"
               onClick={() => setViewMode("single")}
-              className={`p-1.5 rounded-md transition-colors ${
-                viewMode === "single"
+              className={`p-1.5 rounded-md transition-colors ${viewMode === "single"
                   ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
                   : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-              }`}
+                }`}
               aria-label="Single column view"
             >
               <List size={16} />
@@ -179,11 +178,10 @@ export default function CollectionView({
             <button
               type="button"
               onClick={() => setViewMode("grid")}
-              className={`p-1.5 rounded-md transition-colors ${
-                viewMode === "grid"
+              className={`p-1.5 rounded-md transition-colors ${viewMode === "grid"
                   ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
                   : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400"
-              }`}
+                }`}
               aria-label="Grid view"
             >
               <LayoutGrid size={16} />
@@ -216,11 +214,10 @@ export default function CollectionView({
                 <button
                   type="button"
                   onClick={() => setSortOrder("asc")}
-                  className={`p-1 rounded-full transition-colors ${
-                    sortOrder === "asc"
+                  className={`p-1 rounded-full transition-colors ${sortOrder === "asc"
                       ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
                       : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                  }`}
+                    }`}
                   aria-label="Sort ascending"
                 >
                   <ArrowUp size={14} />
@@ -228,11 +225,10 @@ export default function CollectionView({
                 <button
                   type="button"
                   onClick={() => setSortOrder("desc")}
-                  className={`p-1 rounded-full transition-colors ${
-                    sortOrder === "desc"
+                  className={`p-1 rounded-full transition-colors ${sortOrder === "desc"
                       ? "bg-white dark:bg-zinc-700 shadow-sm text-violet-600 dark:text-violet-400"
                       : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
-                  }`}
+                    }`}
                   aria-label="Sort descending"
                 >
                   <ArrowDown size={14} />
@@ -381,6 +377,7 @@ export default function CollectionView({
                               fill
                               sizes={`${posterSize.width}px`}
                               className="object-cover"
+                              unoptimized
                             />
                           ) : (
                             <div className="flex h-full items-center justify-center bg-zinc-200 dark:bg-zinc-700 text-[8px] text-zinc-400">

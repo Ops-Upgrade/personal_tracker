@@ -97,6 +97,7 @@ const BaseMediaCard = forwardRef<HTMLDivElement, BaseMediaCardProps>(
               sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
               className="object-cover"
               priority={priority}
+              unoptimized
             />
           ) : (
             <div className="flex h-full items-center justify-center text-zinc-400 dark:text-zinc-600">

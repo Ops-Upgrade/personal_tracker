@@ -107,6 +107,7 @@ export function SortableDetailItem({
             fill
             sizes="40px"
             className="object-cover"
+            unoptimized
           />
         ) : (
           <div className="flex h-full items-center justify-center text-[8px] text-zinc-400">
