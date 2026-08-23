@@ -29,16 +29,19 @@ export interface SortConfig<Column extends string, Item> {
  * @param items       the array to sort (unchanged when sortState is null or disabled)
  * @param sortConfigs column → extractor mappings (one per sortable column)
  * @param disableSorting  when true, sorting is skipped and items are returned as-is
+ * @param initialSortState  default sort state applied when the user has no stored
+ *                          preference (a stored value in localStorage wins)
  */
 export function useTableSort<Column extends string, Item>(
   storageKey: string,
   items: Item[],
   sortConfigs: SortConfig<Column, Item>[],
   disableSorting = false,
+  initialSortState: SortState<Column> | null = null,
 ) {
   const [sortState, setSortState] = useLocalStorage<SortState<Column> | null>(
     storageKey,
-    null,
+    initialSortState,
   );
 
   /** Called by SortableHeader — receives the FULL next state (column + direction). */

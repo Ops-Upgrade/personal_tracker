@@ -1,7 +1,6 @@
 import type { Education } from "@/types/education";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
 import type { FieldDef } from "@/components/common/GenericDomainModal";
-import PriorityBadge from "@/components/common/PriorityBadge";
 import { PRIORITIES } from "@/types/common";
 import { colPriority, colDate, colRichtext, colFiles } from "@/components/common/columns";
 
@@ -14,11 +13,12 @@ export const EDUCATION_FIELDS: FieldDef[] = [
     key: "priority",
     type: "select",
     label: "Priority",
+    defaultValue: "medium",
     options: PRIORITIES.map((p) => ({ value: p, label: p[0].toUpperCase() + p.slice(1) })),
   },
   { key: "due_date", type: "date", label: "Due Date" },
   { key: "description", type: "richtext", label: "Description", minHeight: "8rem" },
-  { key: "is_completed", type: "checkbox", label: "Mark as complete (acquired)" },
+  { key: "is_completed", type: "checkbox", label: "Mark as complete (acquired)", defaultValue: false },
 ];
 
 export const EDUCATION_LAYOUT: string[][] = [
@@ -33,26 +33,11 @@ export const EDUCATION_LAYOUT: string[][] = [
 
 export type SortColumn = "name" | "provider" | "priority" | "due_date";
 
-// ── Sort configs ──
-
-export const SORT_CONFIGS = [
-  { column: "name" as const, extractor: (e: Education) => e.name.toLowerCase() },
-  { column: "provider" as const, extractor: (e: Education) => e.provider.toLowerCase() },
-  { column: "priority" as const, extractor: (e: Education) => e.priority },
-  { column: "due_date" as const, extractor: (e: Education) => (e.due_date ? new Date(e.due_date + "T00:00:00").getTime() : 0) },
-];
-
 // ── Shared column atoms ──
 
 export const EDU_PRIORITY: ColumnDef<Education, SortColumn> = colPriority<Education, SortColumn>(
   {
-    // Legacy rows may lack a priority — fall back to a dash.
-    render: (e) =>
-      e.priority ? (
-        <PriorityBadge priority={e.priority} />
-      ) : (
-        <span className="text-zinc-400">—</span>
-      ),
+    // The badge token renders an em dash for legacy rows lacking a priority.
     sortColumn: "priority",
   },
 );
@@ -75,7 +60,8 @@ export const EDU_FILES: ColumnDef<Education, SortColumn> = colFiles<Education, S
 
 // Sizing model: "fixed" columns get max-content tracks (badges, dates, files
 // always fit their content); "flex" columns share the remaining space and
-// truncate gracefully via CSS — no breakpoint math anywhere.
+// truncate gracefully via CSS — no breakpoint math anywhere. Cells are
+// declarative tokens; the GenericDataGrid engine renders them internally.
 export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
   {
     key: "name",
@@ -83,11 +69,7 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
     sizing: "flex",
     weight: 2,
     sortColumn: "name",
-    render: (e) => (
-      <span className="font-medium text-zinc-800 dark:text-zinc-100">
-        {e.name || "—"}
-      </span>
-    ),
+    token: { type: "text", accessor: (e) => e.name, color: "strong" },
   },
   {
     key: "provider",
@@ -95,11 +77,7 @@ export const EDUCATION_COLUMNS: ColumnDef<Education, SortColumn>[] = [
     sizing: "flex",
     weight: 1,
     sortColumn: "provider",
-    render: (e) => (
-      <span className="text-zinc-600 dark:text-zinc-300">
-        {e.provider || "—"}
-      </span>
-    ),
+    token: { type: "text", accessor: (e) => e.provider, color: "muted" },
   },
   EDU_PRIORITY,
   EDU_DUE_DATE,

@@ -2,18 +2,8 @@
 
 import { useCallback, useState, type ChangeEvent } from "react";
 import { Check, Copy, Eye, EyeOff } from "lucide-react";
-
-// ── Shared Tailwind classes ──
-
-const LABEL_CLASSES = "mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300";
-
-const INPUT_CLASSES =
-  "w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 disabled:opacity-50";
-
-const DATE_CLASSES = `${INPUT_CLASSES} [color-scheme:dark]`;
-
-const INPUT_ACTION_CLASSES =
-  "cursor-pointer flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-200 hover:text-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-zinc-300 transition-colors disabled:opacity-50";
+import DatePicker from "@/components/common/DatePicker";
+import { LABEL_CLASSES, INPUT_CLASSES, INPUT_ACTION_CLASSES } from "./formFieldClasses";
 
 // ── Input ──
 
@@ -58,6 +48,20 @@ export function InputField({
     }
   }, [value]);
 
+  // Date fields delegate to the editable DatePicker (text input + calendar
+  // popover + clear button) instead of the native date input.
+  if (type === "date") {
+    return (
+      <DatePicker
+        label={label}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        placeholder={placeholder}
+      />
+    );
+  }
+
   return (
     <label className="block">
       <span className={LABEL_CLASSES}>{label}</span>
@@ -70,7 +74,7 @@ export function InputField({
           placeholder={placeholder}
           min={min}
           step={step}
-          className={`${type === "date" ? DATE_CLASSES : INPUT_CLASSES} ${showActions ? (isPassword && isCopyable ? "pr-16" : "pr-10") : ""}`}
+          className={`${INPUT_CLASSES} ${showActions ? (isPassword && isCopyable ? "pr-16" : "pr-10") : ""}`}
         />
         {showActions && (
           <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">

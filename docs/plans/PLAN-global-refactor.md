@@ -917,3 +917,611 @@ Both `GenericActiveBox` and `GenericViewPage` manually iterated over priority gr
 - **Update Views:** Update all Domain Views (e.g., `TaskView.tsx`, `MedicalView.tsx`) to directly render `<GenericDomainModal fields={schema} initialData={record} onSave={...} />`.
 - **State Cleanups:** `src/hooks/useModalBaseState.ts`, `src/lib/useModalDocumentState.ts` (Their logic merges completely into the generic shell, delete them).
 - **Delete:** `src/components/common/GlobalActionModal.tsx` (fully replaced by `GenericDomainModal.tsx`).
+
+---
+
+## Stage 7: The "Inside-Out" Architecture Fix (Strict Opt-In)
+
+> **Current focus.**
+
+### The Core Problem
+The current "Generic" architecture in Stage 4 and Stage 6 was implemented inside-out. The generic components were built as dumb outer wrappers (`<BoxContainer>`, flex grids) while the domains were forced to retain all the complex structural logic.
+
+- `GenericViewPage` expects the domain to pre-calculate `availableYears`, `availableMonths`, apply filters, and manage `useTableSort` and `useSelection` locally.
+- `GenericStorePage` expects the domain to pass 10 different complex CRUD handler functions and manually declare modal closures.
+- `GenericDomainPage` uses `renderBody={() => ...}` to offload the entire dashboard layout (and month grids) back to the domain.
+- **The Result:** The 4 domains copy-paste ~2,000 lines of identical logic across their `/all`, `/completed`, `/store`, and dashboard pages. 
+
+Domain-Specific Violations (These MUST be deleted):
+1. **TaskManager & Education:** Hardcode their own redundant `MonthTile` logic in their View pages (bypassing `GenericMonthRow` limits).
+2. **Expense & Medical:** Pass `!!e.date` and `!!m.date` hardcoded guardrails into their CRUD hooks, which should be handled generically by the schema validation inside `GenericDomainModal`.
+3. **All Domains:** Forcefully dictate their own modal visibility state (`useState`), `useRouter` query-param wiring, and manual `createSaveAdapter` wiring inside their wrappers, rather than letting the generic modal handle it.
+
+### Ideal State Definition Matrix
+
+To achieve the ideal "opt-in" architecture, the Generic Components must absorb all structural logic. Domains must only define the following parameters:
+
+#### 1. GenericViewPage (Lists & Aggregations)
+**What it must own internally (No Domain Code Allowed):**
+- **Year dropdown** — always visible, always-present core feature. Derived from `data` + `getDateKey`. All displayed data (flat list, month groups, priority groups) is strictly filtered to the selected year. This dropdown must never disappear regardless of which `supportedViews` are active.
+- Derivation of `availableMonths` and `priorityGroups` (scoped to `selectedYear`).
+- Filtering logic (`itemsForYear`, `itemsForMonth`).
+- `useTableSort` state and handlers.
+- **Selection checkboxes** — always present as an inherent feature. Behavior matches `GenericStorePage` exactly: hidden by default on desktop (`md:opacity-0 md:group-hover:opacity-100`), permanently visible on mobile (`opacity-100`). When rows are selected, a bulk action bar appears showing only a Delete button. Checkboxes are never gated by a prop — they exist on every `GenericViewPage`. The bulk delete action itself is opt-in via `onBulkDelete`.
+- URL query param synchronization for year/month.
+
+**What domains opt-in / configure:**
+- `data: T[]` (Raw un-filtered data)
+- `columns: ColumnDef<T>[]` (Strict declarative styling schema—no `render` functions. Generic page also natively strips 'priority' column when in priority view)
+- `cacheKeyPrefix: string` (e.g., "taskmanager_completed" for route-specific secure caching)
+- `defaultSort: { column: string, direction: "asc" | "desc" }`
+- `supportedViews: ("all" | "months" | "priority")[]`
+- `getDateKey: (item: T) => string | null` (For internal month/year grouping and year dropdown derivation)
+- `getPriorityKey?: (item: T) => string` (For internal priority grouping)
+- `onRowClick?: (item: T) => void` (To trigger domain-specific edit modals)
+- `rowClassName?: string | ((item: T) => string)` (e.g., for priority-colored row borders)
+- `itemNamePlural?: string` (Generic page builds complex empty state messages natively, e.g., "expenses")
+- `metrics?: { label: string, value: string | number, format?: string }[]` (Generic page renders the stats UI)
+- `onBulkDelete?: (ids: string[], clearFn: () => void) => void` (When provided, the bulk Delete button is shown in the action bar when rows are selected. When absent, the action bar never appears even though checkboxes are present.)
+
+> [!IMPORTANT]
+> **Stage 7 Special Considerations (QoL Safeguards)**
+> - **Selection Checkboxes & Bulk Delete**: Checkboxes are an inherent, always-present feature of every `GenericViewPage` — identical behavior to `GenericStorePage`: hidden on desktop until row hover (`md:opacity-0 md:group-hover:opacity-100`), permanently visible on mobile (`opacity-100`). The only bulk action is Delete, driven by the `onBulkDelete` prop. If `onBulkDelete` is not provided, the bulk action bar never appears (checkboxes are present but selecting rows does nothing visually). Injections of raw JSX for action bars are strictly banned.
+> - **Year Dropdown is Non-Optional**: The year dropdown is a core, always-present UI element. It must be rendered in every `GenericViewPage` regardless of which `supportedViews` are active. All data — flat lists, month groups, and priority groups — must be filtered to the selected year before display. No view or configuration may bypass this filter.
+> - **Breaking API Change from Current Implementation**: The current `GenericViewPage` accepts pre-filtered `items`, `yearFilter`, and `monthFilter` as external props — the domain owns the year state. This is the exact violation being fixed. The new `GenericViewPage` must:
+>   1. Accept `data: T[]` (raw, unfiltered) instead of `items`.
+>   2. Own `selectedYear` state internally — derived from `data` via `getDateKey`, defaulting to current year.
+>   3. Remove `yearFilter`, `monthFilter`, `monthGroups`, `priorityGroups` from its props entirely. These are derived internally.
+>   4. Every adopting route stops pre-filtering data and stops computing `availableYears`, `tasksForYear`, `priorityGroups` etc. — those ~50 lines per route are deleted, which is the source of the line-count reduction to ~40 lines.
+>   5. `getDateKey` is required (non-optional) for all routes that have date-based data. For `/taskmanager/notes`, `getDateKey={(n) => n.created_at}` enables year filtering even though there is no months view — notes from past years are correctly hidden.
+> - **Declarative Column Styling (No JSX Injections)**: The `ColumnDef` schema must be expanded to accept semantic design tokens (`weight`, `color`, `trueLabel`, `falseColor`) instead of inline `render` functions. The generic engine will parse these tokens to construct the DOM and Tailwind classes internally, ensuring domains cannot dictate UI layout or inject arbitrary JSX into table cells.
+> - **View & Sort Caching (Route-Specific)**: Different pages under the same domain have different view toggles. The generic component MUST use the provided `cacheKeyPrefix` to generate secure cache keys per-route so that preferences on one page don't corrupt another. It must also enforce the provided `defaultSort` when no sort is cached.
+> - **3-State Sort Cycle**: The generic wrapper must internalize the custom `asc -> desc -> none` loop and apply it transparently to the grid.
+> - **Safe Metrics Layout**: The generic component must ensure that the `metrics` configuration securely lays out standard stat blocks above the grids without interfering with internal view toggles or search bars.
+> - **Strict Record Grids**: Domains like `/taskmanager/notes` must NOT render mixed grids (combining db records with standalone files). Standalone files belong exclusively in the Store. The notes view must only display proper note records.
+> 
+> **Pre-Existing Working Tree State (Continuation Notes — Read Before Implementing)**
+> - **`GenericViewPage` Already Has Old-Style External Selection Props**: The working tree already contains `selectionKeys`, `onToggleSelection`, `onSelectAll`, `onClearSelection`, `bulkActionBar` as external props on `GenericViewPage`. These are the old domain-managed selection pattern **being replaced** by this plan. Do not extend them — remove them and replace with the internal checkbox model + `onBulkDelete`.
+> - **`useSelection` and `useTableSort` Already Modified**: Both hooks have uncommitted additions. Their call sites in domain route files (`/taskmanager/all`, `/taskmanager/completed`, etc.) will be **deleted** as part of this plan — these hooks move inside `GenericViewPage`. Do not add new external call sites.
+> - **`MonthFilterValue = "unscheduled"` Already Added**: The type `MonthFilterValue = number | "all" | "unscheduled"` already exists in the working tree. Preserve it and wire the `"unscheduled"` value into the internal `MONTHS.map` Unscheduled bucket logic.
+> - **`viewHelpers.ts` Contains Grouping Helpers Already in Use**: `viewHelpers.ts` has ~49 lines of uncommitted additions containing `byPriority`, `completedByMonths`, or similar grouping utilities currently called from route files. After this refactor, these move **inside** `GenericViewPage` — delete the route-level call sites, do not re-import them in routes.
+> 
+> **Mobile Considerations (Must Preserve)**
+> - **Subgrid Architecture (No Stacked Cards)**: Enforces a rigid CSS subgrid with a horizontal scroll wrapper (`overflow-x-auto`). Flex columns (`minmax(6rem, weightFr)`) never squish below 6rem. Fixed columns (`minmax(max-content, 0fr)`) lock tightly to content on mobile. Declarative Styling tokens must compile into this exact math.
+> - **Mobile Bulk Action Wrapping**: The bulk action bar forces itself onto a new row by taking full width and shifting flex order (`order-2 w-full`) on mobile, while aligning horizontally on desktop (`sm:w-auto sm:order-3`). The `bulkActions` array configuration must be rendered natively to obey these breakpoints.
+> - **Double-Header Flex Wrapping**: The top header uses `flex flex-wrap justify-between`. On narrow screens, the Year/Month filters wrap neatly beneath the left-aligned ViewToggle. Any injected metrics must mount securely without breaking this flow.
+> - **Touch Target Protections**: `GenericDataGrid` rows have a generous touch area (`py-1.5 px-2`). To prevent accidental row clicks on small screens, they use strict `e.stopPropagation()` and `e.target.closest("button...")` checks. Declarative toggles/buttons inside columns must maintain these bubbling stops.
+> - **Touch-Target Visibility (No Hover)**: Any inline row actions and selection checkboxes must be permanently visible on mobile (`opacity-100`). Since mobile devices do not have a hover state, they cannot rely on the desktop-style hover-to-reveal behavior (`md:opacity-0 md:group-hover:opacity-100`).
+
+**Exhaustive List of Adopting Routes:**
+Out of the 29 route pages in the app, these 7 routes are lists/aggregations and must opt into `GenericViewPage`, dropping all internal structural logic and reducing to ~40 lines each:
+
+1. **`/taskmanager/all` & `/taskmanager/completed`**
+   - `supportedViews={["all", "months", "priority"]}`
+   - `getDateKey={(t) => t.due_date}`
+   - `getPriorityKey={(t) => t.priority}`
+
+2. **`/taskmanager/notes`**
+   - `supportedViews={["all"]}` *(flat list only — no months view, no priority concept)*
+   - `getDateKey={(n) => n.created_at}` *(Required for year filtering — notes from past years must not appear. No months view, but year dropdown still controls which notes are shown.)*
+   - `getPriorityKey={undefined}`
+
+3. **`/education/all` & `/education/completed`**
+   - `supportedViews={["all", "months", "priority"]}`
+   - `getDateKey={(e) => e.due_date}`
+   - `getPriorityKey={(e) => e.priority}`
+
+4. **`/expense/all`**
+   - `supportedViews={["all", "months"]}` *(no priority concept)*
+   - `getDateKey={(e) => e.date}`
+   - `getPriorityKey={undefined}`
+
+5. **`/medical/all`**
+   - `supportedViews={["all", "months"]}` *(no priority concept)*
+   - `getDateKey={(m) => m.date}`
+   - `getPriorityKey={undefined}`
+
+> [!NOTE]
+> **Stage 7 Pass 1 status — IMPLEMENTED (2026-08-22).** `GenericViewPage` now accepts raw `data` + `cacheKeyPrefix` and internally owns: year dropdown (always visible, derived from `data`+`getDateKey`, URL-synced via `year`/`month` query params — back/forward navigation works), month filtering, the `useTableSort` 3-state cycle with per-route localStorage cache, selection checkboxes (hover-reveal on desktop, always visible on mobile) with the `onBulkDelete` Delete action bar, and the `metrics` stat blocks. `ColumnDef` now takes declarative `ColumnToken` cells (`text`/`date`/`richtext`/`badge`/`files`/`boolean` with `weight`, `color`, `capitalize`, `size`, `prefix`, `localeFormat`, `trueLabel`/`falseColor`); routes pass no `render` JSX. All 7 adopting routes are gutted to ~40-line configs; route-level `useSelection`/`useTableSort`/grouping call sites deleted.
+>
+> Deviations from this spec (deliberate):
+> - Completed routes (`/taskmanager/completed`, `/education/completed`) use `getDateKey={(t) => t.completed_at}` + the new `monthsMode="completed"` prop instead of the literal `due_date` above — pre-existing behavior grouped and year-filtered completed pages by completion date (the `due_date` line here was judged a copy-paste artifact of the active-route config).
+> - `Metric.value` may also be `(visibleItems: T[]) => string | number` so `/expense/all`'s "Total spent" totals the year+month-filtered items, not the whole dataset.
+> - Bulk delete is wired for real on all 7 routes (spec only mandated checkboxes; the old pages had skeleton-only action bars).
+> - `ColumnDef.token` is optional — the legacy `render` escape hatch remains for unmigrated widget cells (box name cells, NotesBox branching cell, the Reopen action button); GenericViewPage routes use tokens only.
+
+#### 2. GenericStorePage (File & Record Stores)
+
+**What it must own internally (No Domain Code Allowed):**
+- All `useEffect` data loading and `refreshAll` logic.
+- All CRUD handlers for linking/unlinking/deleting documents (it will internally map the `domain` prop to the correct API adapter).
+- The `GenericDomainModal` instantiation for editing linked parent records or standalone vault records.
+- Standalone file upload handling and inline parent-creation forms.
+- **Search bar** — always present, owned internally. `searchPlaceholder` is an optional cosmetic override.
+- **Tiles/List view toggle** — always present, persisted per-domain via internal `useLocalStorage`.
+
+**What domains opt-in / configure:**
+- `storeType: "doc" | "record"`
+- `domain: "taskmanager" | "expense" | "education" | "medical" | "vault" | "vault_banks" | "vault_bank_details" | "vault_passwords" | "vault_records"`
+- `modalFields: FieldDef[]` (To feed the internally-managed modal)
+- `allowAdd?: boolean` *(default: `false`) — opt-in to show the Add button and enable file/record creation from the store. Routes that do not pass `allowAdd={true}` get no Add button and no creation modal entry point. Expense and Medical stores intentionally omit this.*
+- `title`, `description`, `backHref`
+- `tileLayout?: "standard" | "body-only"` (Vault passwords require body-only)
+- `headerActions?: { label: string, variant: string, requireConfirm?: boolean, onAction: () => void }[]` (Declarative config for header-level actions like "Delete Bank" — rendered and confirmed natively by the generic page)
+
+> [!IMPORTANT]
+> **Stage 7 Special Considerations (QoL Safeguards - Outside-In Opt-In Model)**
+> - **Hash-Driven Modal Routing (Legacy)**: Legacy stores (like TaskManager) still use `#new-document` hash listeners instead of the modern query-driven routing (`?new=1`) used by Media. Stage 7 must carefully handle this outlier by either porting it to the standard query routing or preserving the hash listener.
+> - **Action Visibility via Handler Opt-In**: The generic store must strictly control bulk action UI (Rename, Link, Unlink, Delete) based entirely on which handler functions the domain passes down (e.g., if `onUnlinkFromParent` is not provided, the UI drops the unlink button; if it's a Record store, it naturally scales down to Delete-only). Domains must never inject custom UI components for this.
+> - **Inline Secrets & Copyables via Schema**: Secret values (eyes/copy buttons) are strictly opted-in via the `isSecret` or `isCopyable` flags in the `mapRecordToItem` and `FieldDef` schemas. Stage 7 must guarantee the generic grid and modal schemas natively support rendering these flags, completely preventing domains from injecting custom JSX for secrets.
+> - **Strict Modal Boundary (Banning Inline Forms)**: Domains currently inject an inline creation form (`renderNewRecordForm`) directly into the Store UI, forcing the Store to orchestrate form state. This must be strictly banned. The Store Page is purely a list viewer and must have zero knowledge of form rendering. If a user creates a new record from the Store, it simply triggers the `GenericDomainModal` in "Create mode", which intrinsically knows how to render the form via `modalFields`.
+> - **The Modal Instantiation Leak (`modalSlot`)**: Currently, all 9 routes inject the entire `<GenericDomainModal>` component as a raw JSX render prop (`modalSlot`). This is banned. Domains must only pass `modalFields`, and the `GenericStorePage` must mount the `GenericDomainModal` internally.
+> - **The File Operations Leak (Manual Iteration)**: Inside the injected modals, domains are currently receiving a raw `fileActions` object and manually writing `for` loops to execute file mutations. `GenericDomainModal` must internalize this completely via its internal `createSaveAdapter(domain)`, executing file ops automatically before/after saving the parent record.
+> - **Header Actions Injection (Banning JSX)**: The `vault/banks/[bankId]` page injects raw JSX for a "Delete Bank" button via `headerActions` and manually manages an external `<ConfirmDialog>`. `headerActions` must be changed to a declarative config array (e.g. `headerActions={[{ label: "Delete Bank", variant: "danger", requireConfirm: true }]}`). The generic page will render the button and handle confirmation natively.
+> - **Manual Data-Fetching & Mapping Glue**: All 9 routes are currently manually writing and injecting `fetchData`, `deriveParentRecords`, `onLinkedRecordClick`, and `handleDocumentSaved` callbacks. The generic store must inherently resolve these functions internally based purely on the `domain` prop.
+> 
+> **Pre-Existing Working Tree State (Continuation Notes — Read Before Implementing)**
+> - **`DataListView.tsx` Already Extracted**: The `src/components/common/DataListView.tsx` component already exists as an untracked file in the working tree and is already imported by both `GenericStorePage` and `GenericViewPage`. Do **not** recreate or overwrite it — read it first and continue building on top of it. The `DataListView` inline function previously embedded in `GenericStorePage` has already been removed (158 lines deleted from `GenericStorePage` in the working tree).
+> 
+> **Mobile Considerations (Must Preserve)**
+> - **The Add Button & Search Bar `order` Flip**: On mobile, the Add button jumps to `order-2` (sitting next to the View Toggle) and pushes the Search Bar to a new full-width row (`order-3 w-full mt-3`). On desktop, they reverse: Search Bar goes to `sm:order-2` (pushed right) and Add Button is `sm:order-3` (far right). This ensures the primary CTA isn't pushed off-screen on phones.
+> - **List Row Title/Body Stacking**: In list views (e.g., Vault Records), the row content uses `flex-col` on mobile to stack the title above its values. On desktop, it switches to `sm:flex-row` with a physical vertical divider (`w-px hidden sm:block`). The declarative schema must natively handle this flex switch.
+> - **Touch-Target Visibility (No Hover)**: All tile/row inline actions (Rename, Trash, Download, Copy, Reveal Password) are strictly hardcoded to `opacity-100` on mobile because phones lack a hover state. They only switch to hover-to-reveal on desktop (`md:opacity-0 md:group-hover:opacity-100`).
+> - **Swipeable Title Tracks (`body-only` mode)**: Long titles (like Vault URLs) in `body-only` tiles use a custom horizontal scroll container (`overflow-x-auto whitespace-nowrap [&::-webkit-scrollbar]:hidden`). This allows horizontal swiping on mobile without breaking the overall CSS grid width.
+
+**Exhaustive List of Adopting Routes:**
+Out of the 29 route pages in the app, these 9 routes are File or Record Stores and must opt into `GenericStorePage`, dropping all internal CRUD handlers, modal wrappers, and data-fetching boilerplate. They will shrink from ~300 lines down to ~25 lines each:
+
+**Files to Delete / Gut (as part of this migration):**
+- `src/components/taskmanager/TaskManagerStorePage` internal `NoteStoreModal` function — deleted; replaced by GenericStorePage's internally managed modal.
+- `src/components/vault/banks/BankListView.tsx` — gutted; becomes a thin ~25-line GenericStorePage wrapper.
+- `src/components/vault/passwords/PasswordView.tsx` — gutted entirely; file becomes the slim modal wrapper (see GenericDomainModal §12).
+- `src/components/vault/records/RecordsView.tsx` — gutted; file is renamed/replaced to become the slim modal wrapper (see GenericDomainModal §10). The store behavior moves to a direct GenericStorePage opt-in.
+- All `renderNewRecordForm`, `extractNewRecordData`, `modalSlot`, `fetchData`, `deriveParentRecords`, `onLinkedRecordClick`, and `handleDocumentSaved` props are deleted from every route file — these callbacks are strictly banned.
+
+**File Stores (Documents linked to Domain Parent Records)**
+1. **`/taskmanager/store`** (Links to Notes)
+   - `storeType="doc"`
+   - `domain="taskmanager"`
+   - `modalFields={NOTE_FIELDS}`
+   - Opts into: add button, standalone upload, link/unlink, delete.
+
+2. **`/education/store`** (Links to Education Records)
+   - `storeType="doc"`
+   - `domain="education"`
+   - `modalFields={EDUCATION_FIELDS}`
+   - Opts into: add button, standalone upload, link/unlink, delete.
+
+3. **`/expense/store`** (Links to Expense Records — Read-Only Store)
+   - `storeType="doc"`
+   - `domain="expense"`
+   - Does **not** opt into `allowNewUpload` — no add button, no standalone upload modal.
+   - Does **not** opt into unlink — only delete is available on existing linked files.
+   - Files reach this store exclusively by being attached to an expense record via `/expense`. This store is a viewer only.
+
+4. **`/medical/store`** (Links to Medical Records — Read-Only Store)
+   - `storeType="doc"`
+   - `domain="medical"`
+   - Does **not** opt into `allowNewUpload` — no add button, no standalone upload modal.
+   - Does **not** opt into unlink — only delete is available on existing linked files.
+   - Files reach this store exclusively by being attached to a medical record via `/medical`. This store is a viewer only.
+
+5. **`/vault/documents`** (Links to Vault Personal Records)
+   - `storeType="doc"`
+   - `domain="vault"` *(Kept as `"vault"` — this is the existing DB document domain string. Renaming would require a data migration and is deferred.)*
+   - `modalFields={VAULT_RECORD_FIELDS}`
+   - Opts into: add button, standalone upload, link/unlink, delete.
+
+**Record Stores (Standalone items managed directly in the grid)**
+6. **`/vault/passwords`**
+   - `storeType="record"`
+   - `domain="vault_passwords"`
+   - `modalFields={PASSWORD_FIELDS}`
+
+7. **`/vault/records`**
+   - `storeType="record"`
+   - `domain="vault_records"`
+   - *(The existing `RecordsView.tsx` is gutted and repurposed as the GenericDomainModal wrapper — see §10. The store route opts in directly to GenericStorePage.)*
+
+8. **`/vault/banks`** (Bank Accounts root dashboard)
+   - `storeType="record"`
+   - `domain="vault_banks"`
+   - *(The existing `BankListView.tsx` is gutted into a ~25-line GenericStorePage wrapper.)*
+
+9. **`/vault/banks/[bankId]`** (Pins/Cards mapped to a Bank)
+   - `storeType="record"`
+   - `domain="vault_bank_details"`
+
+> [!NOTE]
+> **Stage 7 Pass 2 status — IMPLEMENTED (2026-08-22).** `GenericStorePage` is now a fully self-contained smart component. All domain logic lives in `src/components/common/store/storeAdapters.ts` (`getStoreAdapter(domain, scope)` returns a `DocStoreAdapter<T>` or `RecordStoreAdapter<T>`), and the page owns: data loading + `refreshAll`, document link/unlink/delete CRUD, the internally mounted `GenericDomainModal` (linked-record edit + standalone-file modes), inline parent-creation forms (via `modalFields`, mounted in the standalone modal — `renderNewRecordForm`/`extractNewRecordData` are deleted everywhere), the search bar (always present, per-domain `searchPlaceholder` default + prop override), and the tiles/list toggle (per-domain `useLocalStorage` key). Capability gates drive UI: `canUnlink`/`canBulkLink`/`canCascadeDelete`/`canCreateParent` from handler presence; secrets via `isSecret`/`isCopyable` schema flags. The legacy `#new-document` / `#edit-document-{id}` hash routing is preserved. `headerActions` is declarative (`{ label, variant, requireConfirm, confirmTitle, confirmDescription, confirmLabel, onAction }`) and confirmed natively — `vault/banks/[bankId]`'s external ConfirmDialog is gone. All mobile CSS preserved verbatim (Add `order-2` / Search `order-3 w-full mt-3` flip, list-row `flex-col`→`sm:flex-row` + `w-px hidden sm:block` divider, `opacity-100` mobile / `md:opacity-0 md:group-hover:opacity-100` desktop actions, `body-only` swipeable title tracks). The 9 adopting routes are gutted to ~25-line declarative configs; `vault/passwords`, `vault/records`, `vault/banks` keep their thin view wrappers (per the spec's "slim wrapper" model).
+>
+> Deviations from this spec (deliberate):
+> - **Passwords keep standard `tileLayout`.** The spec line "Vault passwords require body-only" is judged a copy-paste slip from `vault/banks/[bankId]` (PINs); `PasswordView` never used body-only tiles, and password tiles display a single secret value that must stay on the standard layout.
+> - **Vault record modals receive `standaloneDocuments` = unlinked vault docs.** Old `RecordsView` passed `[]`; passing the unlinked set enables the modal's "link existing file" pane, which the records flow supports.
+> - **The delete-cascade checkbox renders only when `deleteParent` exists.** Doc-store cascade confirmation (taskmanager/education) shows the "delete parent + files" checkbox; vault records have no parent so their confirm is plain.
+> - **Medical loses unlink/bulk-link UI.** Old `medical/store` passed `hideParentRecordsList` and `disableAdd`; the adapter omits `unlinkFromParent`/`bulkLinkToParent` so the buttons are capability-gated away (files are permanently attached to their medical record). Same for expense.
+> - **`hideParentRecordsList` dropped.** The unlink button is resurrected on taskmanager/education (correct — the parent list must stay visible to select a document's linked note), while unlink/bulk-link are properly hidden only where handlers are absent.
+> - **Unlink/bulk-link now fix a pre-existing bug:** `unlinkFromParent` and `bulkLinkToParent` correctly clear/set `document.linked_id` (old handlers only synced the parent's `document_ids` list).
+> - **Education inline-create honors the `is_completed` checkbox** (sets `completed_at=nowIso` when checked; old inline form always saved `false`).
+> - **Record-store view-mode keys are per-domain** (`store_view_<domain>`) — the spec's per-domain persistence mandate applies to record stores too, not just doc stores.
+> - **Post-unlink hash redirect (`#edit-document-{unlinkedId}`) now also applies to vault**, matching taskmanager's legacy flow.
+> - **Per-domain doc-store `emptyMessage`/`searchPlaceholder`** live in the adapters (taskmanager/education/vault); expense/medical keep the generic defaults.
+> - **`vault/banks/[bankId]` bank-not-found renders via `ErrorBanner`** (adapter `fetchData` throws `"Bank not found."`; the page's `title=""` keeps the h1 hidden until the adapter's `pageTitle=bank.bank_name` loads, matching the old blank-until-loaded behavior).
+> - **`RecordsView` dead rename loop dropped** (the old view had a rename handler that no-op'd on vault records).
+> - **`onDownloadDocument` omitted everywhere** — the modal's internal R2 download path is identical to the old per-route overrides.
+> - **Vault record bulk-delete now cascades attached files** (old flow orphaned them).
+> - **Plaintext hygiene:** adapters build explicit clean plaintexts on save — no `id`/`created_at` pollution from spreading hydrated rows (old routes leaked these into the encrypted blobs).
+> - **Implementation detail:** the `GenericDocStore`/`GenericRecordStore` dispatch boundary casts the adapter union to `Adapter<{ id: string }>` (the stores only touch row `.id` and pass rows back through the adapter), and the shared `updateRow` helper params return `Promise<unknown>` so API-layer functions returning the saved row satisfy them.
+
+#### 3. GenericDomainModal (The Unified Modal)
+
+**Exhaustive List:**
+The 10 current wrapper modals will be strictly deleted: `TaskModal.tsx`, `NoteModal.tsx`, `EducationModal.tsx`, `ExpenseModal.tsx`, `MedicalModal.tsx`, `PasswordModal.tsx`, `RecordModal.tsx`, `BankModal.tsx`, `BankPinModal.tsx`, `StoreDocumentModal.tsx`.
+
+**Code Summary:**
+**What it must own internally (No Domain Code Allowed):**
+- Form state management and dirty-checking (`formData !== initialData`).
+- A generic `createSaveAdapter(domain)` that automatically routes the save action to the correct API hook based on the `domain` prop.
+- Complex file staging (handling the upload/delete queue strictly before saving the parent record).
+- Its own visibility toggle and cleanup logic.
+
+**The New Opt-In API Contract:**
+**What domains opt-in / configure:**
+- `domain: string`
+- `mode: "record" | "standalone_file"`
+- `allowFiles: boolean`
+- `fields: FieldDef[]`
+- `layout?: string[][]`
+- `initialData?: Record<string, any>` (For edit mode)
+- `isOpen: boolean`
+- `onClose: () => void`
+- `title?: string` (Optional override for the modal title)
+- `onSave?: (data) => Promise<void>` (Optional override for custom save logic)
+- `onDelete?: () => Promise<void>` (For deleting standard records)
+- `onDeleteWithCascade?: (cascadeMode: boolean) => Promise<void>` (For deleting records with attached files)
+- `deleteLabel?: string` (To customize the delete button text)
+- `onDownloadDocument?: (doc: Document) => void` (Required for downloading attached files)
+- `maxWidthClassName?: string` (To explicitly set modal width, e.g., "max-w-lg")
+
+> [!IMPORTANT]
+> **Stage 7 Special Considerations (QoL Safeguards)**
+> - **The Date Cross-Mark**: The `type: "date"` schema must map to the custom `DatePicker.tsx` component to preserve the undocumented "clear date" logic added in the `old_domains_fixes` branch.
+> - **Strict Mode Resolution**: 
+>   - `record` mode: Auto-generates the form from `fields`. The right pane is a multi-file uploader strictly toggled by `allowFiles`.
+>   - `standalone_file` mode: Replaces the standard form header with a "Link to Parent" dropdown (`parentRecords`). Critically, it must natively render a `-- OR --` divider below the dropdown, followed by the exact same auto-generated form (using the `fields` schema) so users can create a new parent record inline without raw JSX injections. The right pane locks to a single file preview.
+> - **File Section Behaviors**: Must preserve file name deduplication (`(1)`, `(2)` suffixing), auto-selecting the first file on open/save, and the distinction between "Unlink" vs "Delete".
+> - **Deep Dirty Checking**: Must normalize rich text and deeply compare `formData` to `initialData` to trigger the "Unsaved changes" warning safely.
+> - **Strict Modal Boundary (Banning Boilerplate Glue)**: Domains currently pass `attachedDocuments` filtering loops and manual CRUD hooks (`onSave`, `onDelete`). This is banned. The generic engine must natively own data fetching and its internal `createSaveAdapter(domain)`, automatically routing based on the `domain` prop.
+> - **Banning Manual State Initialization**: Domains must no longer manually construct `initialData` (e.g., `name: target.name ?? ""`). The modal must dynamically derive default empty states from the `fields` schema and automatically map the values from a `target` payload.
+> - **Centralizing Feature Flags**: `allowFiles`, `allowLinking`, and `mode` should not be passed arbitrarily by domains. These are strict domain rules and must be inferred natively from a central domain config based on the `domain` prop.
+> - **Banning Modal Store Wrappers**: Store Pages currently inject custom wrappers (e.g. `NoteStoreModal`) via `modalSlot` to hack `mode="record"` and override `onSave` redirects. This is banned. The modal must expose a declarative `target={{ type: "document" | "record", id }}` API and natively handle layout switching and redirects. Store pages must only pass the `target` state.
+> - **Banning React Key Re-mounting**: Domains must stop passing `key={target.id}` to force re-mounts. The modal must natively reset its internal form state when the `target` payload changes.
+> 
+> **Mobile Considerations (Must Preserve)**
+> - **The 3-Block Grid-to-Stack Translation**: The DOM order is strictly `[Form Pane] -> [Files Pane] -> [Footer Action Buttons]`. On mobile, CSS `flex-col` natively stacks them in this exact order so the save button is pinned beneath the content. On desktop, `sm:grid` explicitly repositions the Files pane to the right. The generic refactor must natively apply this wrapper without injecting the footer inside the left pane.
+> - **Auto-Collapsing Form Layout Rows**: The schema `layout` config (which places fields side-by-side using `sm:grid-cols-X`) automatically drops the `sm:` prefix on mobile. This means *all* fields natively collapse into a strict 1-column vertical stack (`grid-cols-1`). Domains cannot inject custom flex-wraps that break this column constraint.
+> - **Touch-Target Dropdowns (Standalone Linking)**: The "Link to Parent" dropdown must use mobile-friendly touch targets (`px-3 py-1.5`) and must not rely on desktop hover states to reveal linking options.
+> - **Viewport Clamping (The 85vh Rule)**: The modal container relies on `min-h-[65vh] max-h-[85vh] overflow-y-auto`. By keeping scrolling confined to the modal instead of the body, users can scroll down to the Save buttons even when the mobile virtual keyboard consumes screen height. This CSS clamp must be preserved.
+
+**How the Routes Will Opt-In (Exhaustive Directives):**
+To prevent duplication across sub-domains, the `GenericDomainModal` will be mounted inside shared View components, which are then imported by the individual routes. Here is the explicit directive for every route mentioned:
+
+**Task Manager Routes**
+- `/taskmanager`: Uses `TaskView` (opts into form only, no files) for add/edit/view task. Uses `NoteView` (opts into both form and files) for add/view notes.
+- `/taskmanager/all`: Uses `TaskView` (opts into form only, no files) for edit task.
+- `/taskmanager/completed`: Uses `TaskView` (opts into form only, no files) for edit task.
+- `/taskmanager/notes`: Uses `NoteView` (opts into both form and files) for edit notes.
+- `/taskmanager/store`: Mounts `<GenericDomainModal>` directly. Record mode (opts into both form and files) for linked files. Standalone mode (opts into both form and files) for unlinked files.
+
+**Education Routes**
+- `/education`: Uses `EducationView` (opts into both form and files) for add/edit/view.
+- `/education/all`: Uses `EducationView` (opts into both form and files) for edits.
+- `/education/completed`: Uses `EducationView` (opts into both form and files) for edits.
+- `/education/store`: Mounts `<GenericDomainModal>` directly. Record mode for linked, Standalone mode for unlinked (opts into both form and files).
+
+**Expense Routes**
+- `/expense`: Uses `ExpenseView` (opts into both form and files) for add/edit/view.
+- `/expense/all`: Uses `ExpenseView` (opts into both form and files) for edits.
+- `/expense/store`: Mounts `<GenericDomainModal>` directly in Record mode only (opts into both form and files).
+
+**Medical Routes**
+- `/medical`: Uses `MedicalView` (opts into both form and files) for add/edit/view.
+- `/medical/all`: Uses `MedicalView` (opts into both form and files) for edits.
+- `/medical/store`: Mounts `<GenericDomainModal>` directly in Record mode only (opts into both form and files).
+
+**Vault Routes**
+- `/vault/records`: Uses `RecordView` (opts into both form and files) for add/edit/view.
+- `/vault/documents`: Mounts `<GenericDomainModal>` directly. Record mode for linked, Standalone mode for unlinked (opts into both form and files).
+- `/vault/passwords`: Uses `PasswordView` (opts into form only, no files) for add/edit/view.
+- `/vault/banks`: Uses `BankView` (opts into form only, no files) for add/edit/view.
+- `/vault/banks/[bankId]`: Uses `BankPinView` (opts into form only, no files) for add/edit/view.
+
+**Shared View Code Implementations:**
+
+**1. TaskManager - Task View** *(Shared by `/taskmanager`, `/taskmanager/all`, `/taskmanager/completed`)*
+*File: `src/components/taskmanager/TaskView.tsx`*
+```tsx
+<GenericDomainModal 
+  domain="taskmanager"
+  mode="record"
+  allowFiles={false} // Only form section, no file section
+  fields={TASK_FIELDS}
+  layout={TASK_LAYOUT}
+  initialData={selectedTask}
+  isOpen={isOpen}
+  onClose={close}
+/>
+```
+
+**2. TaskManager - Note View** *(Shared by `/taskmanager/notes`)*
+*File: `src/components/taskmanager/NoteView.tsx`*
+```tsx
+<GenericDomainModal 
+  domain="taskmanager_notes"
+  mode="record"
+  allowFiles={true} // Both form and file section
+  fields={NOTE_FIELDS}
+  initialData={selectedNote}
+  isOpen={isOpen}
+  onClose={close}
+/>
+```
+
+**3. TaskManager - Store** *(Shared by `/taskmanager/store`)*
+*File: `src/app/(protected)/taskmanager/store/page.tsx`*
+```tsx
+{/* Renders in Record Mode for Linked Uploads */}
+<GenericDomainModal domain="taskmanager" mode="record" allowFiles={true} fields={NOTE_FIELDS} />
+
+{/* Renders in Standalone Mode for Unlinked Uploads */}
+<GenericDomainModal domain="taskmanager" mode="standalone_file" allowFiles={true} fields={NOTE_FIELDS} />
+```
+
+**4. Education - View** *(Shared by `/education`, `/education/all`, `/education/completed`)*
+*File: `src/components/education/EducationView.tsx`*
+```tsx
+<GenericDomainModal 
+  domain="education"
+  mode="record"
+  allowFiles={true}
+  fields={EDUCATION_FIELDS}
+  initialData={selectedEdu}
+  isOpen={isOpen}
+  onClose={close}
+/>
+```
+
+**5. Education - Store** *(Shared by `/education/store`)*
+*File: `src/app/(protected)/education/store/page.tsx`*
+```tsx
+{/* Record Mode for Linked Uploads */}
+<GenericDomainModal domain="education" mode="record" allowFiles={true} fields={EDUCATION_FIELDS} />
+
+{/* Standalone Mode for Unlinked Uploads */}
+<GenericDomainModal domain="education" mode="standalone_file" allowFiles={true} fields={EDUCATION_FIELDS} />
+```
+
+**6. Expense - View** *(Shared by `/expense`, `/expense/all`)*
+*File: `src/components/expense/ExpenseView.tsx`*
+```tsx
+<GenericDomainModal 
+  domain="expense"
+  mode="record"
+  allowFiles={true}
+  fields={EXPENSE_FIELDS}
+  layout={EXPENSE_LAYOUT}
+  initialData={selectedExpense}
+  isOpen={isOpen}
+  onClose={close}
+/>
+```
+
+**7. Expense - Store** *(Shared by `/expense/store`)*
+*File: `src/app/(protected)/expense/store/page.tsx`*
+```tsx
+{/* Record Mode Only (No Standalone) */}
+<GenericDomainModal domain="expense" mode="record" allowFiles={true} fields={EXPENSE_FIELDS} />
+```
+
+**8. Medical - View** *(Shared by `/medical`, `/medical/all`)*
+*File: `src/components/medical/MedicalView.tsx`*
+```tsx
+<GenericDomainModal 
+  domain="medical"
+  mode="record"
+  allowFiles={true}
+  fields={MEDICAL_FIELDS}
+  initialData={selectedMedical}
+  isOpen={isOpen}
+  onClose={close}
+/>
+```
+
+**9. Medical - Store** *(Shared by `/medical/store`)*
+*File: `src/app/(protected)/medical/store/page.tsx`*
+```tsx
+{/* Record Mode Only (No Standalone) */}
+<GenericDomainModal domain="medical" mode="record" allowFiles={true} fields={MEDICAL_FIELDS} />
+```
+
+**10. Vault - Records View** *(Shared by `/vault/records`)*
+*File: `src/components/vault/records/RecordsView.tsx` — existing file is gutted and repurposed as this modal wrapper. The store behavior for `/vault/records` moves to a direct GenericStorePage opt-in in the route file.*
+```tsx
+<GenericDomainModal 
+  domain="vault_records"
+  mode="record"
+  allowFiles={true}
+  fields={VAULT_RECORD_FIELDS}
+  initialData={selectedRecord}
+  isOpen={isOpen}
+  onClose={close}
+/>
+```
+
+**11. Vault - Documents Store** *(Shared by `/vault/documents`)*
+*File: `src/app/(protected)/vault/documents/page.tsx`*
+```tsx
+{/* Record Mode for Linked Uploads */}
+<GenericDomainModal domain="vault_documents" mode="record" allowFiles={true} fields={VAULT_RECORD_FIELDS} />
+
+{/* Standalone Mode for Unlinked Uploads */}
+<GenericDomainModal domain="vault_documents" mode="standalone_file" allowFiles={true} fields={VAULT_RECORD_FIELDS} />
+```
+
+**12. Vault - Passwords View** *(Shared by `/vault/passwords`)*
+*File: `src/components/vault/passwords/PasswordView.tsx`*
+```tsx
+<GenericDomainModal 
+  domain="vault_passwords"
+  mode="record"
+  allowFiles={false} // No Files
+  fields={PASSWORD_FIELDS}
+  initialData={selectedPassword}
+  isOpen={isOpen}
+  onClose={close}
+/>
+```
+
+**13. Vault - Banks View** *(Shared by `/vault/banks`)*
+*File: `src/components/vault/banks/BankView.tsx`*
+```tsx
+<GenericDomainModal 
+  domain="vault_banks"
+  mode="record"
+  allowFiles={false} // No Files
+  fields={BANK_FIELDS}
+  initialData={selectedBank}
+  isOpen={isOpen}
+  onClose={close}
+/>
+```
+
+**14. Vault - Bank Pins View** *(Shared by `/vault/banks/[bankId]`)*
+*File: `src/components/vault/banks/BankPinView.tsx`*
+```tsx
+<GenericDomainModal 
+  domain="vault_bank_details"
+  mode="record"
+  allowFiles={false} // No Files
+  fields={PIN_FIELDS}
+  initialData={selectedPin}
+  isOpen={isOpen}
+  onClose={close}
+/>
+```
+
+> [!NOTE]
+> **Stage 7 Pass 3 status — IMPLEMENTED (2026-08-23).** `GenericDomainModal` is now a self-contained engine: it owns form state, deep dirty checking (richtext normalization + deep `formData` vs baseline compare powering the "Unsaved changes" guard), the file staging queues (new-file uploads, links, unlinks, deletes — always processed strictly before the parent record save), and save routing resolved automatically from the `domain` prop via the new `src/components/common/modalDomainConfig.ts` registry (`getModalDomainConfig(domain, scope)` — the spec's `createSaveAdapter(domain)` realized as a central config registry rather than a hook factory; the modal itself contains no per-domain logic). The 10 legacy wrapper modals (`TaskModal`, `NoteModal`, `EducationModal`, `ExpenseModal`, `MedicalModal`, `PasswordModal`, `RecordModal`, `BankModal`, `BankPinModal`, `StoreDocumentModal`) are deleted and verified gone by grep sweep. All adopting views/routes mount the modal directly with declarative `fields` schemas and the `target={{ type: "document" | "record", id, data? }}` API: `taskmanager/all`, `taskmanager/completed`, `taskmanager/notes`, `education/all`, `education/completed`, `expense/all`, `medical/all`, the vault records/passwords/banks/bank-pin views, and all four modal mounts in `GenericStorePage` (add, edit, linked-record, record-store). The five CRUD hooks (`useTaskActions`, `useNoteActions`, `useEducationActions`, `useExpenseActions`, `useMedicalActions`) are slimmed to page-owned operations only (row deletes/toggles/downloads); `useActionForm.ts` is deleted. QoL safeguards verified in code: `type: "date"` maps to `DatePicker.tsx` (clear-date logic preserved), `record` mode auto-generates the form from `fields`, the right pane is strictly gated by the config's `allowFiles`, standalone mode renders the "Link to Parent" dropdown + `-- OR --` divider + the same auto-generated inline parent form with a single-file right pane, file-name dedup `(1)`/`(2)`, first-file auto-select, Unlink vs Delete distinction, internal state reset when the `target` payload changes (no `key=` re-mounts), and the mobile constraints (3-block grid-to-stack DOM order, `sm:grid-cols-X` → 1-column collapse, `px-3 py-1.5` touch dropdown, `min-h-[65vh] max-h-[85vh] overflow-y-auto` clamp) all live inside the modal.
+>
+> Deviations from this spec (deliberate):
+> - `GenericStorePage` keeps its own `handleTileDelete` for tile-level delete confirmations — those are page-owned flows (like bulk delete), not modal glue; the strict modal boundary bans modal-side manual CRUD only, and the modal's own delete is driven entirely by the domain config.
+> - The modal's form-init effect wraps its synchronous open-time state reset in an `eslint-disable react-hooks/set-state-in-effect` block (repo precedent: `VaultProvider`, `DocPreviewPanel`, `ThemeSwitcher`), and the file/parent-dropdown state was re-declared above the effect to satisfy `react-hooks/immutability` (no behavior change).
+> - The form-init effect re-runs **once per target identity** — deps are `[targetKey, resetFileState]`; raw `target`/`fields`/`initialData` are read through a per-render `initInputsRef` snapshot (`useLayoutEffect`), not listed as deps. Parents build those objects inline and `initialData` defaults to a fresh `{}` every render, so raw refs in the deps either loop the effect (crash: "Maximum update depth exceeded") or, if gated by a ref guard alone, let the effect's own re-render trigger its cleanup and cancel the in-flight `createDefaults()` await, silently dropping the `due_date`/`date` defaults (StrictMode double-invoke makes this deterministic in dev). The snapshot keeps ESLint natively satisfied (no stringify keys, no `exhaustive-deps` suppress) and honors "reset when the target payload changes" without `key=` re-mounts.
+> - `saveStoreDocument`/`deleteStoreDocument` in `modalDomainConfig.ts` are generic over `T extends { id: string }` — `DocStoreAdapter<T>` is not assignable to `DocStoreAdapter<{ id: string }>` because of `modalTitle` parameter variance (TS2345).
+> - `BankPinData` is imported from `storeAdapters.ts` (its actual home), not `@/types/vault`.
+> - Standalone saves in `GenericStorePage` now drive a fresh refetch + hash navigation (`#edit-document-{id}`) from `onSaved`, replacing the old `handleStoreSave` double-fetch; post-unlink redirects are preserved.
+> - Modal mounts live inside the existing shared view components (`ExpenseView`, `MedicalView`, `ActiveTasksBox`, etc.) rather than the new `TaskView.tsx`/`NoteView.tsx`/`EducationView.tsx` wrapper files the spec's code samples assumed — same boundary, no new wrapper files.
+
+#### 4. GenericDomainPage (Dashboard Engine)
+
+**Exhaustive List:**
+The 4 main domain dashboard wrappers will be completely gutted of their structural logic: `TaskManagerView.tsx`, `EducationView.tsx`, `ExpenseView.tsx`, `MedicalView.tsx`. 
+
+**Code Summary:**
+**What it must own internally (No Domain Code Allowed):**
+- **Year dropdown** — always visible, always-present core feature of every domain dashboard. Derived from `data` + `getDateKey`. All data displayed in any view (month rows, priority columns, all-items list) is strictly filtered to the selected year. This is non-negotiable and cannot be bypassed by any domain configuration.
+- The `MONTHS.map` iteration (including deriving the items per month and the permanent Unscheduled bucket).
+- The rendering of `<GenericMonthRow>` grids (for "months", "single", "multi", "all" views).
+- The rendering of `<GenericPriorityList>` columns (for the "priority" view).
+- The `viewMode` toggle state and UI (`ViewToggle` component) — driven by `supportedViews`.
+- Auth bootstrap, error boundaries, and Loading states.
+
+**The New Opt-In API Contract:**
+**What domains opt-in / configure:**
+- `data: T[]` (Raw un-filtered data)
+- `columns: ColumnDef<T>[]`
+- `domain: "taskmanager" | "expense" | "education" | "medical"`
+- `getDateKey: (item: T) => string | null` (For internal month/year grouping)
+- `supportedViews: string[]` (The allowed layout toggles for this domain dashboard)
+- `priorities?: readonly string[]` (If opting into priority view)
+- `getPriorityColor?: (priority: string) => { border: string; bg: string }`
+- `renderPriorityBadge?: (priority: string) => ReactNode`
+- `headerStat?: ReactNode` (e.g., Total expenses for the year)
+- `completedSlot?: ReactNode` (For Task/Edu right pane)
+- `miscSlot?: ReactNode` (For Task Manager notes box)
+- `modalSlot?: ReactNode` (Crucial for mounting the GenericDomainModal at the layout level)
+- `emptyMessage?: string`
+- `onRowClick?: (item: T) => void` (Passed down to internal grids to trigger modals)
+- `rowClassName?: string | ((item: T) => string)` (Passed down to internal grids)
+- `title`, `description`, `storeHref`, `storeLabel`, `storeIcon` (For the header)
+
+> [!IMPORTANT]
+> **Stage 7 Special Considerations (QoL Safeguards)**
+> - **Breaking API Change — Data Must Be Raw, Year Filtering Is Internal**: Currently, all 4 domain views own `selectedYear` state and pre-filter their data before passing it to `GenericDomainPage` via `renderBody`. This is the violation being fixed. The new `GenericDomainPage` must:
+>   1. Accept `data: T[]` (raw, unfiltered) from the domain.
+>   2. Own `selectedYear` state internally and render the `YearDropdown` natively in its header.
+>   3. Filter all data to `selectedYear` before passing to `GenericMonthRow`, `GenericPriorityList`, and any other internal grid renderers.
+>   4. **Fixes the TaskManager and Education dashboard gap**: Currently, `/taskmanager` and `/education` show active items from ALL years (no year filter on the dashboard). After this refactor, `GenericDomainPage` filters `data` by `selectedYear` before the dashboard renders — only this year's active tasks/courses appear.
+> 
+> **Pre-Existing Working Tree State (Continuation Notes — Read Before Implementing)**
+> - **`viewHelpers.ts` Grouping Helpers**: `viewHelpers.ts` has uncommitted additions containing grouping utilities (e.g., `byPriority`, month-bucketing). After this refactor, these consolidate **inside** `GenericDomainPage` — route files and domain views must not retain call sites for these helpers.
+> - **The "Unscheduled" Bucket**: The internal `MONTHS.map` iteration must safely collect items without dates into the permanent Unscheduled bucket without breaking the grid flow.
+> - **Current-Month Auto-Scrolling**: Domains currently run a `useEffect` to auto-scroll to `id="current-month-tile"`. The generic engine MUST internalize this, otherwise dashboards will load at the top of the year by default.
+> - **Layout Slot Injections**: The generic layout must safely mount the domain's right-pane modules (`completedSlot`, `miscSlot`) without conflicting with the internal month grids.
+> - **Strict Record Widgets**: Domain dashboard widgets (e.g., the Notes widget on `/taskmanager`) must only display database records. Standalone files must not be mixed into widget lists; they belong exclusively in the Store.
+> - **Banning The "Empty Shell" Leak**: Currently, `GenericDomainPage` forces domains to provide a massive `renderBody` closure, manually wiring their own `<YearDropdown>`, `<ViewToggle>`, and `<BoxContainer>`. This is banned. The generic engine must own its own header controls based on a `supportedViews` prop.
+> - **Banning Duplicated Month Grouping**: Domains (Expense, Medical) manually iterate over `MONTHS` and filter by year/month. The generic engine must own this time-bucketing natively via a `getDate` prop.
+> - **Banning GenericActiveBox Strictness**: We will completely delete `GenericActiveBox` along with `ActiveTasksBox` and `ActiveEducationsBox`. `GenericDomainPage` will natively handle both "Priority Mode" and "Month Mode" dynamically, so domains without priority (Expenses/Medical) don't have to redefine UI loops.
+> - **Banning Layout Boilerplate**: Domains currently write raw masonry grid CSS hacks (e.g. `md:columns-2`). `GenericDomainPage` must natively support `viewMode="multi"` vs `viewMode="single"` grids internally.
+> 
+> **Mobile Considerations (Must Preserve)**
+> - **The 2/3 + 1/3 Grid Collapse (Disabled Dual Columns)**: Mobile explicitly disables 2-column views wherever they are present. The desktop dual-column layout (`lg:grid-cols-3` where the `ActiveBox` spans 2 columns) drops the `lg:` prefix and natively collapses into a strict 1-column stack. Because the DOM order is `[ActiveBox] -> [StoreLink + CompletedBox]`, the sidebars natively stack *below* the main content on mobile.
+> - **Full-Width Action Targets**: In full-width layouts, the Store Link button drops its fixed desktop width and stretches to `w-full`, stacking vertically underneath the title and subtitle to become a massive, tappable block button.
+> - **Isolated Scroll Containers (`SCROLLABLE_CLASSES`)**: The ActiveBox list is wrapped in an internal `overflow-y-auto` container with a max height. On phones, this prevents a long list of items from stretching the page endlessly and pushing the sidebars below the fold into oblivion.
+> - **The Current-Month Auto-Scroll Hook**: When switching to "months" view, a `useEffect` actively fires `scrollIntoView` for `#current-month-tile`. Because of the isolated scroll container, this hook is critical on mobile so users don't have to manually swipe past 11 empty months to find the current one.
+
+**How the Routes Will Opt-In (Explicit Directives):**
+The 4 main dashboard routes will completely drop their internal layout definitions, toggles, and grid logic. They will simply pass their raw data and configurations:
+
+**Files to Delete (as part of this migration):**
+- `src/components/common/GenericActiveBox.tsx` — deleted entirely. `GenericDomainPage` natively handles both month and priority views, making this component redundant.
+- `src/components/taskmanager/ActiveTasksBox.tsx` — deleted entirely. Its functionality is absorbed into `GenericDomainPage`'s internal grid rendering.
+- `src/components/education/ActiveEducationsBox.tsx` — deleted entirely. Same reason.
+- `src/components/taskmanager/TaskManagerView.tsx` — gutted. The `renderBody` closure, manual `MONTHS.map`, `YearDropdown`, `ViewToggle`, and priority grouping logic are all deleted. What remains is ~30 lines of opt-in config props passed to `GenericDomainPage`.
+- `src/components/education/EducationView.tsx` — gutted. Same as above.
+- `src/components/expense/ExpenseView.tsx` — gutted. Manual `MONTHS.map`, `YearDropdown`, `BoxContainer` loops, and month-bucketing all deleted.
+- `src/components/medical/MedicalView.tsx` — gutted. Same as above.
+
+1. **`/taskmanager` (`TaskManagerView`)**
+   - **Views**: Opts into `["months", "priority"]`. (Passes priority configs: `TASK_PRIORITIES`, `getTaskPriorityColor`, `<TaskPriorityBadge>`).
+   - **Layout/Widgets**: Opts into `completedSlot` (passes `<CompletedTasksBox>`) and `miscSlot` (passes a flex wrapper containing the "Notes Store" `<Link>` button stacked above the `<NotesBox>`). *Result: The store button is sandwiched directly between the completed and notes widgets.*
+
+2. **`/education` (`EducationView`)**
+   - **Views**: Opts into `["months", "priority"]`. (Passes priority configs: `EDUCATION_PRIORITIES`, `getEducationPriorityColor`, `<EducationPriorityBadge>`).
+   - **Layout/Widgets**: Opts into `storeHref` (Places the Certificate Store button in the header above the list). Opts into `completedSlot` (passes `<CompletedEducationsBox>`).
+
+3. **`/expense` (`ExpenseView`)**
+   - **Views**: Opts into `["single", "multi"]` (Single column and double column month views).
+   - **Layout/Widgets**: Opts into `storeHref` (Places the Expense Store button in the header above the list). Passes `<p>Total for {selectedYear}...</p>` into `headerStat`. Does *not* opt into `completedSlot` or `miscSlot`.
+
+4. **`/medical` (`MedicalView`)**
+   - **Views**: Opts into `["all", "single", "multi"]` (All view, Single column, and double column month views).
+   - **Layout/Widgets**: Opts into `storeHref` (Places the Medical Store button in the header above the list). Passes `<p>{filteredRecords.length} records</p>` into `headerStat`. Does *not* opt into `completedSlot` or `miscSlot`.
+
+*(Note: `GenericMediaPage` is perfectly compliant. It successfully encapsulates 100% of the UI logic and requires only raw TMDB IDs and Collections as props.)*
+
+> [!NOTE]
+> **Stage 7 Pass 4 status — IMPLEMENTED (2026-08-23).** `GenericDomainPage` is now the dashboard engine. It accepts raw `data` + declarative config and internally owns: the year dropdown (always visible, always present — `YearDropdown` natively rendered in the engine header), strict `selectedYear` filtering applied to raw `data` before ANY rendering (month rows, priority columns, and the flat "all" list — this fixes the Task Manager/Education gap where dashboards previously showed active items from ALL years), the `MONTHS.map` iteration with the permanent Unscheduled bucket (`monthIndex=-1`, `?month=unscheduled` hrefs), the `GenericMonthRow` grids for months/single/multi views, the `GenericPriorityList` for the priority view (priority column auto-dropped from `columns` via `col.key !== "priority"`, GenericViewPage precedent), the `ViewToggle` state + UI driven by `supportedViews` (persisted per-domain via `viewCacheKey`), the single-vs-multi masonry CSS (`md:columns-2` + `break-inside-avoid inline-block w-full mb-4` wrappers vs `flex flex-col gap-4`), the `#current-month-tile` auto-scroll `useEffect`, and the mobile constraints (2/3+1/3 grid drops `lg:` to stack `[ActiveBox]→[StoreLink+CompletedBox]`, full-width store link stretches to `w-full`, `SCROLLABLE_CLASSES` isolated scroll container). `GenericActiveBox`, `ActiveTasksBox`, and `ActiveEducationsBox` are deleted entirely (verified gone by grep sweep). The 4 dashboards are gutted to opt-in config — Task Manager: `["months","priority"]` + completedSlot + miscSlot (Notes Store link stacked above NotesBox); Education: `["months","priority"]` + storeHref + completedSlot; Expense: `["single","multi"]` + storeHref + headerStat (yearly total); Medical: `["all","single","multi"]` + storeHref + headerStat (record count). All grouping logic (month bucketing, priority grouping, flat date-desc sort) is consolidated inside `GenericDomainPage.tsx`; the `viewHelpers.ts` grouping helpers (`byPriority`, `activeByMonths`, `completedByMonths`, `byMonth`, `byDueMonth` and their orphaned interfaces/constants) are deleted, and the taskmanager/education helpers' dead re-exports/wrappers removed — zero call sites remain (grep-verified).
+>
+> Deviations from this spec (deliberate):
+> - `headerStat` is a render-prop `(info: { selectedYear: number; itemsForYear: T[] }) => ReactNode` rather than a static `ReactNode` — the spec's own expense example interpolates `{selectedYear}` and totals, which cannot be computed outside the engine now that the year state is engine-internal.
+> - The spec's opt-in list omits several props the existing dashboards already render with, so these were added to `GenericDomainPageProps`: `onAdd` ("+ Add" header button), `getItemKey` (row keys), `getPriorityKey` (priority extraction for grouping), `rowAction` (Complete buttons in the rows), `getSubtitle` (per-month subtitles like "Total Expense: ₹ X · N items"), `viewAllBaseHref` ("View All" month-row navigation), `viewCacheKey` (preserves the existing localStorage keys `taskManagerActiveView`/`educationActiveView`/`expenseViewMode`/`medicalViewMode` — no stored-preference break), `isLoading`/`error`/`onRetry`, and `nowYear`/`nowMonth` (IST clock). Engine behavior otherwise unchanged.
+> - Auth bootstrap stays in the domain data hooks (`useTaskData`/`useEducationData`/`useExpenseData`/`useMedicalData` — they also supply `userId` for the `modalSlot` mounts); the engine receives `isLoading`/`error`/`onRetry` and owns all loading/error *presentation* (LoadingSpinner, ErrorBanner, loading text, content gating). Same boundary as Pass 3, split by data ownership.
+> - The ViewToggle is now visible on mobile for all domains (`hideContainerOnMobile={false}`): Expense previously hid its toggle entirely on mobile, and Medical's "multi" option previously used `hideOnMobile` — dropped because `md:columns-2` already natively collapses to a single column on mobile, per this spec's own Mobile Considerations. Expense gains a usable mobile toggle.
+> - Medical's "all" view renders the shared `GenericDataGrid` with `MEDICAL_COLUMNS` (newest-first) instead of the old `MedicalTable`; the dashboard grid has no column sorting (the old table had it) — full sorting remains on `/medical/all` via `GenericViewPage`.
+> - The Unscheduled bucket now surfaces date-less Expense/Medical rows on the dashboards (the old loops silently dropped them); Task Manager/Education already handled them.
+> - `MedicalTable.tsx` was left in place with zero call sites — it was not in this spec's deletion list and is out of Pass 4 scope; awaiting user decision on disposal.
+> - `groupByStatus` was left in `viewHelpers.ts` (zero call sites, media-scoped — out of Pass 4 scope).
+> - The 3 deleted files carried uncommitted Pass 1-3 working-tree modifications, so `git rm -f` was used per the spec's "deleted entirely" mandate (working-tree state intentionally discarded).
+>
+> Verification: `npm run lint` clean, `npm run build` (--webpack) passes (all 37 routes emitted), `npm test` 35/35 passed, and the banned-pattern grep sweep is clean (`renderBody`, `GenericActiveBox`, `ActiveTasksBox`, `ActiveEducationsBox`, legacy grouping helpers — only historical doc comments remain in GenericDomainPage/GenericViewPage).

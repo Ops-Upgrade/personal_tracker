@@ -12,6 +12,11 @@ import type { AuthResult } from "@/types";
  * After Supabase confirms credentials, bootstraps the client-side
  * crypto layer (derives KEK from password, unwraps/creates DEK).
  * The password is never stored — it only lives as a function argument.
+ *
+ * Failures return only a safe `errorCode` — never a raw Supabase/crypto
+ * error string, and never a console.* call. LoginForm consumes the
+ * unauthenticated result, so anything more is an enumeration/info-leak
+ * vector (the browser console is public information).
  */
 export async function login(
   email: string,
@@ -25,24 +30,18 @@ export async function login(
   });
 
   if (error) {
-    return { success: false, error: error.message };
+    return { success: false, errorCode: "invalid_credentials" };
   }
 
   const userId = data.session?.user.id;
   if (!userId) {
-    return { success: false, error: "Login succeeded but no session returned." };
+    return { success: false, errorCode: "unknown" };
   }
 
   try {
     await bootstrapCrypto(userId, password, email);
-  } catch (err) {
-    return {
-      success: false,
-      error:
-        err instanceof Error
-          ? `Encryption setup failed: ${err.message}`
-          : "Encryption setup failed. Please try again.",
-    };
+  } catch {
+    return { success: false, errorCode: "crypto_setup_failed" };
   }
 
   return { success: true };
@@ -67,7 +66,7 @@ export async function logout(): Promise<AuthResult> {
   const { error } = await supabase.auth.signOut();
 
   if (error) {
-    return { success: false, error: error.message };
+    return { success: false, errorCode: "unknown" };
   }
 
   return { success: true };

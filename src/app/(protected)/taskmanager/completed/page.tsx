@@ -2,139 +2,23 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useTaskData } from "@/hooks/useTaskData";
-import { useLocalStorage } from "@/lib/useLocalStorage";
-import { useTaskActions } from "@/hooks/useTaskActions";
 import { ROUTES } from "@/routes/paths";
 import type { Task } from "@/types/taskmanager";
-import { PRIORITIES } from "@/types/common";
-import type { SortState } from "@/components/common/SortableHeader";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import type { ColumnDef, MonthGroup, PriorityGroup } from "@/components/common/GenericViewPage";
+import GenericViewPage, { type ColumnDef } from "@/components/common/GenericViewPage";
+import { useTaskActions } from "@/hooks/useTaskActions";
 import { colPriority, colDate } from "@/components/common/columns";
-import {
-  byPriority,
-  completedByMonths,
-  sortByCompletedDesc,
-  getPriorityColor,
-} from "@/components/taskmanager/helpers";
-import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
+import { getPriorityColor } from "@/lib/priorityColors";
+import { TASK_FIELDS, TASK_LAYOUT } from "@/components/taskmanager/config";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
 
-const TASK_FIELDS: FieldDef[] = [
-  { key: "name", type: "text", label: "Task Name" },
-  {
-    key: "priority",
-    type: "select",
-    label: "Priority",
-    options: [
-      { value: "low", label: "Low" },
-      { value: "medium", label: "Medium" },
-      { value: "high", label: "High" },
-      { value: "critical", label: "Critical" },
-    ],
-  },
-  { key: "due_date", type: "date", label: "Due Date" },
-  {
-    key: "mode",
-    type: "select",
-    label: "Mode",
-    options: [
-      { value: "online", label: "Online" },
-      { value: "offline", label: "Offline" },
-    ],
-  },
-  {
-    key: "description",
-    type: "richtext",
-    label: "Task Description",
-    minHeight: "8rem",
-  },
-  { key: "is_completed", type: "checkbox", label: "Mark complete" },
-];
-
-// Every field must appear in the layout (GenericDomainModal only renders listed rows).
-const TASK_LAYOUT: string[][] = [
-  ["name"],
-  ["priority", "due_date", "mode"],
-  ["description"],
-  ["is_completed"],
-];
+type SortColumn = "name" | "priority" | "date";
 
 export default function CompletedTasksPage() {
   const { userId, nowYear, nowMonth, isLoading, error, refreshData, tasks } = useTaskData();
 
-  const [view, setView] = useLocalStorage<string>("taskManagerCompletedView", "all");
   const [taskModalTarget, setTaskModalTarget] = useState<Task | null>(null);
-
-  // ── Year filtering ──
-
-  const [selectedYear, setSelectedYear] = useState(nowYear);
-
-  const completedTasks = useMemo(
-    () => tasks.filter((t) => t.is_completed),
-    [tasks]
-  );
-
-  const availableYears = useMemo(() => {
-    const yearsFromData = new Set(
-      completedTasks.map((t) => {
-        if (!t.completed_at) return nowYear;
-        return new Date(t.completed_at).getFullYear();
-      })
-    );
-    yearsFromData.add(nowYear);
-    return Array.from(yearsFromData).sort((a, b) => b - a);
-  }, [completedTasks, nowYear]);
-
-  const tasksForYear = useMemo(
-    () =>
-      completedTasks.filter((t) => {
-        if (!t.completed_at) return false;
-        return new Date(t.completed_at).getFullYear() === selectedYear;
-      }),
-    [completedTasks, selectedYear]
-  );
-
-  // ── Sort state for completion view ──
-
-  const [sortState, setSortState] = useLocalStorage<SortState<"name" | "date">>(
-    "taskManagerCompletedSort",
-    { column: "date", direction: "desc" }
-  );
-
-  const completionTasks = useMemo(() => {
-    const sorted = [...tasksForYear].sort((a, b) => {
-      if (sortState.column === "name") {
-        const cmp = (a.name ?? "").localeCompare(b.name ?? "");
-        return sortState.direction === "asc" ? cmp : -cmp;
-      }
-      // date
-      const aTs = a.completed_at ? new Date(a.completed_at).getTime() : 0;
-      const bTs = b.completed_at ? new Date(b.completed_at).getTime() : 0;
-      return sortState.direction === "asc" ? aTs - bTs : bTs - aTs;
-    });
-    return sorted;
-  }, [tasksForYear, sortState]);
-
-  // ── Grouped views ──
-
-  const priorityGroupsRecord = byPriority(tasksForYear);
-  const priorityGroups: PriorityGroup<Task>[] = useMemo(
-    () =>
-      PRIORITIES.map((p) => ({
-        priority: p,
-        items: [...(priorityGroupsRecord[p] ?? [])].sort(sortByCompletedDesc),
-      })),
-    [priorityGroupsRecord],
-  );
-  const monthGroups: MonthGroup<Task>[] = completedByMonths(tasksForYear, selectedYear);
-
-  // ── Handlers ──
-
-  const handleEditTask = (task: Task) => {
-    setTaskModalTarget(task);
-  };
 
   const closeTaskModal = () => setTaskModalTarget(null);
 
@@ -143,59 +27,40 @@ export default function CompletedTasksPage() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { createSaveAdapter, handleTaskDelete, handleToggleComplete } =
+  const { handleTaskDelete, handleToggleComplete } =
     useTaskActions({ userId, refresh });
 
-  // ── Column definitions ──
+  // ── Column definitions (declarative tokens — the grid renders them) ──
 
-  const renderTaskName = (task: Task) => (
-    <span className="font-semibold text-zinc-800 dark:text-zinc-100">
-      {task.name}
-    </span>
-  );
-
-  const renderTaskMode = (task: Task) => (
-    <span className="text-xs capitalize text-zinc-500 dark:text-zinc-400">
-      {task.mode}
-    </span>
-  );
-
-  const renderReopenAction = (task: Task) => (
-    <div className="flex justify-end items-center">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggleComplete(task, false); }}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); handleToggleComplete(task, false); } }}
-        className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
-      >
-        Reopen
-      </div>
-    </div>
-  );
-
-  const completionColumns: ColumnDef<Task, "name" | "date">[] = useMemo(
+  const completionColumns: ColumnDef<Task, SortColumn>[] = useMemo(
     () => [
-      { key: "name",    header: "Name",    sizing: "flex",  weight: 2, sortColumn: "name", render: renderTaskName },
-      colPriority<Task, "name" | "date">(),
-      { key: "mode",    header: "Mode",    sizing: "fixed", render: renderTaskMode },
-      colDate<Task, "name" | "date">(
+      {
+        key: "name",
+        header: "Name",
+        sizing: "flex",
+        weight: 2,
+        sortColumn: "name",
+        token: { type: "text", accessor: (task) => task.name, color: "strong" },
+      },
+      colPriority<Task, SortColumn>({ sortColumn: "priority" }),
+      {
+        key: "mode",
+        header: "Mode",
+        sizing: "fixed",
+        token: {
+          type: "text",
+          accessor: (task) => task.mode,
+          color: "faint",
+          capitalize: true,
+          size: "xs",
+        },
+      },
+      colDate<Task, SortColumn>(
         { key: "date", header: "Date", accessor: (task) => task.completed_at },
         { sortColumn: "date" },
       ),
-      { key: "actions", header: "Actions", sizing: "fixed", align: "right", render: renderReopenAction },
     ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
-  );
-
-  // Sorting is disabled in the months view (headers render as plain text), so
-  // it reuses the completion columns as-is.
-  const monthsViewColumns = completionColumns;
-
-  const priorityViewColumns: ColumnDef<Task>[] = useMemo(
-    () => completionColumns.filter((col) => col.key !== "priority"),
-    [completionColumns],
   );
 
   const taskRowClass = (task: Task) => {
@@ -206,65 +71,81 @@ export default function CompletedTasksPage() {
   // ── Render ──
 
   return (
-    <PageShell
-      backHref={ROUTES.TASK_MANAGER}
-      title="Completed Tasks"
-      description="All your completed tasks."
-      error={error}
-      onRetry={() => userId && refreshData(userId)}
-    >
-      {isLoading && <LoadingSpinner />}
+    <>
+      <PageShell
+        backHref={ROUTES.TASK_MANAGER}
+        title="Completed Tasks"
+        description="All your completed tasks."
+        error={error}
+        onRetry={() => userId && refreshData(userId)}
+      >
+        {isLoading && <LoadingSpinner />}
 
-      {!isLoading && (
-        <GenericViewPage
-          items={completionTasks}
-          columns={completionColumns}
-          getItemKey={(t) => t.id}
-          views={STANDARD_VIEWS.COMPLETION_MONTHS_PRIORITY}
-          activeView={view}
-          onViewChange={setView}
-          yearFilter={{
-            years: availableYears,
-            selectedYear,
-            onChange: setSelectedYear,
-          }}
-          sortState={sortState}
-          onSortChange={setSortState}
-          emptyMessage={`No tasks completed in ${selectedYear}.`}
-          onRowClick={handleEditTask}
-          rowClassName={taskRowClass}
-          monthGroups={monthGroups}
-          priorityGroups={priorityGroups}
-          nowYear={nowYear}
-          nowMonth={nowMonth}
-          completionColumns={completionColumns}
-          monthColumns={monthsViewColumns}
-          priorityColumns={priorityViewColumns}
-        />
-      )}
+        {!isLoading && (
+          <GenericViewPage
+            data={tasks.filter((t) => t.is_completed)}
+            columns={completionColumns}
+            getItemKey={(t) => t.id}
+            cacheKeyPrefix="taskmanager_completed"
+            defaultSort={{ column: "date", direction: "desc" }}
+            supportedViews={["all", "months", "priority"]}
+            getDateKey={(t) => t.completed_at}
+            getPriorityKey={(t) => t.priority}
+            monthsMode="completed"
+            itemNamePlural="completed tasks"
+            onRowClick={(t) => setTaskModalTarget(t)}
+            rowClassName={taskRowClass}
+            rowAction={(task) => (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleToggleComplete(task, false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleToggleComplete(task, false);
+                  }
+                }}
+                className="cursor-pointer rounded-md border border-red-300 px-2 py-0.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/30"
+              >
+                Reopen
+              </div>
+            )}
+            onBulkDelete={async (ids, clearFn) => {
+              for (const id of ids) await handleTaskDelete(id);
+              clearFn();
+            }}
+            nowYear={nowYear ?? undefined}
+            nowMonth={nowMonth ?? undefined}
+          />
+        )}
+      </PageShell>
 
-      {taskModalTarget && (
+      {taskModalTarget && userId && (
         <GenericDomainModal
-          key={taskModalTarget.id}
           mode="record"
-          title="Edit task"
-          onClose={closeTaskModal}
+          domain="taskmanager"
+          target={{
+            type: "record",
+            id: taskModalTarget.id,
+            data: taskModalTarget as unknown as Record<string, unknown>,
+          }}
           fields={TASK_FIELDS}
           layout={TASK_LAYOUT}
-          initialData={{
-            name: taskModalTarget.name,
-            priority: taskModalTarget.priority,
-            due_date: taskModalTarget.due_date ?? "",
-            mode: taskModalTarget.mode,
-            description: taskModalTarget.description,
-            is_completed: taskModalTarget.is_completed,
+          onClose={closeTaskModal}
+          onSaved={async () => {
+            await refresh();
           }}
-          onSave={createSaveAdapter(taskModalTarget)}
-          onDelete={() => handleTaskDelete(taskModalTarget.id)}
-          deleteLabel="Delete"
-          maxWidthClassName="max-w-lg"
+          onDeleted={async () => {
+            await refresh();
+          }}
         />
       )}
-    </PageShell>
+    </>
   );
 }

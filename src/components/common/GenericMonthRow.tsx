@@ -43,7 +43,7 @@ export interface GenericMonthRowProps<T> {
 /**
  * Generic month tile wrapper used across all 4 domains (Expense, Medical,
  * Task Manager, Education). Shows a preview of items (sorted by date
- * descending, capped at `previewCount`) inside a MonthTile, rendered via
+ * ascending, capped at `previewCount`) inside a MonthTile, rendered via
  * GenericDataGrid. The "View All" button is shown only when `previewCount`
  * is provided (i.e. in active-box preview mode).
  */
@@ -64,17 +64,20 @@ export default function GenericMonthRow<T>({
 }: GenericMonthRowProps<T>) {
   const router = useRouter();
 
-  // Sort items by date descending
+  // Sort items by date ascending (oldest first) — a tail slice then extracts
+  // the newest items while preserving same-day chronological order (a
+  // descending slice would render them backwards, and reversing it would
+  // flip same-day rows too).
   const sorted = [...items].sort((a, b) => {
     const aDate = getDate(a);
     const bDate = getDate(b);
     if (!aDate && !bDate) return 0;
     if (!aDate) return 1;
     if (!bDate) return -1;
-    return new Date(bDate + "T00:00:00").getTime() - new Date(aDate + "T00:00:00").getTime();
+    return new Date(aDate + "T00:00:00").getTime() - new Date(bDate + "T00:00:00").getTime();
   });
 
-  const preview = previewCount ? sorted.slice(0, previewCount) : sorted;
+  const preview = previewCount ? sorted.slice(-previewCount) : sorted;
   const defaultLabel = `View All ${monthName} (${items.length})`;
 
   return (

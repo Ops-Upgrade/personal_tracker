@@ -1,17 +1,19 @@
 import type { MedicalRecord } from "@/types/medical";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
+import type { FieldDef } from "@/components/common/GenericDomainModal";
 import { colDate, colRichtext, colFiles } from "@/components/common/columns";
 
 // ── Sort column type ──
 
 export type SortColumn = "name" | "clinic" | "date";
 
-// ── Sort configs ──
+// ── Form schema for the medical record modal (store pages) ──
 
-export const SORT_CONFIGS = [
-  { column: "name" as const, extractor: (rec: MedicalRecord) => rec.name.toLowerCase() },
-  { column: "clinic" as const, extractor: (rec: MedicalRecord) => (rec.clinic ?? "").toLowerCase() },
-  { column: "date" as const, extractor: (rec: MedicalRecord) => new Date(rec.date + "T00:00:00").getTime() },
+export const MEDICAL_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Name" },
+  { key: "clinic", type: "text", label: "Clinic / Doctor" },
+  { key: "date", type: "date", label: "Date" },
+  { key: "diagnosis_timeline", type: "richtext", label: "Diagnosis Timeline", minHeight: "8rem" },
 ];
 
 // ── Shared column atoms ──
@@ -34,7 +36,8 @@ export const MEDICAL_FILES: ColumnDef<MedicalRecord, SortColumn> = colFiles<Medi
 
 // Sizing model: "fixed" columns get max-content tracks (dates, files always
 // fit their content); "flex" columns share the remaining space and truncate
-// gracefully via CSS — no breakpoint math anywhere.
+// gracefully via CSS — no breakpoint math anywhere. Cells are declarative
+// tokens; the GenericDataGrid engine renders them internally.
 export const MEDICAL_COLUMNS: ColumnDef<MedicalRecord, SortColumn>[] = [
   {
     key: "name",
@@ -42,11 +45,7 @@ export const MEDICAL_COLUMNS: ColumnDef<MedicalRecord, SortColumn>[] = [
     sizing: "flex",
     weight: 2,
     sortColumn: "name",
-    render: (rec) => (
-      <span className="font-medium text-zinc-800 dark:text-zinc-100">
-        {rec.name || "—"}
-      </span>
-    ),
+    token: { type: "text", accessor: (rec) => rec.name, color: "strong" },
   },
   {
     key: "clinic",
@@ -54,11 +53,7 @@ export const MEDICAL_COLUMNS: ColumnDef<MedicalRecord, SortColumn>[] = [
     sizing: "flex",
     weight: 1,
     sortColumn: "clinic",
-    render: (rec) => (
-      <span className="text-zinc-600 dark:text-zinc-300">
-        {rec.clinic || "—"}
-      </span>
-    ),
+    token: { type: "text", accessor: (rec) => rec.clinic, color: "muted" },
   },
   MEDICAL_DATE,
   MEDICAL_DIAGNOSIS,

@@ -3,10 +3,32 @@ import { encryptField, decryptField } from "@/lib/crypto";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import { getUniqueFileName } from "@/lib/viewHelpers";
 
+// ── In-memory session cache ──
+// Fetching documents requires decrypting every row, so we cache the full
+// hydrated list once per session (mirroring media.ts). Dedupe checks inside
+// create/update also reuse the warm cache instead of re-hitting Supabase.
+// Mutations (create / update / delete) maintain the cache so it stays fresh.
+
+let cachedDocuments: Document[] | null = null;
+let cacheUserId: string | null = null;
+
+/** Drop the in-memory cache (call on logout / user switch). */
+export function clearDocumentsCache(): void {
+  cachedDocuments = null;
+  cacheUserId = null;
+}
+
 /**
  * Fetch all documents for a user, decrypt each row, and return hydrated Document[].
+ *
+ * Cached per userId — subsequent calls in the same session return instantly.
  */
 export async function fetchDocuments(userId: string): Promise<Document[]> {
+  // Return cached result if the same user asks again
+  if (cachedDocuments !== null && cacheUserId === userId) {
+    return cachedDocuments;
+  }
+
   const supabase = createClient();
   const { data: rows, error } = await supabase
     .from("documents")
@@ -14,15 +36,23 @@ export async function fetchDocuments(userId: string): Promise<Document[]> {
     .eq("user_id", userId);
 
   if (error) throw new Error(`Failed to fetch documents: ${error.message}`);
-  if (!rows || rows.length === 0) return [];
+  if (!rows || rows.length === 0) {
+    cachedDocuments = [];
+    cacheUserId = userId;
+    return [];
+  }
 
-  return Promise.all(
+  const parsed = await Promise.all(
     rows.map(async (row) => {
       const plaintext = await decryptField(userId, row.iv, row.data);
-      const parsed: DocumentPlaintext = JSON.parse(plaintext);
-      return { id: row.id, created_at: row.created_at, ...parsed };
+      const parsedPlaintext: DocumentPlaintext = JSON.parse(plaintext);
+      return { id: row.id, created_at: row.created_at, ...parsedPlaintext };
     })
   );
+
+  cachedDocuments = parsed;
+  cacheUserId = userId;
+  return parsed;
 }
 
 /**
@@ -68,7 +98,14 @@ export async function createDocument(
 
   if (error) throw new Error(`Failed to create document: ${error.message}`);
 
-  return { id: data.id, created_at: data.created_at, ...deduplicated };
+  const created: Document = { id: data.id, created_at: data.created_at, ...deduplicated };
+
+  // Maintain cache — create a new array reference so React detects the change
+  if (cachedDocuments !== null && cacheUserId === userId) {
+    cachedDocuments = [...cachedDocuments, created];
+  }
+
+  return created;
 }
 
 /**
@@ -98,7 +135,14 @@ export async function updateDocument(
 
   if (error) throw new Error(`Failed to update document: ${error.message}`);
 
-  return { id: data.id, created_at: data.created_at, ...deduplicated };
+  const updated: Document = { id: data.id, created_at: data.created_at, ...deduplicated };
+
+  // Maintain cache — replace stale entry with a new array reference
+  if (cachedDocuments !== null && cacheUserId === userId) {
+    cachedDocuments = cachedDocuments.map((d) => (d.id === documentId ? updated : d));
+  }
+
+  return updated;
 }
 
 /**
@@ -112,4 +156,9 @@ export async function deleteDocument(documentId: string): Promise<void> {
   const { error } = await supabase.from("documents").delete().eq("id", documentId);
 
   if (error) throw new Error(`Failed to delete document: ${error.message}`);
+
+  // Maintain cache — remove deleted entry
+  if (cachedDocuments !== null) {
+    cachedDocuments = cachedDocuments.filter((d) => d.id !== documentId);
+  }
 }

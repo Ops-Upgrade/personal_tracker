@@ -2,7 +2,7 @@
 
 import { type ReactNode } from "react";
 import type { ColumnDef, MonthGroup } from "./GenericViewPage";
-import GenericDataGrid from "./GenericDataGrid";
+import GenericDataGrid, { type GridSelection } from "./GenericDataGrid";
 import GenericMonthRow from "./GenericMonthRow";
 import MonthTile from "./MonthTile";
 import { MONTH_NAMES } from "@/lib/constants";
@@ -22,7 +22,7 @@ export interface GenericMonthsListProps<T> {
   /** The year selected in the year filter (for full-view isCurrentMonth check). */
   selectedYear?: number;
 
-  // ── Preview mode (active box / GenericActiveBox usage) ──
+  // ── Preview mode (dashboard usage) ──
   /** When set, renders GenericMonthRow previews capped at this count. */
   previewCount?: number;
   /** Base href for "View All" navigation in preview mode. */
@@ -41,12 +41,15 @@ export interface GenericMonthsListProps<T> {
   rowAction?: (item: T) => ReactNode;
   /** Per-row CSS class modifier (e.g. priority-colored left border). */
   getItemClassName?: (item: T) => string;
+
+  /** Forwarded to the inner GenericDataGrid instances (checkbox track). */
+  selection?: GridSelection;
 }
 
 /**
  * Renders items grouped by month, using GenericMonthRow when previewCount
  * is set (preview mode) or MonthTile + GenericDataGrid when not (full mode).
- * Used by both GenericActiveBox and GenericViewPage.
+ * Used by GenericViewPage (full mode).
  */
 export default function GenericMonthsList<T>({
   monthGroups,
@@ -63,6 +66,7 @@ export default function GenericMonthsList<T>({
   rowClassName,
   rowAction,
   getItemClassName,
+  selection,
 }: GenericMonthsListProps<T>) {
   const isPreviewMode = !!previewCount;
 
@@ -122,6 +126,7 @@ export default function GenericMonthsList<T>({
                   onRowClick={onRowClick}
                   rowAction={rowAction}
                   getItemClassName={getItemClassName}
+                  selection={selection}
                 />
               )}
             </MonthTile>
@@ -151,6 +156,7 @@ export default function GenericMonthsList<T>({
               emptyMessage={`No items in ${group.label}.`}
               onRowClick={onRowClick}
               rowClassName={rowClassName}
+              selection={selection}
             />
           </MonthTile>
         );

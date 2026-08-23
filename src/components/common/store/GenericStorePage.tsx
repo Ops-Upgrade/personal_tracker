@@ -5,8 +5,8 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
+import { useRouter } from "next/navigation";
 import {
   Download,
   Eye,
@@ -16,37 +16,42 @@ import {
   File,
   FileText,
   Image as ImageIcon,
-  LayoutGrid,
-  List,
   Link,
   Pencil,
-  Plus,
   Trash2,
 } from "lucide-react";
 import { LinkSlashIcon, PaperClipIcon } from "@/components/common/Icons";
 import BackButton from "@/components/common/BackButton";
 import BoxContainer from "@/components/common/BoxContainer";
-import BulkActionBar from "@/components/common/BulkActionBar";
+import BulkActionBar, {
+  BulkActionDeleteButton,
+  BulkActionRenameButton,
+} from "@/components/common/BulkActionBar";
+import Button from "@/components/common/Button";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
-import EmptyState from "@/components/common/EmptyState";
+import DataListView from "@/components/common/DataListView";
 import ErrorBanner from "@/components/common/ErrorBanner";
-import LoadingSpinner from "@/components/common/LoadingSpinner";
 import OverlayActionButton from "@/components/common/OverlayActionButton";
-import SearchBar from "@/components/common/SearchBar";
-import ViewToggle from "@/components/common/ViewToggle";
-import type { ViewToggleOption } from "@/components/common/ViewToggle";
-import GenericDomainModal, { type StoreParentRecord } from "@/components/common/GenericDomainModal";
+import GenericDomainModal, {
+  type FieldDef,
+  type StoreParentRecord,
+} from "@/components/common/GenericDomainModal";
+import { storeToModalDomain } from "../modalDomainConfig";
 import BulkLinkModal from "./BulkLinkModal";
+import {
+  getStoreAdapter,
+  type DocStoreAdapter,
+  type RecordStoreAdapter,
+  type StoreDomainKey,
+} from "./storeAdapters";
 import { getUniqueFileName } from "@/lib/viewHelpers";
 import { useLocalStorage } from "@/lib/useLocalStorage";
 import { getSession } from "@/api/auth";
 import {
-  createDocument,
   updateDocument,
   deleteDocument,
 } from "@/api/common/documents";
 import {
-  uploadDocumentFile,
   downloadDocumentFile,
   deleteDocumentFile,
 } from "@/api/common/documentStorage";
@@ -58,24 +63,47 @@ import type { VaultRecordItem } from "@/types/vault";
 // Types
 // ============================================================
 
-/** Parameters passed to handleStoreSave from GenericDomainModal's onSave */
-interface StoreDocumentSaveParams {
-  file?: File;
+/** Declarative header action (replaces raw JSX + external ConfirmDialog). */
+export interface HeaderAction {
   label: string;
-  linkedParentId?: string;
-  /** Optional new parent record data when creating inline */
-  newParentRecord?: Record<string, string>;
-  existingDocument?: Document | null;
+  variant?: "primary" | "secondary" | "danger" | "ghost";
+  requireConfirm?: boolean;
+  confirmTitle?: string;
+  confirmDescription?: string;
+  confirmLabel?: string;
+  onAction: () => void | Promise<void>;
+}
+
+/** Unified, declarative store-page contract. All domain behavior lives in the adapter registry. */
+export interface GenericStorePageProps {
+  /** Declarative plan conformance; the adapter registry is authoritative. */
+  storeType?: "doc" | "record";
+  /** Adapter registry key — drives all fetching, mapping and CRUD. */
+  domain: StoreDomainKey;
+  /** Field schema for the record modal + the standalone parent-creation form. */
+  modalFields: FieldDef[];
+  title: string;
+  description?: string;
+  backHref: string;
+  backLabel?: string;
+  /** Extra data for scope-scoped adapters (e.g. vault_bank_details → { bankId }). */
+  scope?: Record<string, string>;
+  /** Show the Add button (default false — Expense and Medical intentionally omit). */
+  allowAdd?: boolean;
+  /** Tile layout mode. */
+  tileLayout?: "standard" | "body-only";
+  /** Cosmetic overrides (adapter defaults otherwise). */
+  searchPlaceholder?: string;
+  emptyMessage?: string;
+  /** Declarative header actions. */
+  headerActions?: HeaderAction[];
+  /** When true, hides selection checkboxes and disables bulk selection (record stores). */
+  disableSelection?: boolean;
 }
 
 // ============================================================
 // Constants
 // ============================================================
-
-const VIEW_OPTIONS: readonly ViewToggleOption<"tiles" | "list">[] = [
-  { value: "tiles", label: <LayoutGrid size={16} /> },
-  { value: "list", label: <List size={16} /> },
-];
 
 const DOMAIN_THEMES = {
   taskmanager: {
@@ -148,84 +176,70 @@ interface DocumentTile {
 }
 
 // ============================================================
-// Props
+// GenericStorePage — router
 // ============================================================
 
-interface GenericDocStoreProps<T> {
-  storeType?: "doc";
-  domain: DocumentPlaintext["domain"];
-  title: string;
-  description?: string;
-  backHref: string;
-  backLabel?: string;
-  fetchData: (userId: string) => Promise<{ domainRows: T[]; documents: Document[] }>;
-  deriveParentRecords: (rows: T[]) => StoreParentRecord[];
-  onLinkedRecordClick?: (docId: string, allDocuments: Document[], allRows: T[]) => T | null;
-  modalSlot?: (props: {
-    linkedRecord: T;
-    allRows: T[];
-    allDocuments: Document[];
-    userId: string;
-    refreshAll: () => Promise<void>;
-    onClose: () => void;
-  }) => ReactNode;
-  onDeleteParentRecord?: (parentId: string, userId: string, refreshAll: () => Promise<void>) => Promise<void>;
-  onUnlinkFromParent?: (documentId: string, parentId: string, userId: string, refreshAll: () => Promise<void>) => Promise<void>;
-  onBulkLinkToParent?: (documentIds: string[], parentId: string, userId: string, refreshAll: () => Promise<void>) => Promise<void>;
-  onDocumentSaved?: (documentId: string, newLinkedId: string, oldLinkedId: string, userId: string, refreshAll: () => Promise<void>) => Promise<void>;
-  renderNewRecordForm?: (opts: { disabled: boolean; isSaving: boolean }) => React.ReactNode;
-  extractNewRecordData?: () => Record<string, string> | null;
-  onCreateParentFromStore?: (data: Record<string, string>, userId: string, refreshAll: () => Promise<void>) => Promise<string>;
-  hideParentRecordsList?: boolean;
-  disableAdd?: boolean;
+export default function GenericStorePage(props: GenericStorePageProps) {
+  const adapter = useMemo(
+    () => getStoreAdapter(props.domain, props.scope),
+    [props.domain, props.scope],
+  );
+  if (adapter.storeType === "doc") {
+    // The adapter union's row types differ per domain; the stores only use
+    // the row `id` directly and pass rows back through the adapter, so the
+    // boundary cast to the shared shape is safe.
+    return <GenericDocStore {...props} adapter={adapter as unknown as DocStoreAdapter<{ id: string }>} />;
+  }
+  return <GenericRecordStore {...props} adapter={adapter as unknown as RecordStoreAdapter<{ id: string }>} />;
 }
 
-interface GenericRecordStoreProps<T extends { id: string }> {
-  storeType: "record";
-  /** Domain key for theming (buttons, checkboxes, focus rings). Defaults to "vault". */
-  domain?: DomainTheme;
-  title: string;
-  description?: string;
-  backHref: string;
-  backLabel?: string;
-  /** Fetches the domain rows for the given userId. */
-  fetchData: (userId: string) => Promise<T[]>;
-  /** Maps a domain row to the lightweight VaultRecordItem displayed in the view. */
-  mapRecordToItem: (record: T) => VaultRecordItem;
-  /** Called to delete a single record. Must refresh data after deletion. */
-  onDeleteRecord: (id: string) => Promise<void>;
-  /** Called to bulk-delete records. Must refresh data after deletion. */
-  onBulkDeleteRecords: (ids: string[]) => Promise<void>;
-  /** Singular item name for delete confirm dialogs. */
-  itemName: string;
-  /** Plural item name. Defaults to itemName + "s". */
-  itemNamePlural?: string;
-  /** Override the single-delete confirmation description. */
-  singleDeleteDescription?: string;
-  /** Empty-state message. */
-  emptyMessage?: string;
-  /** Search placeholder. */
-  searchPlaceholder?: string;
-  /** Tile layout mode. */
-  tileLayout?: "standard" | "body-only";
-  /** Optional header actions rendered next to the title. */
-  headerActions?: ReactNode;
-  /** When true, hides selection checkboxes and disables bulk selection. */
-  disableSelection?: boolean;
-  /** Override the default action-click (which opens the domain modal). */
-  onActionClick?: (id: string) => void;
-  /** Render prop for a domain-specific modal (e.g., BankModal, PasswordModal). */
-  recordModalSlot?: (props: {
-    record: T | null;
-    userId: string;
-    onSaved: (entry: T) => void;
-    onClose: () => void;
-  }) => ReactNode;
-}
+// ============================================================
+// HeaderActionsArea — renders declarative header actions + confirm
+// ============================================================
 
-export type GenericStorePageProps<T extends { id: string }> =
-  | GenericDocStoreProps<T>
-  | GenericRecordStoreProps<T>;
+function HeaderActionsArea({
+  actions,
+  pendingAction,
+  onAction,
+  onRequireConfirm,
+  onConfirm,
+  onCancelConfirm,
+}: {
+  actions: HeaderAction[];
+  pendingAction: HeaderAction | null;
+  onAction: (action: HeaderAction) => void;
+  onRequireConfirm: (action: HeaderAction) => void;
+  onConfirm: () => void;
+  onCancelConfirm: () => void;
+}) {
+  if (actions.length === 0) return null;
+  return (
+    <>
+      <div className="flex shrink-0 items-center gap-2">
+        {actions.map((action, i) => (
+          <Button
+            key={action.label + i}
+            variant={action.variant ?? "secondary"}
+            size="sm"
+            onClick={() => (action.requireConfirm ? onRequireConfirm(action) : onAction(action))}
+          >
+            {action.label}
+          </Button>
+        ))}
+      </div>
+      {pendingAction && (
+        <ConfirmDialog
+          title={pendingAction.confirmTitle ?? "Confirm action?"}
+          description={pendingAction.confirmDescription ?? "Are you sure you want to proceed?"}
+          confirmLabel={pendingAction.confirmLabel ?? "Confirm"}
+          cancelLabel="Cancel"
+          onConfirm={onConfirm}
+          onCancel={onCancelConfirm}
+        />
+      )}
+    </>
+  );
+}
 
 // ============================================================
 // InlineSecretValue — for record store tile/list values
@@ -288,187 +302,27 @@ function InlineSecretValue({ value, isSecret, isCopyable = true }: { value: stri
 }
 
 // ============================================================
-// DataListView — shared list/grid container
-// ============================================================
-
-interface DataListViewProps {
-  viewMode: "tiles" | "list";
-  onViewModeChange: (mode: "tiles" | "list") => void;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
-  searchPlaceholder?: string;
-  isLoading: boolean;
-  isEmpty: boolean;
-  isFilteredEmpty: boolean;
-  emptyMessage?: string;
-  onAdd?: () => void;
-  addLabel?: string;
-  selectionEnabled?: boolean;
-  selectedCount?: number;
-  totalCount?: number;
-  onSelectAll?: (checked: boolean) => void;
-  onClearSelection?: () => void;
-  bulkActionBar?: ReactNode;
-  renderGridTile: (itemIndex: number) => ReactNode;
-  renderListRow: (itemIndex: number) => ReactNode;
-  itemCount: number;
-  toggleActiveClassName?: string;
-  themeBtnClassName?: string;
-  themeInputFocus?: string;
-}
-
-function DataListView({
-  viewMode,
-  onViewModeChange,
-  searchQuery,
-  onSearchChange,
-  searchPlaceholder = "Search...",
-  isLoading,
-  isEmpty,
-  isFilteredEmpty,
-  emptyMessage = "No items to display.",
-  onAdd,
-  addLabel = "Add",
-  selectionEnabled = false,
-  selectedCount = 0,
-  totalCount = 0,
-  onSelectAll,
-  onClearSelection,
-  bulkActionBar,
-  renderGridTile,
-  renderListRow,
-  itemCount,
-  toggleActiveClassName,
-  themeBtnClassName,
-  themeInputFocus,
-}: DataListViewProps) {
-  const hasSelection = selectionEnabled && selectedCount > 0;
-
-  return (
-    <>
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="order-1 flex flex-row items-center gap-3">
-          <ViewToggle
-            value={viewMode}
-            onChange={onViewModeChange}
-            options={VIEW_OPTIONS}
-            ariaLabel="View toggle"
-            variant="media"
-            activeClassName={toggleActiveClassName}
-          />
-          {hasSelection && onSelectAll && (
-            <button
-              onClick={() => onSelectAll(selectedCount < totalCount)}
-              className={`cursor-pointer text-xs font-medium transition-colors ${toggleActiveClassName || "text-zinc-900 hover:text-black dark:text-zinc-100 dark:hover:text-white"}`}
-            >
-              {selectedCount < totalCount ? `Select all (${totalCount})` : "Deselect all"}
-            </button>
-          )}
-        </div>
-        {hasSelection && bulkActionBar ? (
-          <div className="order-2 sm:order-3 w-full sm:w-auto">{bulkActionBar}</div>
-        ) : (
-          <>
-            <div className="order-3 sm:order-2 w-full sm:w-auto sm:ml-auto mt-3 sm:mt-0">
-              <SearchBar
-                value={searchQuery}
-                onChange={onSearchChange}
-                placeholder={searchPlaceholder}
-                className="flex-1 sm:w-64"
-              />
-            </div>
-            {onAdd && (
-              <button
-                onClick={onAdd}
-                className={`order-2 sm:order-3 cursor-pointer inline-flex items-center justify-center gap-x-1.5 rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${themeBtnClassName || "bg-zinc-900 hover:bg-black dark:bg-zinc-100 dark:text-black dark:hover:bg-white"}`}
-              >
-                <Plus className="-ml-0.5 h-4 w-4" />
-                {addLabel}
-              </button>
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1">
-        {isLoading ? (
-          <LoadingSpinner message="Loading..." />
-        ) : isEmpty ? (
-          <EmptyState message={emptyMessage} />
-        ) : isFilteredEmpty ? (
-          <EmptyState message="No matching items found." />
-        ) : viewMode === "list" ? (
-          <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm">
-            {hasSelection && onSelectAll && (
-              <div className="flex items-center gap-3 px-4 py-2.5 border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/50">
-                <input
-                  type="checkbox"
-                  checked={itemCount > 0 && selectedCount === itemCount}
-                  onChange={(e) => onSelectAll(e.target.checked)}
-                  className={`h-4 w-4 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 ${themeInputFocus || "text-zinc-900 focus:ring-zinc-900 dark:text-zinc-100 dark:focus:ring-zinc-100"}`}
-                />
-                <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  {selectedCount === itemCount ? "All selected" : `${selectedCount} of ${itemCount} selected`}
-                </span>
-                <button onClick={onClearSelection} className="cursor-pointer ml-auto text-xs text-zinc-400 hover:text-zinc-600 dark:text-zinc-500 dark:hover:text-zinc-300 transition-colors">
-                  Clear
-                </button>
-              </div>
-            )}
-            <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {Array.from({ length: itemCount }, (_, i) => renderListRow(i))}
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {Array.from({ length: itemCount }, (_, i) => renderGridTile(i))}
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-// ============================================================
-// GenericStorePage — router
-// ============================================================
-
-export default function GenericStorePage<T extends { id: string }>(
-  props: GenericStorePageProps<T>,
-) {
-  if (props.storeType === "record") {
-    return <GenericRecordStore<T> {...props} />;
-  }
-  return <GenericDocStore<T> {...props} />;
-}
-
-// ============================================================
 // GenericDocStore — document store (absorbed GlobalStoreView)
 // ============================================================
 
+type GenericDocStoreProps<T extends { id: string }> = GenericStorePageProps & {
+  adapter: DocStoreAdapter<T>;
+};
+
 function GenericDocStore<T extends { id: string }>({
-  domain,
+  adapter,
+  domain: domainKey,
+  modalFields,
   title,
   description,
   backHref,
   backLabel = "← Back",
-  fetchData: fetchDomainData,
-  deriveParentRecords,
-  onLinkedRecordClick,
-  modalSlot,
-  onDeleteParentRecord,
-  onUnlinkFromParent,
-  onBulkLinkToParent,
-  onDocumentSaved,
-  renderNewRecordForm,
-  extractNewRecordData,
-  onCreateParentFromStore,
-  hideParentRecordsList = false,
-  disableAdd = false,
+  allowAdd = false,
+  searchPlaceholder,
+  emptyMessage,
+  headerActions,
 }: GenericDocStoreProps<T>) {
-  const theme = DOMAIN_THEMES[domain as DomainTheme] ?? DOMAIN_THEMES.expense;
+  const theme = DOMAIN_THEMES[adapter.domain as DomainTheme] ?? DOMAIN_THEMES.expense;
 
   // --- Core state ---
   const [userId, setUserId] = useState<string | null>(null);
@@ -497,6 +351,10 @@ function GenericDocStore<T extends { id: string }>({
 
   const isAddingDocument = modals.add;
 
+  // Modal domain key (store registry keys differ from modal registry keys —
+  // see storeToModalDomain in modalDomainConfig.ts).
+  const modalDomain = storeToModalDomain(domainKey);
+
   // Bulk selection
   const { selectedIds, toggleSelection, selectAll, clearSelection } = useSelection();
 
@@ -513,11 +371,18 @@ function GenericDocStore<T extends { id: string }>({
   // Inline rename
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState("");
+  // Header actions
+  const [pendingHeaderAction, setPendingHeaderAction] = useState<HeaderAction | null>(null);
+
+  // --- Adapter capability gates (handler opt-in → action visibility) ---
+  const canUnlink = !!adapter.unlinkFromParent;
+  const canBulkLink = !!adapter.bulkLinkToParent;
+  const canCascadeDelete = !!adapter.deleteParent;
 
   // --- Derived ---
   const domainDocuments = useMemo(
-    () => allDocuments.filter((d) => d.domain === domain),
-    [allDocuments, domain],
+    () => allDocuments.filter((d) => d.domain === adapter.domain),
+    [allDocuments, adapter.domain],
   );
 
   const bulkSelectedDocs = useMemo(
@@ -558,11 +423,11 @@ function GenericDocStore<T extends { id: string }>({
     let cancelled = false;
     const load = async () => {
       try {
-        const { domainRows, documents } = await fetchDomainData(userId);
+        const { rows, documents } = await adapter.fetchData(userId);
         if (!cancelled) {
-          setAllRows(domainRows);
+          setAllRows(rows);
           setAllDocuments(documents);
-          setParentRecords(deriveParentRecords(domainRows));
+          setParentRecords(adapter.deriveParentRecords(rows));
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load data");
@@ -572,16 +437,16 @@ function GenericDocStore<T extends { id: string }>({
     return () => {
       cancelled = true;
     };
-  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, adapter]);
 
   // --- Refresh cycle ---
   const refreshAll = useCallback(async () => {
     if (!userId) return;
-    const { domainRows, documents } = await fetchDomainData(userId);
-    setAllRows(domainRows);
+    const { rows, documents } = await adapter.fetchData(userId);
+    setAllRows(rows);
     setAllDocuments(documents);
-    setParentRecords(deriveParentRecords(domainRows));
-  }, [userId, fetchDomainData, deriveParentRecords]);
+    setParentRecords(adapter.deriveParentRecords(rows));
+  }, [userId, adapter]);
 
   // --- Hash management ---
   const resolveHash = useCallback(
@@ -613,18 +478,6 @@ function GenericDocStore<T extends { id: string }>({
     }
   }, []);
 
-  // --- Wrap page handlers ---
-  const wrappedOnDeleteParentRecord = userId && onDeleteParentRecord
-    ? (parentId: string) => onDeleteParentRecord(parentId, userId, refreshAll) : undefined;
-  const wrappedOnUnlinkFromParent = userId && onUnlinkFromParent
-    ? (documentId: string, parentId: string) => onUnlinkFromParent(documentId, parentId, userId, refreshAll) : undefined;
-  const wrappedOnBulkLinkToParent = userId && onBulkLinkToParent
-    ? (documentIds: string[], parentId: string) => onBulkLinkToParent(documentIds, parentId, userId, refreshAll) : undefined;
-  const wrappedOnDocumentSaved = userId && onDocumentSaved
-    ? (documentId: string, newLinkedId: string, oldLinkedId: string) => onDocumentSaved(documentId, newLinkedId, oldLinkedId, userId, refreshAll) : undefined;
-  const wrappedOnCreateParentFromStore = userId && onCreateParentFromStore
-    ? (data: Record<string, string>) => onCreateParentFromStore(data, userId, refreshAll) : undefined;
-
   // --- Tile interaction handlers ---
   const handleDownload = async (docId: string) => {
     if (!userId) return;
@@ -649,92 +502,25 @@ function GenericDocStore<T extends { id: string }>({
     (docId: string) => {
       const doc = allDocuments.find((d) => d.id === docId);
       if (!doc?.linked_id) return false;
-      if (onLinkedRecordClick) {
-        const record = onLinkedRecordClick(docId, allDocuments, allRows);
-        if (record) {
-          setLinkedRecord(record);
-          return true;
-        }
+      const record = allRows.find((r) => r.id === doc.linked_id);
+      if (record) {
+        setLinkedRecord(record);
+        return true;
       }
       return false;
     },
-    [allDocuments, allRows, onLinkedRecordClick],
+    [allDocuments, allRows],
   );
 
-  // --- StoreDocumentModal handlers ---
-  const handleStoreSave = async (params: StoreDocumentSaveParams) => {
-    if (!userId) throw new Error("No active session.");
-    const nowIso = new Date().toISOString();
-    let resolvedLinkedId = params.linkedParentId || "";
-    const oldLinkedId = params.existingDocument?.linked_id || "";
-
-    if (!resolvedLinkedId && params.newParentRecord && wrappedOnCreateParentFromStore) {
-      resolvedLinkedId = await wrappedOnCreateParentFromStore(params.newParentRecord);
-    }
-
-    let docId: string;
-    if (params.existingDocument) {
-      const existing = params.existingDocument;
-      if (params.file) {
-        if (existing.file_name) {
-          try { await deleteDocumentFile(userId, existing.file_name); } catch { /* best-effort */ }
-        }
-        const { fileName, iv, mimeType } = await uploadDocumentFile(userId, params.file);
-        await updateDocument(userId, existing.id, {
-          ...existing, label: params.label, file_name: fileName, file_iv: iv,
-          file_mime: mimeType, linked_id: resolvedLinkedId, updated_at: nowIso,
-        } as DocumentPlaintext);
-      } else {
-        await updateDocument(userId, existing.id, {
-          ...existing, label: params.label, linked_id: resolvedLinkedId, updated_at: nowIso,
-        } as DocumentPlaintext);
-      }
-      docId = existing.id;
-    } else {
-      if (!params.file) throw new Error("File is required for new documents.");
-      const { fileName, iv, mimeType } = await uploadDocumentFile(userId, params.file);
-      const newDoc = await createDocument(userId, {
-        label: params.label, file_name: fileName, file_iv: iv, file_mime: mimeType,
-        domain, linked_id: resolvedLinkedId, updated_at: nowIso,
-      });
-      docId = newDoc.id;
-    }
-
-    const { domainRows: freshRows, documents: freshDocs } = await fetchDomainData(userId);
-    setAllRows(freshRows);
-    setAllDocuments(freshDocs);
-
-    if (wrappedOnDocumentSaved) {
-      await wrappedOnDocumentSaved(docId, resolvedLinkedId, oldLinkedId);
-    }
-
-    const updatedDoc = freshDocs.find((d) => d.id === docId);
-    if (updatedDoc) {
-      if (resolvedLinkedId) {
-        // Find the parent record (use freshRows — not allRows — to include newly created records)
-        const parentRecord = freshRows.find((r) => r.id === resolvedLinkedId);
-        setModals({ add: false, edit: null });
-        clearHash();
-        if (parentRecord) {
-          setLinkedRecord(parentRecord);
-        }
-      } else {
-        setModals({ add: false, edit: updatedDoc });
-        window.history.replaceState(null, "", window.location.pathname + window.location.search + `#edit-document-${docId}`);
-      }
-    } else {
-      setModals({ add: false, edit: null });
-      clearHash();
-    }
-  };
-
-  const handleStoreDelete = async (d: Document, cascadeMode: "unlink" | "cascade") => {
+  // --- Tile-level delete (page-owned; the modal owns its own delete via
+  // modalDomainConfig, and the bulk flow lives in executeBulkDelete) ---
+  const handleTileDelete = async (d: Document, cascadeMode: "unlink" | "cascade") => {
     if (!userId) return;
     try {
-      if (cascadeMode === "cascade" && d.linked_id && wrappedOnDeleteParentRecord) {
-        await wrappedOnDeleteParentRecord(d.linked_id);
-      } else if (cascadeMode === "unlink" && d.linked_id && wrappedOnUnlinkFromParent) {
-        await wrappedOnUnlinkFromParent(d.id, d.linked_id);
+      if (cascadeMode === "cascade" && d.linked_id && adapter.deleteParent) {
+        await adapter.deleteParent(userId, d.linked_id);
+      } else if (cascadeMode === "unlink" && d.linked_id && adapter.unlinkFromParent) {
+        await adapter.unlinkFromParent(userId, d.id, d.linked_id);
       }
       if (d.file_name) {
         try { await deleteDocumentFile(userId, d.file_name); } catch { /* best-effort */ }
@@ -779,7 +565,7 @@ function GenericDocStore<T extends { id: string }>({
     const idToRemove = docToDelete.id;
     setDocToDelete(null);
     setTimeout(() => {
-      handleStoreDelete(allDocuments.find((x) => x.id === idToRemove)!, cascadeMode);
+      handleTileDelete(allDocuments.find((x) => x.id === idToRemove)!, cascadeMode);
       setTimeout(() => { setRemovingIds((prev) => { const n = new Set(prev); n.delete(idToRemove); return n; }); }, 500);
     }, 300);
   };
@@ -811,10 +597,10 @@ function GenericDocStore<T extends { id: string }>({
     setBulkProcessing(true);
     try {
       for (const d of bulkSelectedDocs) {
-        if (cascade && d.linked_id && wrappedOnDeleteParentRecord) {
-          try { await wrappedOnDeleteParentRecord(d.linked_id); } catch { /* best-effort */ }
-        } else if (!cascade && d.linked_id && wrappedOnUnlinkFromParent) {
-          await wrappedOnUnlinkFromParent(d.id, d.linked_id);
+        if (cascade && d.linked_id && adapter.deleteParent) {
+          try { await adapter.deleteParent(userId, d.linked_id); } catch { /* best-effort */ }
+        } else if (!cascade && d.linked_id && adapter.unlinkFromParent) {
+          await adapter.unlinkFromParent(userId, d.id, d.linked_id);
         }
         if (d.file_name) { try { await deleteDocumentFile(userId, d.file_name); } catch { /* best-effort */ } }
         await deleteDocument(d.id);
@@ -832,20 +618,12 @@ function GenericDocStore<T extends { id: string }>({
     if (!userId || !parentId) return;
     setBulkProcessing(true);
     try {
-      if (wrappedOnBulkLinkToParent) {
-        await wrappedOnBulkLinkToParent(bulkSelectedDocs.map((d) => d.id), parentId);
+      if (adapter.bulkLinkToParent) {
+        await adapter.bulkLinkToParent(userId, bulkSelectedDocs.map((d) => d.id), parentId);
         await refreshAll();
         clearSelection();
         setShowBulkLink(false);
-        return;
       }
-      const nowIso = new Date().toISOString();
-      const updates = bulkSelectedDocs.map((d) =>
-        updateDocument(userId, d.id, { ...d, linked_id: parentId, updated_at: nowIso } as DocumentPlaintext));
-      await Promise.all(updates);
-      await refreshAll();
-      clearSelection();
-      setShowBulkLink(false);
     } catch (err) {
       alert("Failed to bulk link: " + (err instanceof Error ? err.message : "Unknown error"));
     } finally {
@@ -857,19 +635,19 @@ function GenericDocStore<T extends { id: string }>({
   const documentTiles: DocumentTile[] = useMemo(
     () =>
       domainDocuments.map((d) => {
-        const parent = hideParentRecordsList ? undefined : parentRecords.find((r) => r.id === d.linked_id);
+        const parent = parentRecords.find((r) => r.id === d.linked_id);
         return {
           id: d.id, fileName: d.label || "Unnamed Document", fileUrl: "",
           linkedItemName: parent ? parent.name : null, isLinked: !!d.linked_id,
           thumbnailUrl: null, mime: d.file_mime || undefined,
         };
       }),
-    [domainDocuments, hideParentRecordsList, parentRecords],
+    [domainDocuments, parentRecords],
   );
 
   // --- Search / view state ---
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useLocalStorage<"tiles" | "list">("store_view_" + domain, "tiles");
+  const [viewMode, setViewMode] = useLocalStorage<"tiles" | "list">("store_view_" + domainKey, "tiles");
 
   const filteredDocs = useMemo(() => {
     if (!searchQuery) return documentTiles;
@@ -927,7 +705,7 @@ function GenericDocStore<T extends { id: string }>({
           </div>
         </div>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          {doc.linkedItemName && wrappedOnUnlinkFromParent && (
+          {doc.linkedItemName && canUnlink && (
             <button onClick={() => setDocToUnlink(doc)}
               className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-950/30 transition-colors" title="Unlink">
               <LinkSlashIcon className="h-4 w-4" />
@@ -983,7 +761,7 @@ function GenericDocStore<T extends { id: string }>({
           {/* Overlay actions */}
           <div className="absolute inset-x-0 top-0 flex items-start justify-end p-2 opacity-100 md:opacity-0 transition-opacity duration-200 md:group-hover:opacity-100 bg-gradient-to-b from-black/40 to-transparent">
             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-              {doc.linkedItemName && wrappedOnUnlinkFromParent && (
+              {doc.linkedItemName && canUnlink && (
                 <OverlayActionButton onClick={() => setDocToUnlink(doc)} title="Unlink" className="hover:bg-amber-500/80"><LinkSlashIcon className="h-4 w-4" /></OverlayActionButton>
               )}
               <OverlayActionButton onClick={() => handleDownload(doc.id)} title="Download" className="hover:bg-white/40"><Download className="h-4 w-4" /></OverlayActionButton>
@@ -1016,14 +794,35 @@ function GenericDocStore<T extends { id: string }>({
   const closeStoreEditModal = () => { setModals((prev) => ({ ...prev, edit: null })); clearHash(); };
   const closeLinkedRecord = useCallback(() => { setLinkedRecord(null); refreshAll(); }, [refreshAll]);
 
+  // --- Header action handlers ---
+  const runHeaderAction = useCallback((action: HeaderAction) => {
+    void action.onAction();
+  }, []);
+
   // --- Render ---
   return (
     <div className="space-y-6">
       <div className="flex flex-col items-start gap-4">
         <BackButton href={backHref}>{backLabel}</BackButton>
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{title}</h1>
-          {description && <p className="mt-1 text-sm font-normal text-zinc-500 dark:text-zinc-400">{description}</p>}
+        <div className="flex w-full items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{title}</h1>
+            {description && <p className="mt-1 text-sm font-normal text-zinc-500 dark:text-zinc-400">{description}</p>}
+          </div>
+          {headerActions && (
+            <HeaderActionsArea
+              actions={headerActions}
+              pendingAction={pendingHeaderAction}
+              onAction={runHeaderAction}
+              onRequireConfirm={setPendingHeaderAction}
+              onConfirm={() => {
+                const action = pendingHeaderAction;
+                setPendingHeaderAction(null);
+                if (action) void action.onAction();
+              }}
+              onCancelConfirm={() => setPendingHeaderAction(null)}
+            />
+          )}
         </div>
       </div>
 
@@ -1033,29 +832,25 @@ function GenericDocStore<T extends { id: string }>({
         <DataListView
           viewMode={viewMode} onViewModeChange={setViewMode}
           searchQuery={searchQuery} onSearchChange={setSearchQuery}
-          searchPlaceholder="Search files..."
+          searchPlaceholder={searchPlaceholder ?? adapter.searchPlaceholder}
           isLoading={isLoading}
           isEmpty={documentTiles.length === 0}
           isFilteredEmpty={filteredDocs.length === 0 && documentTiles.length > 0}
-          emptyMessage="No documents in the vault."
-          onAdd={disableAdd ? undefined : () => setModals((prev) => ({ ...prev, add: true }))}
+          emptyMessage={emptyMessage ?? adapter.emptyMessage}
+          onAdd={allowAdd ? () => setModals((prev) => ({ ...prev, add: true })) : undefined}
           selectionEnabled selectedCount={selectedIds.size} totalCount={filteredDocs.length}
           onSelectAll={(checked) => { if (checked) selectAll(domainDocuments.map((d) => d.id)); else clearSelection(); }}
           onClearSelection={() => clearSelection()}
           bulkActionBar={
             <BulkActionBar selectedCount={selectedIds.size} onClear={clearSelection}>
-              <button onClick={() => { setBulkRenameBase(""); setShowBulkRename(true); }}
-                className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors">
-                <Pencil className="h-4 w-4" /> Rename
-              </button>
-              <button onClick={() => setShowBulkDelete(true)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors">
-                <Trash2 className="h-4 w-4" /> Delete
-              </button>
-              <button onClick={() => setShowBulkLink(true)} disabled={!allBulkUnlinked}
-                className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${theme.lightBg}`}>
-                <Link className="h-4 w-4" /> Link
-              </button>
+              <BulkActionRenameButton onClick={() => { setBulkRenameBase(""); setShowBulkRename(true); }} />
+              <BulkActionDeleteButton onClick={() => setShowBulkDelete(true)} />
+              {canBulkLink && (
+                <button onClick={() => setShowBulkLink(true)} disabled={!allBulkUnlinked}
+                  className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${theme.lightBg}`}>
+                  <Link className="h-4 w-4" /> Link
+                </button>
+              )}
             </BulkActionBar>
           }
           itemCount={filteredDocs.length}
@@ -1092,7 +887,7 @@ function GenericDocStore<T extends { id: string }>({
       )}
 
       {/* Bulk Delete Confirmation */}
-      {showBulkDelete && (anyBulkLinked ? (
+      {showBulkDelete && (anyBulkLinked && canCascadeDelete ? (
         <ConfirmDialog title="Bulk Delete"
           description={`You are about to delete ${selectedIds.size} document${selectedIds.size !== 1 ? "s" : ""}. Some are linked to records.`}
           confirmLabel={bulkProcessing ? "Deleting..." : "Delete"} cancelLabel="Cancel"
@@ -1106,7 +901,7 @@ function GenericDocStore<T extends { id: string }>({
       ))}
 
       {/* Bulk Link Modal */}
-      {showBulkLink && userId && (
+      {showBulkLink && userId && canBulkLink && (
         <BulkLinkModal parentRecords={parentRecords} selectedCount={selectedIds.size} isProcessing={bulkProcessing}
           onClose={() => setShowBulkLink(false)} onSave={handleBulkLinkSave} />
       )}
@@ -1116,16 +911,34 @@ function GenericDocStore<T extends { id: string }>({
         <ConfirmDialog title="Unlink certificate?"
           description={`This will unlink '${docToUnlink.fileName}' from '${docToUnlink.linkedItemName}'. The certificate file will be kept in the store as a standalone file.`}
           confirmLabel="Unlink" cancelLabel="Cancel"
-          onConfirm={() => { const id = docToUnlink.id; setDocToUnlink(null); wrappedOnUnlinkFromParent?.(id, allDocuments.find((x) => x.id === id)?.linked_id || ""); }}
+          onConfirm={async () => {
+            const id = docToUnlink.id;
+            const parentId = allDocuments.find((x) => x.id === id)?.linked_id || "";
+            setDocToUnlink(null);
+            if (userId && adapter.unlinkFromParent) {
+              try {
+                await adapter.unlinkFromParent(userId, id, parentId);
+                await refreshAll();
+              } catch (err) {
+                alert("Failed to unlink: " + (err instanceof Error ? err.message : "Unknown error"));
+              }
+            }
+          }}
           onCancel={() => setDocToUnlink(null)} />
       )}
 
       {/* Tile-level Delete Confirmation */}
-      {docToDelete && (docToDelete.linkedItemName || docToDelete.isLinked) ? (
+      {docToDelete && (docToDelete.linkedItemName || docToDelete.isLinked) && canCascadeDelete ? (
         <ConfirmDialog title="Delete document?"
           description={`This document is linked to ${docToDelete.linkedItemName ? `'${docToDelete.linkedItemName}'` : "an associated record"}.`}
           confirmLabel="Delete" cancelLabel="Cancel" showDeleteFilesCheckbox deleteFilesLabel="Delete associated record"
           onConfirm={(deleteRecord) => confirmDeleteWithMode(deleteRecord ? "cascade" : "unlink")}
+          onCancel={() => setDocToDelete(null)} />
+      ) : docToDelete && (docToDelete.linkedItemName || docToDelete.isLinked) ? (
+        <ConfirmDialog title="Delete document?"
+          description={`This document is linked to ${docToDelete.linkedItemName ? `'${docToDelete.linkedItemName}'` : "an associated record"}.`}
+          confirmLabel="Delete" cancelLabel="Cancel"
+          onConfirm={() => confirmDeleteWithMode("unlink")}
           onCancel={() => setDocToDelete(null)} />
       ) : docToDelete ? (
         <ConfirmDialog title="Delete document?"
@@ -1137,72 +950,110 @@ function GenericDocStore<T extends { id: string }>({
       {/* GenericDomainModal — Add mode (standalone_file) */}
       {isAddingDocument && userId && (
         <GenericDomainModal
-          key="new"
           mode="standalone_file"
-          title="Add Document"
-          onClose={closeStoreAddModal}
+          domain={modalDomain}
+          fields={modalFields}
           userId={userId}
-          attachedDocuments={[]}
-          domain={domain}
-          parentRecords={parentRecords}
-          renderNewRecordForm={renderNewRecordForm}
-          extractNewRecordData={extractNewRecordData}
-          onSave={async (_formData, fileActions) => {
-            const firstNewFile = fileActions.newFiles[0];
-            await handleStoreSave({
-              file: firstNewFile?.file,
-              label: firstNewFile?.label ?? "Document",
-              linkedParentId: fileActions.linkedParentId,
-              newParentRecord: fileActions.newRecordData ?? undefined,
-            });
+          onClose={closeStoreAddModal}
+          onSaved={async (saved) => {
+            const fresh = await adapter.fetchData(userId);
+            setAllRows(fresh.rows);
+            setAllDocuments(fresh.documents);
+            setParentRecords(adapter.deriveParentRecords(fresh.rows));
+            if (saved.linkedId) {
+              // Linked to a (possibly inline-created) parent: jump to the record modal.
+              setModals({ add: false, edit: null });
+              clearHash();
+              const parent = fresh.rows.find((r) => r.id === saved.linkedId);
+              if (parent) setLinkedRecord(parent);
+            } else {
+              // Standalone: stay in the edit modal for the freshly saved doc.
+              const updatedDoc = fresh.documents.find((d) => d.id === saved.id);
+              if (updatedDoc) {
+                setModals({ add: false, edit: updatedDoc });
+                window.history.replaceState(
+                  null,
+                  "",
+                  window.location.pathname + window.location.search + `#edit-document-${saved.id}`,
+                );
+              } else {
+                setModals({ add: false, edit: null });
+                clearHash();
+              }
+            }
           }}
-          onDeleteWithCascade={undefined}
-          deleteLabel="Delete"
         />
       )}
 
       {/* GenericDomainModal — Edit mode (standalone_file) */}
       {editingDocument && userId && (
         <GenericDomainModal
-          key={editingDocument.id}
           mode="standalone_file"
-          title="Edit Document"
-          onClose={closeStoreEditModal}
-          userId={userId}
-          attachedDocuments={[editingDocument]}
-          domain={domain}
-          parentRecords={parentRecords}
-          renderNewRecordForm={renderNewRecordForm}
-          extractNewRecordData={extractNewRecordData}
-          onSave={async (_formData, fileActions) => {
-            const firstNewFile = fileActions.newFiles[0];
-            await handleStoreSave({
-              file: firstNewFile?.file,
-              label: firstNewFile?.label ?? editingDocument?.label ?? "Document",
-              linkedParentId: fileActions.linkedParentId,
-              newParentRecord: fileActions.newRecordData ?? undefined,
-              existingDocument: editingDocument,
-            });
+          domain={modalDomain}
+          target={{
+            type: "document",
+            id: editingDocument.id,
+            data: editingDocument as unknown as Record<string, unknown>,
           }}
-          onDeleteWithCascade={
-            editingDocument && handleStoreDelete
-              ? async (cascadeMode) => { await handleStoreDelete(editingDocument, cascadeMode); }
-              : undefined
-          }
-          deleteLabel="Delete"
-          deleteCascadeDescription={
-            editingDocument?.linked_id
-              ? "This document is linked to a record. Deleting it will also unlink it."
-              : undefined
-          }
-          deleteCascadeFilesLabel="Delete associated record"
+          fields={modalFields}
+          userId={userId}
+          onClose={closeStoreEditModal}
+          onSaved={async (saved) => {
+            const fresh = await adapter.fetchData(userId);
+            setAllRows(fresh.rows);
+            setAllDocuments(fresh.documents);
+            setParentRecords(adapter.deriveParentRecords(fresh.rows));
+            if (saved.linkedId) {
+              setModals({ add: false, edit: null });
+              clearHash();
+              const parent = fresh.rows.find((r) => r.id === saved.linkedId);
+              if (parent) setLinkedRecord(parent);
+            } else {
+              const updatedDoc = fresh.documents.find((d) => d.id === saved.id);
+              if (updatedDoc) {
+                setModals({ add: false, edit: updatedDoc });
+                window.history.replaceState(
+                  null,
+                  "",
+                  window.location.pathname + window.location.search + `#edit-document-${saved.id}`,
+                );
+              } else {
+                setModals({ add: false, edit: null });
+                clearHash();
+              }
+            }
+          }}
+          onDeleted={async () => {
+            await refreshAll();
+          }}
         />
       )}
 
-      {/* Domain-specific modal (e.g., NoteModal, ExpenseModal) */}
-      {linkedRecord && userId && modalSlot?.({
-        linkedRecord, allRows, allDocuments, userId, refreshAll, onClose: closeLinkedRecord,
-      })}
+      {/* Record modal (linked parent record or standalone record) */}
+      {linkedRecord && userId && (
+        <GenericDomainModal
+          mode="record"
+          domain={modalDomain}
+          target={{
+            type: "record",
+            id: linkedRecord.id,
+            data: linkedRecord as unknown as Record<string, unknown>,
+          }}
+          fields={modalFields}
+          userId={userId}
+          onClose={closeLinkedRecord}
+          onSaved={async (_saved, sctx) => {
+            await refreshAll();
+            if (sctx.unlinkedDocIds.length > 0) {
+              // A doc was unlinked from this record: jump to its edit modal.
+              setLinkedRecord(null);
+              const unlinkedId =
+                sctx.unlinkedDocIds[sctx.unlinkedDocIds.length - 1];
+              window.location.hash = `#edit-document-${unlinkedId}`;
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1211,34 +1062,36 @@ function GenericDocStore<T extends { id: string }>({
 // GenericRecordStore — record store (absorbed VaultRecordView)
 // ============================================================
 
+type GenericRecordStoreProps<T extends { id: string }> = GenericStorePageProps & {
+  adapter: RecordStoreAdapter<T>;
+};
+
 function GenericRecordStore<T extends { id: string }>({
-  storeType,
-  domain = "vault",
+  adapter,
+  domain: domainKey,
+  modalFields,
   title,
   description,
   backHref,
   backLabel = "← Back",
-  fetchData,
-  mapRecordToItem,
-  onDeleteRecord,
-  onBulkDeleteRecords,
-  itemName,
-  itemNamePlural,
-  singleDeleteDescription,
-  emptyMessage = "No items to display.",
-  searchPlaceholder = "Search...",
-  tileLayout = "standard",
+  scope,
+  allowAdd = false,
+  tileLayout,
+  searchPlaceholder,
+  emptyMessage,
   headerActions,
   disableSelection = false,
-  onActionClick,
-  recordModalSlot,
 }: GenericRecordStoreProps<T>) {
-  const theme = DOMAIN_THEMES[domain] ?? DOMAIN_THEMES.vault;
+  const theme = DOMAIN_THEMES.vault;
+  const router = useRouter();
 
   const [userId, setUserId] = useState<string | null>(null);
   const [data, setData] = useState<T[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [pageTitle, setPageTitle] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pendingHeaderAction, setPendingHeaderAction] = useState<HeaderAction | null>(null);
 
   // Auth
   useEffect(() => {
@@ -1256,25 +1109,31 @@ function GenericRecordStore<T extends { id: string }>({
     let cancelled = false;
     const load = async () => {
       try {
-        const rows = await fetchData(userId);
-        if (!cancelled) setData(rows);
+        const res = await adapter.fetchData(userId, scope);
+        if (!cancelled) {
+          setData(res.rows);
+          setDocuments(res.documents ?? []);
+          setPageTitle(res.pageTitle ?? null);
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load data");
       }
     };
     load();
     return () => { cancelled = true; };
-  }, [userId, fetchData]);
+  }, [userId, adapter, scope]);
 
   const reload = useCallback(async () => {
     if (!userId) return;
     try {
-      const rows = await fetchData(userId);
-      setData(rows);
+      const res = await adapter.fetchData(userId, scope);
+      setData(res.rows);
+      setDocuments(res.documents ?? []);
+      setPageTitle(res.pageTitle ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
     }
-  }, [userId, fetchData]);
+  }, [userId, adapter, scope]);
 
   // Selection
   const { selectedIds, toggleSelection, selectAll, clearSelection } = useSelection();
@@ -1302,33 +1161,34 @@ function GenericRecordStore<T extends { id: string }>({
   // Delete confirmation (inline, not via useDeleteConfirm to use our callbacks)
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-  const plural = itemNamePlural ?? `${itemName}s`;
+  const plural = adapter.itemNamePlural ?? `${adapter.itemName}s`;
 
   const handleSingleDelete = useCallback(async () => {
-    if (!itemToDelete) return;
-    await onDeleteRecord(itemToDelete);
+    if (!itemToDelete || !userId) return;
+    await adapter.deleteRecord(userId, itemToDelete);
     setItemToDelete(null);
     clearSelection();
     await reload();
-  }, [itemToDelete, onDeleteRecord, clearSelection, reload]);
+  }, [itemToDelete, userId, adapter, clearSelection, reload]);
 
   const handleBulkDelete = useCallback(async () => {
-    await onBulkDeleteRecords(Array.from(selectedIds));
+    if (!userId) return;
+    await adapter.bulkDeleteRecords(userId, Array.from(selectedIds));
     setIsBulkDeleting(false);
     clearSelection();
     await reload();
-  }, [selectedIds, onBulkDeleteRecords, clearSelection, reload]);
+  }, [selectedIds, userId, adapter, clearSelection, reload]);
 
   // Derived items
-  const items: VaultRecordItem[] = useMemo(() => data.map(mapRecordToItem), [data, mapRecordToItem]);
+  const items: VaultRecordItem[] = useMemo(
+    () => data.map((r) => adapter.mapRecordToItem(r, documents)),
+    [data, adapter, documents],
+  );
 
   // Bulk actions bar
   const bulkActions = (
     <BulkActionBar selectedCount={selectedIds.size} onClear={clearSelection}>
-      <button onClick={() => setIsBulkDeleting(true)}
-        className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors">
-        <Trash2 className="h-4 w-4" /> Delete
-      </button>
+      <BulkActionDeleteButton onClick={() => setIsBulkDeleting(true)} />
     </BulkActionBar>
   );
 
@@ -1339,18 +1199,22 @@ function GenericRecordStore<T extends { id: string }>({
 
   const handleActionClick = useCallback(
     (id: string) => {
-      if (onActionClick) { onActionClick(id); return; }
+      if (adapter.getRowHref) {
+        const record = data.find((r) => r.id === id);
+        if (record) router.push(adapter.getRowHref(record));
+        return;
+      }
       const record = data.find((r) => r.id === id);
       if (record) setModalRecord(record);
     },
-    [data, onActionClick],
+    [data, adapter, router],
   );
 
   const closeModal = useCallback(() => { setModalRecord(undefined); reload(); }, [reload]);
 
   // Search / view state
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useLocalStorage<"tiles" | "list">("store_view_" + (domain || storeType), "tiles");
+  const [viewMode, setViewMode] = useLocalStorage<"tiles" | "list">("store_view_" + domainKey, "tiles");
 
   const filtered = useMemo(() => {
     if (!searchQuery) return items;
@@ -1359,6 +1223,8 @@ function GenericRecordStore<T extends { id: string }>({
       item.title.toLowerCase().includes(q) || item.values.some((v) => !v.isSecret && v.value.toLowerCase().includes(q)),
     );
   }, [items, searchQuery]);
+
+  const effectiveTileLayout = tileLayout ?? adapter.tileLayout ?? "standard";
 
   // --- Tile/list renderers ---
   const renderListRow = (i: number) => {
@@ -1374,7 +1240,7 @@ function GenericRecordStore<T extends { id: string }>({
         )}
         {/* Name + values: stacked on mobile, side-by-side columns on desktop */}
         <div className="flex flex-col sm:flex-row flex-1 min-w-0 items-start sm:items-center gap-4">
-          {tileLayout === "body-only" ? (
+          {effectiveTileLayout === "body-only" ? (
             <div className="w-full sm:w-1/3 sm:min-w-[120px] pt-0.5 flex items-start">
               <div className="flex-1 min-w-0 flex items-center gap-1 rounded px-1 py-2 -mx-1 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors cursor-text" onClick={(e) => e.stopPropagation()}>
                 <span className="text-base text-zinc-700 dark:text-zinc-300 font-mono overflow-x-auto whitespace-nowrap flex-1 min-w-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">{item.title}</span>
@@ -1420,8 +1286,8 @@ function GenericRecordStore<T extends { id: string }>({
               <input type="checkbox" checked={isSelected} onChange={(e) => toggleSelection(item.id, e.target.checked)} onClick={(e) => e.stopPropagation()}
                 className={`h-4 w-4 shrink-0 rounded border-zinc-300 dark:border-zinc-600 dark:bg-zinc-800 ${theme.inputFocus} transition-opacity ${isSelected ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"}`} />
             )}
-            <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100" title={tileLayout === "standard" ? item.title : undefined}>
-              {tileLayout === "standard" ? item.title : " "}
+            <span className="block truncate text-sm font-semibold text-zinc-900 dark:text-zinc-100" title={effectiveTileLayout === "standard" ? item.title : undefined}>
+              {effectiveTileLayout === "standard" ? item.title : " "}
             </span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
@@ -1437,7 +1303,7 @@ function GenericRecordStore<T extends { id: string }>({
           </div>
         </div>
         <div className="flex flex-col flex-1 p-3 gap-2 justify-end overflow-hidden">
-          {tileLayout === "body-only" && (
+          {effectiveTileLayout === "body-only" && (
             <div className="flex flex-col overflow-hidden">
               <div className="flex items-center gap-1 rounded px-1 py-2 -mx-1 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors cursor-text" onClick={(e) => e.stopPropagation()}>
                 <span className="text-base text-zinc-700 dark:text-zinc-300 font-mono overflow-x-auto whitespace-nowrap flex-1 min-w-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">{item.title}</span>
@@ -1464,26 +1330,37 @@ function GenericRecordStore<T extends { id: string }>({
         {backHref && <BackButton href={backHref}>{backLabel}</BackButton>}
         <div className="flex w-full items-end justify-between">
           <div>
-            {title && <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{title}</h1>}
+            {title && <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{pageTitle ?? title}</h1>}
             {description && <p className="mt-1 text-sm font-normal text-zinc-500 dark:text-zinc-400">{description}</p>}
           </div>
-          {headerActions && <div>{headerActions}</div>}
+          {headerActions && (
+            <HeaderActionsArea
+              actions={headerActions}
+              pendingAction={pendingHeaderAction}
+              onAction={(action) => void action.onAction()}
+              onRequireConfirm={setPendingHeaderAction}
+              onConfirm={() => {
+                const action = pendingHeaderAction;
+                setPendingHeaderAction(null);
+                if (action) void action.onAction();
+              }}
+              onCancelConfirm={() => setPendingHeaderAction(null)}
+            />
+          )}
         </div>
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">{error}</div>
-      )}
+      {error && <ErrorBanner message={error} onRetry={userId ? () => reload() : undefined} />}
 
       <BoxContainer className="flex flex-col h-full w-full space-y-6">
         <DataListView
           viewMode={viewMode} onViewModeChange={setViewMode}
           searchQuery={searchQuery} onSearchChange={setSearchQuery}
-          searchPlaceholder={searchPlaceholder}
+          searchPlaceholder={searchPlaceholder ?? adapter.searchPlaceholder ?? "Search..."}
           isLoading={isLoading} isEmpty={items.length === 0}
           isFilteredEmpty={filtered.length === 0 && items.length > 0}
-          emptyMessage={emptyMessage}
-          onAdd={userId ? () => setModalRecord(null) : undefined}
+          emptyMessage={emptyMessage ?? adapter.emptyMessage ?? "No items to display."}
+          onAdd={allowAdd && userId ? () => setModalRecord(null) : undefined}
           selectionEnabled={!disableSelection} selectedCount={selectedCount} totalCount={filtered.length}
           onSelectAll={handleSelectAll} onClearSelection={() => handleSelectAll(false)}
           bulkActionBar={bulkActions}
@@ -1496,15 +1373,34 @@ function GenericRecordStore<T extends { id: string }>({
         />
       </BoxContainer>
 
-      {/* Domain modal */}
-      {modalRecord !== undefined && userId && recordModalSlot && (
-        recordModalSlot({ record: modalRecord, userId, onSaved: handleSaved, onClose: closeModal })
+      {/* Record modal */}
+      {modalRecord !== undefined && userId && (
+        <GenericDomainModal
+          mode="record"
+          domain={domainKey}
+          scope={scope}
+          target={
+            modalRecord
+              ? {
+                  type: "record",
+                  id: modalRecord.id,
+                  data: modalRecord as unknown as Record<string, unknown>,
+                }
+              : undefined
+          }
+          fields={modalFields}
+          userId={userId}
+          onClose={closeModal}
+          onSaved={async (saved) => {
+            if (saved.data) handleSaved(saved.data as unknown as T);
+          }}
+        />
       )}
 
       {/* Delete confirmation modals */}
       {itemToDelete && (
-        <ConfirmDialog title={`Delete ${itemName}?`}
-          description={singleDeleteDescription ?? `This will permanently delete this ${itemName}. This action cannot be undone.`}
+        <ConfirmDialog title={`Delete ${adapter.itemName}?`}
+          description={adapter.singleDeleteDescription ?? `This will permanently delete this ${adapter.itemName}. This action cannot be undone.`}
           confirmLabel="Delete" cancelLabel="Cancel" onConfirm={handleSingleDelete} onCancel={() => setItemToDelete(null)} />
       )}
       {isBulkDeleting && (

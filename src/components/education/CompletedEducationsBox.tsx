@@ -55,11 +55,7 @@ export default function CompletedEducationsBox({
         header: "Provider",
         sizing: "flex",
         weight: 1,
-        render: (edu) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {edu.provider}
-          </span>
-        ),
+        token: { type: "text", accessor: (edu) => edu.provider, color: "muted" },
       },
       EDU_PRIORITY,
       colDate<Education>({

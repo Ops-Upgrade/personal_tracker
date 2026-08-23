@@ -67,9 +67,15 @@ export default function NotesBox({
     [],
   );
 
+  // Newest 5, in chronological order: ascending sort + tail slice keeps
+  // same-day rows in their original order.
+  const sorted = [...items]
+    .sort((a, b) => new Date(a.dateStr).getTime() - new Date(b.dateStr).getTime())
+    .slice(-5);
+
   return (
     <GenericCompletedBox
-      items={items}
+      items={sorted}
       isLoading={isLoading}
       onOpenExpanded={onOpenExpanded}
       title="Notes"

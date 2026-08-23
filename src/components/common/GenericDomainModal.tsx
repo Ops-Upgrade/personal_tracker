@@ -7,7 +7,6 @@ import {
   useState,
   useMemo,
   useCallback,
-  type ReactNode,
 } from "react";
 import type { Document } from "@/types/document";
 import DocPreviewPanel from "./DocPreviewPanel";
@@ -31,6 +30,13 @@ import { Pencil } from "lucide-react";
 import { downloadDocumentFile } from "@/api/common/documentStorage";
 import { trunc } from "@/lib/viewHelpers";
 import { getUniqueFileName } from "@/lib/viewHelpers";
+import {
+  getModalDomainConfig,
+  type ModalDomainContext,
+  type ModalSavedContext,
+  type ModalSavedResult,
+  type ModalTarget,
+} from "./modalDomainConfig";
 
 // ============================================================================
 // Types
@@ -98,6 +104,8 @@ export interface FieldDef {
   minHeight?: string;
   /** When true, renders an inline copy button inside the input (see InputField). */
   isCopyable?: boolean;
+  /** Create-mode default, merged into the form before initialData overrides. */
+  defaultValue?: unknown;
 }
 
 interface ToastConfig {
@@ -112,67 +120,70 @@ interface ToastConfig {
 
 const EMPTY_FIELDS: FieldDef[] = [];
 const EMPTY_DOCS: Document[] = [];
-const EMPTY_RECORDS: StoreParentRecord[] = [];
 
 // ============================================================================
 // GenericDomainModal
 // ============================================================================
 
 export interface GenericDomainModalProps {
-  // ── Mode ──
+  // ── Mode & domain ──
   /** "record" = left form + optional right files; "standalone_file" = left link/create + right single file */
   mode: "record" | "standalone_file";
+  /** Central domain key — resolves feature flags, defaults, and save/delete adapters. */
+  domain: string;
+  /** Declarative target. {type:"document", id} → standalone file; {type:"record", id} → record.
+   *  `data` carries the hydrated row for edit mode; a missing `target` means create. */
+  target?: ModalTarget;
+  /** Per-request scope (e.g. { bankId } for vault_bank_details). */
+  scope?: Record<string, string>;
 
   // ── Basic modal config ──
-  title: string;
+  /** Show/hide the modal. Closed modals render nothing (defaults to true). */
+  isOpen?: boolean;
   onClose: () => void;
-  /** Optional saved-callback: called after successful save (for modals that want to close) */
-  onSaved?: () => void;
+  /** Optional title override (defaults to the domain config's title). */
+  title?: string;
 
-  // ── Form schema (record mode) ──
-  /** Field definitions for the form. Only used in record mode. */
+  // ── Form schema (record mode + inline parent creation) ──
+  /** Field definitions for the form. Used in record mode and standalone inline creation. */
   fields?: FieldDef[];
-  /** Initial values keyed by field key. Also used as the baseline for dirty checking. */
+  /** Initial values keyed by field key, merged over schema defaults (create mode)
+   *  and the domain's edit mapping. Also used as the baseline for dirty checking. */
   initialData?: Record<string, unknown>;
   /** Optional: group field keys into rows. Each sub-array = one grid row.
    *  Fields in the same row share equal column width (up to sm:grid-cols-3).
-   *  If omitted, each field gets its own full-width row. */
+   *  If omitted, the domain config's layout is used, then one field per row. */
   layout?: string[][];
 
-  // ── File handling (opt-in) ──
+  // ── File handling (opt-in — defaults come from the domain config) ──
   /** Enables the right file pane for record mode. Ignored for standalone_file mode (always on). */
   allowFiles?: boolean;
   /** When false, hides the "Unlink" file action and the link-to-existing-document
-   *  dropdown. Use for domains that don't support linking standalone files (e.g. expense, medical).
-   *  Defaults to true (linking enabled). */
+   *  dropdown. Use for domains that don't support linking standalone files (e.g. expense, medical). */
   allowLinking?: boolean;
-  /** User ID for downloading/previewing encrypted files */
+  /** User ID for context fetching and encrypted file operations */
   userId?: string;
-  /** Documents currently attached to the record being edited */
-  attachedDocuments?: Document[];
-  /** Standalone (unlinked) documents available for linking */
-  standaloneDocuments?: Document[];
-  /** Domain filter label used in the link-dropdown placeholder (e.g. "education", "taskmanager") */
-  domain?: string;
 
-  // ── Standalone file mode: parent linking ──
-  parentRecords?: StoreParentRecord[];
-  renderNewRecordForm?: (opts: {
-    disabled: boolean;
-    isSaving: boolean;
-  }) => ReactNode;
-  extractNewRecordData?: () => Record<string, string> | null;
-
-  // ── Actions ──
-  /** Called on save with form data + file actions. Throw on error; the shell catches + displays it. */
-  onSave: (formData: Record<string, unknown>, fileActions: FileActions) => Promise<void>;
-  /** Simple delete (no cascade). Show confirm dialog → call this. Throw on error. */
+  // ── Save / delete ──
+  /** Called after a successful save with the saved result and outcome context. */
+  onSaved?: (
+    saved: ModalSavedResult,
+    ctx: ModalSavedContext,
+  ) => void | Promise<void>;
+  /** Called after a successful delete (before the modal closes). */
+  onDeleted?: () => void | Promise<void>;
+  /** Escape hatch: custom save overriding the domain adapter. Throw on error. */
+  onSave?: (
+    formData: Record<string, unknown>,
+    fileActions: FileActions,
+  ) => Promise<void>;
+  /** Escape hatch: simple delete (no cascade). */
   onDelete?: () => Promise<void>;
-  /** Cascade-aware delete. Shows confirm dialog with "delete associated files" checkbox. */
+  /** Escape hatch: cascade-aware delete. */
   onDeleteWithCascade?: (
     cascadeMode: "unlink" | "cascade",
   ) => Promise<void>;
-  /** Label for delete button */
+  /** Label for delete button (defaults to the domain config's label) */
   deleteLabel?: string;
   /** Override the cascade-delete description text */
   deleteCascadeDescription?: string;
@@ -199,33 +210,70 @@ function normaliseRichtext(value: unknown): string {
   return stripped;
 }
 
-export default function GenericDomainModal({
+/** Inline parent-creation form defaults: field defaultValue as strings
+ *  (checkboxes as "true"/"false" — the inline form's string value model). */
+function buildInlineDefaults(fields: FieldDef[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const field of fields) {
+    if (field.defaultValue === undefined) {
+      out[field.key] = "";
+    } else if (field.type === "checkbox") {
+      out[field.key] = field.defaultValue ? "true" : "false";
+    } else {
+      out[field.key] = String(field.defaultValue);
+    }
+  }
+  return out;
+}
+
+export default function GenericDomainModal(props: GenericDomainModalProps) {
+  // Render nothing while closed, so the inner component can unconditionally
+  // hold all hooks (Rules of Hooks).
+  if (props.isOpen === false) return null;
+  return <GenericDomainModalInner {...props} />;
+}
+
+function GenericDomainModalInner({
   mode,
-  title,
+  domain,
+  target,
+  scope,
   onClose,
-  onSaved,
+  title,
   fields = EMPTY_FIELDS,
   initialData = {},
   layout,
-  allowFiles = false,
-  allowLinking = true,
+  allowFiles,
+  allowLinking,
   userId = "",
-  attachedDocuments = EMPTY_DOCS,
-  standaloneDocuments = EMPTY_DOCS,
-  domain = "",
-  parentRecords = EMPTY_RECORDS,
-  renderNewRecordForm,
-  extractNewRecordData,
+  onSaved,
+  onDeleted,
   onSave,
   onDelete,
   onDeleteWithCascade,
-  deleteLabel = "Delete",
+  deleteLabel,
   deleteCascadeDescription,
   deleteCascadeFilesLabel,
   onDownloadDocument,
   maxWidthClassName,
   zClassName = "z-40",
-}: GenericDomainModalProps) {
+}: Omit<GenericDomainModalProps, "isOpen">) {
+  // =========================================================================
+  // Domain config (feature flags + save/delete routing)
+  // =========================================================================
+  const config = useMemo(
+    () => getModalDomainConfig(domain, scope),
+    [domain, scope],
+  );
+
+  const isStandaloneFile = mode === "standalone_file";
+  const targetType: "record" | "document" =
+    target?.type ?? (isStandaloneFile ? "document" : "record");
+  const targetKey = `${targetType}:${target?.id ?? ""}`;
+
+  const effAllowFiles = allowFiles ?? config.allowFiles;
+  const effAllowLinking = allowLinking ?? config.allowLinking;
+
   // =========================================================================
   // Base UI state (was useModalBaseState)
   // =========================================================================
@@ -250,26 +298,76 @@ export default function GenericDomainModal({
   );
 
   // =========================================================================
+  // Domain context (documents + parent records) — fetched internally
+  // =========================================================================
+  const [ctx, setCtx] = useState<ModalDomainContext>({
+    documents: [],
+    parentRecords: [],
+  });
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    config
+      .fetchContext(userId)
+      .then((fresh) => {
+        if (!cancelled) setCtx(fresh);
+      })
+      .catch(() => {
+        // Parent pages surface data errors; the modal degrades to empty panes.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [config, userId, targetKey]);
+
+  // =========================================================================
+  // Derived: attached / standalone documents
+  // =========================================================================
+  const attachedDocuments = useMemo(() => {
+    if (isStandaloneFile) {
+      // The document being edited is the single "attached" file.
+      return target
+        ? ctx.documents.filter((d) => d.id === target.id)
+        : EMPTY_DOCS;
+    }
+    if (!effAllowFiles || !target || !config.docDomain) return EMPTY_DOCS;
+    const linkedId = target.id;
+    return ctx.documents.filter(
+      (d) => d.domain === config.docDomain && d.linked_id === linkedId,
+    );
+  }, [isStandaloneFile, target, ctx.documents, effAllowFiles, config.docDomain]);
+
+  const standaloneDocuments = useMemo(() => {
+    if (isStandaloneFile) return EMPTY_DOCS;
+    if (!effAllowFiles || !effAllowLinking || !config.docDomain) return EMPTY_DOCS;
+    return ctx.documents.filter(
+      (d) => d.domain === config.docDomain && !d.linked_id,
+    );
+  }, [isStandaloneFile, effAllowFiles, effAllowLinking, config.docDomain, ctx.documents]);
+
+  // =========================================================================
   // Form state (schema-driven)
   // =========================================================================
   // Baseline for dirty checking: tracks the last-known-saved values so the
   // dirty check resets after a successful save (initialData stays stale).
-  const [baselineData, setBaselineData] = useState<Record<string, unknown>>(initialData);
-  const [formData, setFormData] =
-    useState<Record<string, unknown>>(initialData);
+  const [baselineData, setBaselineData] = useState<Record<string, unknown>>({});
+  const [formData, setFormData] = useState<Record<string, unknown>>({});
 
-  // Sync formData when initialData changes (e.g. record switch, edit→create)
-  const initialDataKey = JSON.stringify(initialData);
-  const [prevDataKey, setPrevDataKey] = useState(initialDataKey);
-  if (initialDataKey !== prevDataKey) {
-    setPrevDataKey(initialDataKey);
-    setBaselineData({ ...initialData });
-    setFormData({ ...initialData });
-  }
+  // Inline parent-creation form state (standalone mode, string values)
+  const [inlineFormData, setInlineFormData] = useState<Record<string, string>>(
+    buildInlineDefaults(fields),
+  );
 
   const updateField = useCallback(
     (key: string, value: unknown) =>
       setFormData((prev) => ({ ...prev, [key]: value })),
+    [],
+  );
+
+  const updateInlineField = useCallback(
+    (key: string, value: string) =>
+      setInlineFormData((prev) => ({ ...prev, [key]: value })),
     [],
   );
 
@@ -310,6 +408,91 @@ export default function GenericDomainModal({
     setLinkSearchQuery("");
     setLinkDropdownOpen(false);
   }, []);
+
+  // Standalone file mode: parent record dropdown state (declared before the
+  // form-init effect, which resets these on every target/schema change).
+  const [parentLinkedId, setParentLinkedId] = useState("");
+  const [parentSearchQuery, setParentSearchQuery] = useState("");
+  const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
+
+  // Re-initialize the form once per target identity (create → edit, record
+  // switch). Schema defaults + async createDefaults form the create baseline;
+  // edit mode maps the hydrated row through the domain config; explicit
+  // initialData overrides both. The effect re-runs only when targetKey
+  // changes, so it reads the latest inputs through a snapshot ref instead of
+  // depending on raw object refs: parents build `target`/`fields` inline
+  // (fresh refs every render) and `initialData` defaults to a fresh `{}` on
+  // every modal render — raw refs would either loop the effect forever or
+  // cancel an in-flight async init, silently dropping create defaults.
+  const initInputsRef = useRef({
+    fields,
+    initialData,
+    targetData: target?.data,
+    targetType,
+    isStandaloneFile,
+    config,
+  });
+  useLayoutEffect(() => {
+    initInputsRef.current = {
+      fields,
+      initialData,
+      targetData: target?.data,
+      targetType,
+      isStandaloneFile,
+      config,
+    };
+  });
+  useEffect(() => {
+    const {
+      fields: curFields,
+      initialData: curInitialData,
+      targetData,
+      targetType: curTargetType,
+      isStandaloneFile: curStandalone,
+      config: curConfig,
+    } = initInputsRef.current;
+
+    let cancelled = false;
+    (async () => {
+      const base: Record<string, unknown> = {};
+      for (const f of curFields) {
+        if (f.defaultValue !== undefined) base[f.key] = f.defaultValue;
+      }
+      let data: Record<string, unknown>;
+      if (targetData && curTargetType === "record") {
+        data = { ...curConfig.initialDataFor(targetData), ...(curInitialData ?? {}) };
+      } else if (!curStandalone) {
+        const defaults = curConfig.createDefaults
+          ? await curConfig.createDefaults()
+          : {};
+        data = { ...base, ...defaults, ...(curInitialData ?? {}) };
+      } else {
+        // Standalone mode: the left pane holds the inline parent form, not
+        // the record form — an empty baseline keeps the dirty check quiet.
+        data = { ...base };
+      }
+      if (cancelled) return;
+      setBaselineData(data);
+      setFormData(data);
+    })();
+
+    // Any target change resets staged file state and inline form.
+    /* eslint-disable react-hooks/set-state-in-effect -- synchronous
+       open-time reset: staged files and the inline form must not leak across
+       targets, and these setters are stable by contract. */
+    resetFileState();
+    setParentLinkedId("");
+    setParentSearchQuery("");
+    setParentDropdownOpen(false);
+    setInlineFormData(buildInlineDefaults(curFields));
+    hasAutoSelectedRef.current = false;
+    pendingAutoSelectAfterSaveRef.current = false;
+    /* eslint-enable react-hooks/set-state-in-effect */
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetKey, resetFileState]);
 
   // =========================================================================
   // Derived: files array for the file panel
@@ -712,7 +895,7 @@ export default function GenericDomainModal({
   }, []);
 
   // =========================================================================
-  // Save handler
+  // Save handler — routes through the domain config (or the onSave override)
   // =========================================================================
 
   const handleSave = async () => {
@@ -745,25 +928,61 @@ export default function GenericDomainModal({
           ? parentLinkedId || undefined
           : undefined,
         newRecordData: isStandaloneFile
-          ? (extractNewRecordData?.() ?? null)
+          ? extractInlineNewRecordData()
           : null,
       };
 
-      await onSave(trimmedFormData, fileActions);
+      let saved: ModalSavedResult;
+      if (isStandaloneFile) {
+        if (!config.saveDocument) {
+          throw new Error("Documents are not supported for this domain.");
+        }
+        saved = await config.saveDocument(userId, target ?? null, fileActions);
+      } else if (onSave) {
+        await onSave(trimmedFormData, fileActions);
+        saved = {
+          id: target?.id ?? "",
+          name: "",
+          data: target?.data,
+        };
+      } else {
+        saved = await config.saveRecord(
+          userId,
+          target ?? null,
+          trimmedFormData,
+          fileActions,
+          ctx,
+        );
+      }
 
       // Sync formData with trimmed values so dirty check resets
       setFormData(trimmedFormData);
       setBaselineData(trimmedFormData);
 
-      // Clear file state on success
+      // Clear file + inline form state on success
       resetFileState();
+      setParentLinkedId("");
+      setInlineFormData(buildInlineDefaults(fields));
 
       // Arm the post-save auto-select: once the files list refreshes from the
       // server, preview the first file instead of the plain list.
       pendingAutoSelectAfterSaveRef.current = true;
 
       triggerToast("✓ Saved", "success");
-      onSaved?.();
+      await onSaved?.(saved, {
+        wasCreate: !target,
+        unlinkedDocIds: fileActions.docsToUnlink,
+      });
+
+      // Refresh internal context so the file pane reflects the save.
+      if (userId) {
+        config
+          .fetchContext(userId)
+          .then(setCtx)
+          .catch(() => {
+            // Parent pages surface data errors; the modal keeps its current panes.
+          });
+      }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to save.",
@@ -774,7 +993,7 @@ export default function GenericDomainModal({
   };
 
   // =========================================================================
-  // Delete handler
+  // Delete handler — routes through the domain config (or delete overrides)
   // =========================================================================
 
   const handleDeleteClick = () => {
@@ -788,20 +1007,45 @@ export default function GenericDomainModal({
     setIsSaving(true);
     setError(null);
     try {
-      if (
-        onDeleteWithCascade &&
-        typeof cascadeModeOrDeleteFiles === "boolean"
-      ) {
-        // Cascade dialog: user chose cascade or unlink
-        await onDeleteWithCascade(
-          cascadeModeOrDeleteFiles ? "cascade" : "unlink",
-        );
-      } else if (onDeleteWithCascade) {
-        // Simple dialog: default to unlink
-        await onDeleteWithCascade("unlink");
-      } else if (onDelete) {
-        await onDelete();
+      if (target) {
+        if (isStandaloneFile) {
+          const cascadeMode =
+            typeof cascadeModeOrDeleteFiles === "boolean"
+              ? cascadeModeOrDeleteFiles
+                ? "cascade"
+                : "unlink"
+              : "unlink";
+          if (!config.deleteDocument) {
+            throw new Error("Documents are not supported for this domain.");
+          }
+          await config.deleteDocument(userId, target, cascadeMode);
+        } else if (
+          onDeleteWithCascade &&
+          typeof cascadeModeOrDeleteFiles === "boolean"
+        ) {
+          // Cascade dialog: user chose cascade or unlink
+          await onDeleteWithCascade(
+            cascadeModeOrDeleteFiles ? "cascade" : "unlink",
+          );
+        } else if (onDeleteWithCascade) {
+          // Simple dialog: default to unlink
+          await onDeleteWithCascade("unlink");
+        } else if (onDelete) {
+          await onDelete();
+        } else {
+          // Domain config: "simple" kinds always cascade their files;
+          // "cascade" kinds follow the confirm-dialog checkbox.
+          const cascadeMode =
+            config.deleteKind === "cascade" &&
+            typeof cascadeModeOrDeleteFiles === "boolean"
+              ? cascadeModeOrDeleteFiles
+                ? "cascade"
+                : "unlink"
+              : "cascade";
+          await config.deleteRecord(userId, target, cascadeMode);
+        }
       }
+      await onDeleted?.();
       onClose();
     } catch (err) {
       setError(
@@ -909,9 +1153,7 @@ export default function GenericDomainModal({
   // Standalone file mode: parent record dropdown
   // =========================================================================
 
-  const [parentLinkedId, setParentLinkedId] = useState("");
-  const [parentSearchQuery, setParentSearchQuery] = useState("");
-  const [parentDropdownOpen, setParentDropdownOpen] = useState(false);
+  const parentRecords = ctx.parentRecords;
 
   const filteredParents = useMemo(() => {
     if (!parentSearchQuery.trim()) return parentRecords;
@@ -933,7 +1175,6 @@ export default function GenericDomainModal({
   // Layout decisions
   // =========================================================================
 
-  const isStandaloneFile = mode === "standalone_file";
   const hasFiles = files.length > 0;
 
   // For standalone_file: max 1 file, upload only allowed if no file yet
@@ -943,16 +1184,13 @@ export default function GenericDomainModal({
   // Show right panel if:
   // - record mode with allowFiles (always show upload zone, even empty)
   // - standalone_file mode (always show)
-
-
-  // For record mode without files: no right panel at all
   const actualShowRightPanel = isStandaloneFile
     ? true
-    : allowFiles;
+    : effAllowFiles;
 
   const computedMaxWidth =
     maxWidthClassName ??
-    (actualShowRightPanel ? "max-w-6xl" : "max-w-md");
+    (actualShowRightPanel ? "max-w-6xl" : "max-w-lg");
 
   // =========================================================================
   // Link dropdown extras (for record mode with standalone document linking)
@@ -960,7 +1198,7 @@ export default function GenericDomainModal({
 
   const linkDropdownExtras = useMemo(() => {
     if (isStandaloneFile) return null;
-    if (!allowFiles) return null;
+    if (!effAllowFiles) return null;
     if (standaloneDocuments.length === 0 && !stagedLinkDocId) return null;
 
     // Build display names (with dedup numbering)
@@ -1069,7 +1307,7 @@ export default function GenericDomainModal({
     );
   }, [
     isStandaloneFile,
-    allowFiles,
+    effAllowFiles,
     standaloneDocuments,
     stagedLinkDocId,
     linkSearchQuery,
@@ -1089,15 +1327,20 @@ export default function GenericDomainModal({
   // For record mode, show cascade when there are linked files (attached docs).
   const showDeleteCascade = isStandaloneFile
     ? linkedDocCount > 0 && !!attachedDocuments[0]?.linked_id
-    : linkedDocCount > 0;
+    : linkedDocCount > 0 &&
+      (config.deleteKind === "cascade" || !!onDeleteWithCascade);
 
   // =========================================================================
   // Dynamic field rendering (schema-driven form)
   // =========================================================================
 
   const renderField = useCallback(
-    (field: FieldDef) => {
-      const value = formData[field.key] ?? "";
+    (
+      field: FieldDef,
+      value: unknown,
+      onChange: (value: unknown) => void,
+      opts?: { checkboxAsString?: boolean; defaultMinHeight?: string },
+    ) => {
       const disabled = isSaving;
 
       switch (field.type) {
@@ -1107,7 +1350,7 @@ export default function GenericDomainModal({
               key={field.key}
               label={field.label}
               value={value as string}
-              onChange={(v) => updateField(field.key, v)}
+              onChange={onChange}
               placeholder={field.placeholder}
               disabled={disabled}
               isCopyable={field.isCopyable}
@@ -1120,7 +1363,7 @@ export default function GenericDomainModal({
               label={field.label}
               type="date"
               value={value as string}
-              onChange={(v) => updateField(field.key, v)}
+              onChange={onChange}
               disabled={disabled}
             />
           );
@@ -1131,7 +1374,7 @@ export default function GenericDomainModal({
               label={field.label}
               type="number"
               value={value as string}
-              onChange={(v) => updateField(field.key, v)}
+              onChange={onChange}
               placeholder={field.placeholder}
               min={field.min}
               step={field.step}
@@ -1145,7 +1388,7 @@ export default function GenericDomainModal({
               label={field.label}
               type="password"
               value={value as string}
-              onChange={(v) => updateField(field.key, v)}
+              onChange={onChange}
               placeholder={field.placeholder}
               disabled={disabled}
               isCopyable={field.isCopyable}
@@ -1157,7 +1400,7 @@ export default function GenericDomainModal({
               key={field.key}
               label={field.label}
               value={value as string}
-              onChange={(v) => updateField(field.key, v)}
+              onChange={onChange}
               options={field.options || []}
               disabled={disabled}
             />
@@ -1170,19 +1413,28 @@ export default function GenericDomainModal({
               </label>
               <RichTextEditor
                 value={value as string}
-                onChange={(v) => updateField(field.key, v)}
+                onChange={onChange}
                 disabled={disabled}
-                minHeight={field.minHeight || "8rem"}
+                minHeight={field.minHeight || opts?.defaultMinHeight || "8rem"}
               />
             </div>
           );
         case "checkbox":
-          return (
+          return opts?.checkboxAsString ? (
+            <CheckboxField
+              key={field.key}
+              label={field.label}
+              checked={value === "true"}
+              onChange={(v) => onChange(v ? "true" : "false")}
+              disabled={disabled}
+              id={field.key}
+            />
+          ) : (
             <CheckboxField
               key={field.key}
               label={field.label}
               checked={!!value}
-              onChange={(v) => updateField(field.key, v)}
+              onChange={onChange}
               disabled={disabled}
               id={field.key}
             />
@@ -1191,48 +1443,114 @@ export default function GenericDomainModal({
           return null;
       }
     },
-    [formData, isSaving, updateField],
+    [isSaving],
   );
+
+  const effLayout = layout ?? config.layout;
 
   const renderFormFields = useMemo(() => {
     if (fields.length === 0) return null;
 
     const fieldMap = new Map(fields.map((f) => [f.key, f]));
+    const rows =
+      effLayout && effLayout.length > 0
+        ? effLayout
+        : fields.map((f) => [f.key]);
 
-    if (layout && layout.length > 0) {
-      return layout.map((row, rowIdx) => {
-        const cols = Math.min(row.length, 3);
-        const colClass =
-          cols >= 3
-            ? "sm:grid-cols-3"
-            : cols === 2
-              ? "sm:grid-cols-2"
-              : "sm:grid-cols-1";
-        return (
-          <div key={rowIdx} className={`grid gap-3 ${colClass}`}>
-            {row.map((key) => {
-              const field = fieldMap.get(key);
-              return field ? renderField(field) : null;
-            })}
-          </div>
-        );
-      });
-    }
-
-    // No layout: one field per row
     return (
       <div className="flex flex-col space-y-3">
-        {fields.map((f) => renderField(f))}
+        {rows.map((row, rowIdx) => {
+          const cols = Math.min(row.length, 3);
+          const colClass =
+            cols >= 3
+              ? "sm:grid-cols-3"
+              : cols === 2
+                ? "sm:grid-cols-2"
+                : "sm:grid-cols-1";
+          return (
+            <div key={rowIdx} className={`grid gap-3 ${colClass}`}>
+              {row.map((key) => {
+                const field = fieldMap.get(key);
+                if (!field) return null;
+                const value = formData[field.key] ?? "";
+                return renderField(field, value, (v) =>
+                  updateField(field.key, v),
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     );
-  }, [fields, layout, renderField]);
+  }, [fields, effLayout, formData, renderField, updateField]);
+
+  // =========================================================================
+  // Inline parent-creation form (standalone mode, below the "— or —" divider)
+  // =========================================================================
+
+  const inlineFormDisabled = parentLinkedId !== "";
+
+  const renderInlineCreateForm = useMemo(() => {
+    if (!config.canCreateParent) return null;
+    if (fields.length === 0) return null;
+
+    const fieldMap = new Map(fields.map((f) => [f.key, f]));
+    const rows =
+      effLayout && effLayout.length > 0
+        ? effLayout
+        : fields.map((f) => [f.key]);
+
+    return (
+      <fieldset disabled={inlineFormDisabled || isSaving} className="space-y-3">
+        {rows.map((row, rowIdx) => (
+          <div
+            key={rowIdx}
+            className={row.length > 1 ? "grid gap-3 sm:grid-cols-2" : undefined}
+          >
+            {row.map((key) => {
+              const field = fieldMap.get(key);
+              if (!field) return null;
+              return renderField(
+                field,
+                inlineFormData[field.key] ?? "",
+                (v) => updateInlineField(field.key, v as string),
+                { checkboxAsString: true, defaultMinHeight: "6rem" },
+              );
+            })}
+          </div>
+        ))}
+      </fieldset>
+    );
+  }, [
+    config.canCreateParent,
+    fields,
+    effLayout,
+    inlineFormData,
+    inlineFormDisabled,
+    isSaving,
+    renderField,
+    updateInlineField,
+  ]);
+
+  /** First-field-non-empty gate → copy of the inline form values (as strings). */
+  const extractInlineNewRecordData = useCallback(():
+    | Record<string, string>
+    | null => {
+    const first = fields[0];
+    if (!first) return null;
+    if (!inlineFormData[first.key]?.trim()) return null;
+    return { ...inlineFormData };
+  }, [fields, inlineFormData]);
 
   // =========================================================================
   // Render
   // =========================================================================
 
-  const domainLabel = domain
-    ? domain.charAt(0).toUpperCase() + domain.slice(1)
+  const modalTitle =
+    title ?? config.modalTitle(targetType, !!target, target?.data);
+  const resolvedDeleteLabel = deleteLabel ?? (isStandaloneFile ? "Delete" : config.deleteLabel);
+  const domainLabel = config.label
+    ? config.label.charAt(0).toUpperCase() + config.label.slice(1)
     : "";
 
   return (
@@ -1256,7 +1574,7 @@ export default function GenericDomainModal({
           {/* Header */}
           <header className="shrink-0 flex items-center border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              {title}
+              {modalTitle}
             </h2>
           </header>
 
@@ -1298,7 +1616,7 @@ export default function GenericDomainModal({
                                 150,
                               )
                             }
-                            placeholder={`Search ${domain} records...`}
+                            placeholder={`Search ${config.label} records...`}
                             disabled={isSaving}
                             className="w-full rounded-lg border border-zinc-300 px-2 py-1.5 pr-16 text-xs outline-none focus:border-zinc-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                           />
@@ -1366,7 +1684,7 @@ export default function GenericDomainModal({
                               <div className="px-3 py-2 text-xs text-zinc-400">
                                 {parentSearchQuery
                                   ? "No matching records"
-                                  : `No ${domain} records available`}
+                                  : `No ${config.label} records available`}
                               </div>
                             )}
                           </div>
@@ -1375,7 +1693,7 @@ export default function GenericDomainModal({
                     )}
 
                     {/* --- or --- divider + inline creation form */}
-                    {renderNewRecordForm && (
+                    {renderInlineCreateForm && (
                       <>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />
@@ -1384,10 +1702,7 @@ export default function GenericDomainModal({
                           </span>
                           <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />
                         </div>
-                        {renderNewRecordForm({
-                          disabled: parentLinkedId !== "",
-                          isSaving,
-                        })}
+                        {renderInlineCreateForm}
                       </>
                     )}
 
@@ -1544,7 +1859,7 @@ export default function GenericDomainModal({
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
-                      {allowLinking && !isStandaloneFile && handleFileUnlink && (
+                      {effAllowLinking && !isStandaloneFile && handleFileUnlink && (
                         <button
                           type="button"
                           onClick={() =>
@@ -1594,7 +1909,7 @@ export default function GenericDomainModal({
                           showEncryptedNotice={true}
                           multiple={!isStandaloneFile}
                         />
-                        {allowLinking && !isStandaloneFile && linkDropdownExtras && (
+                        {effAllowLinking && !isStandaloneFile && linkDropdownExtras && (
                           <>
                             <div className="flex items-center gap-2 w-full max-w-xs">
                               <div className="flex-1 border-t border-zinc-200 dark:border-zinc-700" />
@@ -1720,7 +2035,7 @@ export default function GenericDomainModal({
                         multiple={!isStandaloneFile}
                       />
                     </div>
-                    {allowLinking && !isStandaloneFile && linkDropdownExtras && (
+                    {effAllowLinking && !isStandaloneFile && linkDropdownExtras && (
                       <div className="shrink-0 border-l border-zinc-200 dark:border-zinc-800 px-4 py-3 flex items-center">
                         {linkDropdownExtras}
                       </div>
@@ -1732,14 +2047,14 @@ export default function GenericDomainModal({
 
             {/* Footer: Action buttons (direct body child — bottom-left on desktop grid, after files on mobile) */}
             <div className={`shrink-0 flex justify-end gap-2 border-t border-zinc-200 px-4 py-3 dark:border-zinc-800 ${actualShowRightPanel ? "sm:col-start-1 sm:row-start-2" : "mt-auto"}`}>
-              {(onDelete || onDeleteWithCascade) && (
+              {target && (
                 <Button
                   variant="danger"
                   size="md"
                   onClick={handleDeleteClick}
                   disabled={isSaving}
                 >
-                  {deleteLabel}
+                  {resolvedDeleteLabel}
                 </Button>
               )}
               <Button
@@ -1786,17 +2101,22 @@ export default function GenericDomainModal({
       )}
 
       {/* Delete confirmation (cascade mode) */}
-      {showDeleteConfirm && onDeleteWithCascade && showDeleteCascade && (
+      {showDeleteConfirm && showDeleteCascade && target && (
         <ConfirmDialog
-          title={`${deleteLabel}?`}
+          title={`${resolvedDeleteLabel}?`}
           description={
             deleteCascadeDescription ??
+            config.deleteCascadeDescription ??
             `This record has ${linkedDocCount} linked file(s).`
           }
-          confirmLabel={deleteLabel}
+          confirmLabel={resolvedDeleteLabel}
           cancelLabel="Cancel"
           showDeleteFilesCheckbox
-          deleteFilesLabel={deleteCascadeFilesLabel ?? "Delete associated files"}
+          deleteFilesLabel={
+            deleteCascadeFilesLabel ??
+            config.deleteCascadeFilesLabel ??
+            "Delete associated files"
+          }
           onCancel={() => setShowDeleteConfirm(false)}
           onConfirm={async (deleteFiles) => {
             await handleDeleteConfirm(deleteFiles);
@@ -1804,20 +2124,18 @@ export default function GenericDomainModal({
         />
       )}
 
-      {showDeleteConfirm &&
-        !showDeleteCascade &&
-        (onDelete || onDeleteWithCascade) && (
-          <ConfirmDialog
-            title={`${deleteLabel}?`}
-            description="Are you sure? This cannot be undone."
-            confirmLabel={deleteLabel}
-            cancelLabel="Cancel"
-            onCancel={() => setShowDeleteConfirm(false)}
-            onConfirm={async () => {
-              await handleDeleteConfirm();
-            }}
-          />
-        )}
+      {showDeleteConfirm && !showDeleteCascade && target && (
+        <ConfirmDialog
+          title={`${resolvedDeleteLabel}?`}
+          description="Are you sure? This cannot be undone."
+          confirmLabel={resolvedDeleteLabel}
+          cancelLabel="Cancel"
+          onCancel={() => setShowDeleteConfirm(false)}
+          onConfirm={async () => {
+            await handleDeleteConfirm();
+          }}
+        />
+      )}
     </>
   );
 }

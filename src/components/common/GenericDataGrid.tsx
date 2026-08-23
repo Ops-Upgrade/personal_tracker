@@ -1,11 +1,23 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { ColumnDef } from "./GenericViewPage";
+import type { ColumnDef, ColumnToken, TextColor } from "./GenericViewPage";
 import SortableHeader from "./SortableHeader";
 import type { SortState } from "./SortableHeader";
+import PriorityBadge from "./PriorityBadge";
+import { PaperClipIcon } from "./Icons";
+import { formatShortDate } from "@/lib/format";
+import { stripHtml } from "@/lib/viewHelpers";
 
 // ── Types ──
+
+/** Bulk-selection wiring for the checkbox track. */
+export interface GridSelection {
+  selectedKeys: Set<string>;
+  onToggle: (key: string, checked: boolean) => void;
+  onSelectAll: (checked: boolean) => void;
+  itemsLength: number;
+}
 
 export interface GenericDataGridProps<T, C extends string = string> {
   /** Items to render. When empty, shows the empty message. */
@@ -35,9 +47,100 @@ export interface GenericDataGridProps<T, C extends string = string> {
   rowAction?: (item: T) => ReactNode;
   /** Per-row CSS class modifier (e.g. priority-colored left border). */
   getItemClassName?: (item: T) => string;
+
+  /** When provided, prepends a checkbox track (header select-all + row checkboxes). */
+  selection?: GridSelection;
 }
 
 // ── Helpers ──
+
+/** Preset text colour tokens mapped by the declarative token engine. */
+export const TEXT_COLOR_CLASSES: Record<TextColor, string> = {
+  strong: "font-medium text-zinc-800 dark:text-zinc-100",
+  plain: "text-zinc-700 dark:text-zinc-200",
+  muted: "text-zinc-600 dark:text-zinc-300",
+  faint: "text-zinc-500 dark:text-zinc-400",
+};
+
+/**
+ * Renders a declarative cell token into DOM — the only cell-rendering path
+ * GenericViewPage consumers use. Columns carrying a legacy JSX `render`
+ * function (widgets not yet migrated) bypass this engine entirely.
+ */
+export function renderTokenCell<T>(token: ColumnToken<T>, item: T): ReactNode {
+  switch (token.type) {
+    case "text": {
+      const value = token.accessor(item);
+      if (value === null || value === undefined || value === "") {
+        return <span className="text-zinc-400">—</span>;
+      }
+      const display =
+        typeof value === "number" && token.localeFormat
+          ? value.toLocaleString(token.localeFormat)
+          : value;
+      return (
+        <span
+          className={`${TEXT_COLOR_CLASSES[token.color ?? "muted"]} ${
+            token.capitalize ? "capitalize" : ""
+          } ${token.size === "xs" ? "text-xs" : ""} ${token.className ?? ""}`}
+        >
+          {token.prefix ?? ""}
+          {display}
+        </span>
+      );
+    }
+    case "date":
+      return (
+        <span className={token.className ?? "text-zinc-600 dark:text-zinc-300"}>
+          {formatShortDate(token.accessor(item) ?? null)}
+        </span>
+      );
+    case "richtext": {
+      const plain = stripHtml(token.accessor(item) ?? "");
+      return (
+        <span className={token.className ?? "text-zinc-500 dark:text-zinc-400"}>
+          {plain || "—"}
+        </span>
+      );
+    }
+    case "badge": {
+      const priority = token.accessor(item);
+      return priority ? (
+        <PriorityBadge priority={priority} />
+      ) : (
+        <span className="text-zinc-400">—</span>
+      );
+    }
+    case "files": {
+      const count = token.getCount(item);
+      return count > 0 ? (
+        <span
+          className={`inline-flex items-center justify-center gap-1 ${token.iconColorClass}`}
+          title={`${count} document(s) attached`}
+        >
+          <PaperClipIcon className="h-4 w-4" />
+          <span className={token.countClass ?? "text-zinc-600 dark:text-zinc-300"}>
+            ({count})
+          </span>
+        </span>
+      ) : (
+        <span className="text-zinc-400">—</span>
+      );
+    }
+    case "boolean": {
+      const value = token.accessor(item);
+      return (
+        <span
+          className={`text-[10px] sm:text-xs ${
+            value ? token.trueColorClass : token.falseColorClass
+          }`}
+        >
+          {value ? token.trueLabel : token.falseLabel ?? token.trueLabel}
+        </span>
+      );
+    }
+  }
+}
 
 /**
  * Builds a shared `grid-template-columns` value from the column definitions,
@@ -56,7 +159,11 @@ export interface GenericDataGridProps<T, C extends string = string> {
  * row are subgrids, so all tracks are sized across the full column at once —
  * header/row alignment holds at any viewport width with no breakpoint math.
  */
-function buildGridTemplate<T>(columns: ColumnDef<T>[], hasAction: boolean): string {
+function buildGridTemplate<T>(
+  columns: ColumnDef<T>[],
+  hasAction: boolean,
+  hasSelection: boolean,
+): string {
   const tracks = columns.map((col) => {
     const weight = col.weight ?? 1;
     if (col.sizing === "fixed") {
@@ -64,6 +171,7 @@ function buildGridTemplate<T>(columns: ColumnDef<T>[], hasAction: boolean): stri
     }
     return `minmax(6rem, ${weight}fr)`;
   });
+  if (hasSelection) tracks.unshift("max-content");
   if (hasAction) tracks.push("max-content");
   return tracks.join(" ");
 }
@@ -89,8 +197,8 @@ const getAlignClass = (align?: "left" | "center" | "right"): string => {
  * `max-content` tracks guarantee fixed columns (badges, dates, actions)
  * always fit their content instead of overflowing at narrow widths.
  *
- * Used by: GenericViewPage (all/months/priority views), GenericActiveBox,
- * GenericCompletedBox.
+ * Used by: GenericViewPage (all/months/priority views), GenericDomainPage
+ * (dashboard grids), GenericCompletedBox.
  */
 export default function GenericDataGrid<T, C extends string = string>({
   items,
@@ -104,6 +212,7 @@ export default function GenericDataGrid<T, C extends string = string>({
   rowClassName,
   rowAction,
   getItemClassName,
+  selection,
 }: GenericDataGridProps<T, C>) {
   const resolveRowClass = (item: T): string => {
     if (typeof rowClassName === "function") return rowClassName(item);
@@ -121,7 +230,7 @@ export default function GenericDataGrid<T, C extends string = string>({
     );
   }
 
-  const template = buildGridTemplate(columns, !!rowAction);
+  const template = buildGridTemplate(columns, !!rowAction, !!selection);
 
   return (
     <div className="w-full overflow-x-auto pb-2 -mb-2">
@@ -135,9 +244,27 @@ export default function GenericDataGrid<T, C extends string = string>({
     >
       {/* Column headers — one subgrid row spanning all tracks */}
       <div
-        className="col-span-full grid grid-cols-subgrid items-center gap-x-2 border-b border-zinc-200 px-2 pb-2 pl-[3px] dark:border-zinc-700"
+        className="group col-span-full grid grid-cols-subgrid items-center gap-x-2 border-b border-zinc-200 px-2 pb-2 pl-[3px] dark:border-zinc-700"
         style={{ gridTemplateColumns: "subgrid" }}
       >
+        {selection && (
+          <div className="flex items-center justify-center">
+            <input
+              type="checkbox"
+              checked={
+                selection.itemsLength > 0 &&
+                selection.selectedKeys.size === selection.itemsLength
+              }
+              onChange={(e) => selection.onSelectAll(e.target.checked)}
+              className={`h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-100 transition-opacity ${
+                selection.selectedKeys.size > 0
+                  ? "opacity-100"
+                  : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
+              }`}
+              aria-label="Select all rows"
+            />
+          </div>
+        )}
         {columns.map((col) => {
           const alignClass = getAlignClass(col.align);
           if (col.sortColumn && sortState !== undefined && onSortChange) {
@@ -199,9 +326,31 @@ export default function GenericDataGrid<T, C extends string = string>({
               } ${extraClass}`}
             style={{ gridTemplateColumns: "subgrid" }}
           >
+            {selection && (
+              <div className="flex items-center justify-center">
+                <input
+                  type="checkbox"
+                  checked={selection.selectedKeys.has(getItemKey(item))}
+                  onChange={(e) =>
+                    selection.onToggle(getItemKey(item), e.target.checked)
+                  }
+                  onClick={(e) => e.stopPropagation()}
+                  className={`h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-100 transition-opacity ${
+                    selection.selectedKeys.has(getItemKey(item))
+                      ? "opacity-100"
+                      : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
+                  }`}
+                  aria-label={`Select row ${getItemKey(item)}`}
+                />
+              </div>
+            )}
             {columns.map((col) => {
               const alignClass = col.align ? `text-${col.align}` : "";
-              const content = col.render(item);
+              const content = col.render
+                ? col.render(item)
+                : col.token
+                  ? renderTokenCell(col.token, item)
+                  : null;
               const isTruncating = col.sizing !== "fixed";
               return (
                 <div

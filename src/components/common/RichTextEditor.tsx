@@ -189,7 +189,7 @@ export default function RichTextEditor({
 
   // Sync external value changes into the editor (e.g. form reset, undo)
   useEffect(() => {
-    if (!editor || editor.isFocused) return;
+    if (!editor || editor.isDestroyed || editor.isFocused) return;
     const currentHTML = editor.getHTML();
     const normalisedCurrent = currentHTML === "<p></p>" ? "" : currentHTML;
     if (value !== normalisedCurrent) {

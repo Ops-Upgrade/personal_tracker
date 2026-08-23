@@ -1,4 +1,11 @@
-import { fetchUserKeys, upsertUserKeys, hasRecoveryKey as apiHasRecoveryKey, upsertRecoveryKey } from "@/api/auth";
+import {
+  fetchUserKeys,
+  insertUserKeys,
+  upsertUserKeys,
+  getSession,
+  hasRecoveryKey as apiHasRecoveryKey,
+  upsertRecoveryKey,
+} from "@/api/auth";
 import {
   deriveKEK,
   generateDEK,
@@ -21,12 +28,26 @@ import { saveDEK, loadDEK, clearDEK as clearStore, hasDEK } from "./store";
  * - If user_keys row exists → derive KEK → unwrap DEK → save to IndexedDB.
  * - If no row (first login)  → generate salt + DEK → derive KEK → wrap DEK
  *   → persist row to Supabase → save DEK to IndexedDB.
+ *
+ * A dropped/mismatched session makes `fetchUserKeys` return null even when a
+ * row exists (RLS silently filters it), which would otherwise route into the
+ * first-login branch. Two layers defend against overwriting the existing DEK
+ * there: this session guard fails fast before any key material is derived,
+ * and `insertUserKeys` (plain INSERT, no upsert) makes Postgres reject a
+ * duplicate row even if a write slips past the guard.
  */
 export async function bootstrapCrypto(
   userId: string,
   password: string,
   email: string
 ): Promise<void> {
+  const session = await getSession();
+  if (!session?.user || session.user.id !== userId) {
+    throw new Error(
+      "Active session missing or mismatched during encryption setup."
+    );
+  }
+
   const existing = await fetchUserKeys(userId);
 
   if (existing) {
@@ -38,7 +59,7 @@ export async function bootstrapCrypto(
     const dek = await generateDEK();
     const kek = await deriveKEK(password, salt);
     const bundle = await wrapDEK(dek, kek);
-    await upsertUserKeys(userId, email, salt, bundle.iv, bundle.wrappedKey);
+    await insertUserKeys(userId, email, salt, bundle.iv, bundle.wrappedKey);
     await saveDEK(userId, dek);
   }
 }

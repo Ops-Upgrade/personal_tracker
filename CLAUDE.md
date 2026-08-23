@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Dev server:** `npm run dev` (uses `--webpack` for Next.js 16 Webpack fallback)
 - **Build:** `npm run build` (also `--webpack` — Next 16 Turbopack dev mode does not emit Tailwind variant rules, so the Webpack fallback is mandatory for both)
 - **Lint:** `npm run lint` (ESLint 9 with `eslint-config-next`)
-- **Tests:** `npm test` (vitest, config `vitest.config.mts`) — Tier 1 pure-function unit tests (hermetic, `vi.mock`ed Supabase/crypto). `npm run test:integration` (config `vitest.integration.config.mts`) — media Tier 2/3 suites against the REAL Supabase project as the dummy test user (credentials in gitignored `.env.test.local`; fails fast if absent; excluded from `npm test`; per-test teardown wipes only the dummy user's rows). See `docs/plans/PLAN-mediamanager.md` Stage 11. No component tests yet — still verify UI changes manually by driving the UI (`npm run dev`).
+- **Tests:** `npm test` (vitest, config `vitest.config.mts`) — Tier 1 pure-function unit tests (hermetic, `vi.mock`ed Supabase/crypto). `npm run test:integration` (config `vitest.integration.config.mts`) — media Tier 2/3 suites against the REAL Supabase project as the dummy test user (credentials in gitignored `.env.test.local`; fails fast if absent; excluded from `npm test`; per-test teardown wipes only the dummy user's rows). See `docs/plans/PLAN-mediamanager.md` Stage 11. Component tests exist for the generic engines: `GenericDomainModal` and `DatePicker` run under jsdom via per-file `// @vitest-environment jsdom` pragmas (no config change), using `@testing-library/react` + `user-event` with plain assertions (no jest-dom). JSX in tests requires the `.tsx` extension (Oxc parses JSX only in `.tsx`); `@vitejs/plugin-react` is NOT required. Still verify complex UI changes by driving the UI (`npm run dev`).
 
 ## Essential docs (read first)
 
@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **[`docs/schema.md`](docs/schema.md)** — Supabase tables, columns, DDL, RLS policies, storage buckets. **Always read this before touching DB/DAL code.**
 - **[`docs/plans/`](docs/plans/)** — feature-specific plans (`PLAN-crypto.md`, `PLAN-taskmanager.md`, `PLAN-expense.md`, `PLAN-education.md`, `PLAN-global_QOL.md`). Read the relevant plan before working on a feature.
 
-**Keep these files current** — update them after any significant change (new tables, columns, endpoints, architecture changes, completed milestones).
+**Do NOT edit `docs/context.md` or `docs/schema.md`.** Only the planner agent updates them. Always read them before planning work; if they look stale or wrong, report it to the user/planner — never edit them yourself.
 
 ## Architecture patterns you won't see from a single file
 
@@ -70,7 +70,7 @@ File uploads (expense invoices, certificates) are client-side encrypted with DEK
 
 ### Date handling
 
-Use `getServerDateIST()` from `src/api/serverDate.ts` to get current IST date from a Supabase RPC. Don't use `new Date()` directly for "today" in feature logic — the server may be in a different timezone than the user.
+Use `getServerDateIST()` from `src/api/serverDate.ts` to get the current IST calendar date — computed client-side via `Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" })` (no RPC; session-cached, reset with `resetServerDateCache()`). Don't use `new Date()` directly for "today" in feature logic — the user may be in a different timezone than the server.
 
 ### CSP considerations
 
@@ -82,7 +82,7 @@ Use `getServerDateIST()` from `src/api/serverDate.ts` to get current IST date fr
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable API key (note: NOT `ANON_KEY`) |
-| `NEXT_PUBLIC_COOKIE_DOMAIN` | `localhost` in dev, `.ops-upgrade.com` in prod |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` | `localhost` in dev, `.ops-upgrade.net` in prod |
 
 ## Common tasks
 

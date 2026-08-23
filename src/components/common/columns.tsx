@@ -1,25 +1,25 @@
 import type { ColumnDef } from "./GenericViewPage";
 import type { Priority } from "@/types/common";
-import PriorityBadge from "./PriorityBadge";
-import { PaperClipIcon } from "./Icons";
-import { formatShortDate } from "@/lib/format";
-import { stripHtml } from "@/lib/viewHelpers";
 
 // ── Shared column factories ─────────────────────────────────────────────
 //
 // One definition per column *concept*. Domain configs compose these into
 // their exported column arrays; widgets and pages assemble per-view arrays
-// from the same atoms. Sizing / alignment / render semantics live here,
+// from the same atoms. Sizing / alignment / token semantics live here,
 // not at each call site — so "center the priority badge" is one edit.
 //
 // Every factory result is spreadable: pass an `overrides` partial to tweak
-// sortColumn, align, weight, or replace the render entirely. Keep the
+// sortColumn, align, weight, or replace the token entirely. Keep the
 // factory count small — a column that needs more than a couple of options
 // should stay an inline definition at its call site.
+//
+// Factories emit declarative `token`s (no JSX) — the GenericDataGrid engine
+// renders them internally.
 
 /**
  * Priority column — badge in a fixed, centered track (the lone mobile dot
- * sits mid-track when the label hides below md).
+ * sits mid-track when the label hides below md). Null priorities render a
+ * dash so legacy rows without a priority never crash the grid.
  */
 export function colPriority<T extends { priority: Priority }, C extends string = string>(
   overrides: Partial<ColumnDef<T, C>> = {},
@@ -30,7 +30,7 @@ export function colPriority<T extends { priority: Priority }, C extends string =
     sizing: "fixed",
     // Centered so the lone mobile dot (label hidden) sits mid-track.
     align: "center",
-    render: (item) => <PriorityBadge priority={item.priority} />,
+    token: { type: "badge", accessor: (item) => item.priority },
     ...overrides,
   };
 }
@@ -50,25 +50,15 @@ export function colFiles<T, C extends string = string>(
   },
   overrides: Partial<ColumnDef<T, C>> = {},
 ): ColumnDef<T, C> {
-  const { getCount, iconColorClass, countClass = "text-zinc-600 dark:text-zinc-300" } =
-    options;
   return {
     key: "files",
     header: "Files",
     sizing: "fixed",
-    render: (item) => {
-      const count = getCount(item);
-      return count > 0 ? (
-        <span
-          className={`inline-flex items-center justify-center gap-1 ${iconColorClass}`}
-          title={`${count} document(s) attached`}
-        >
-          <PaperClipIcon className="h-4 w-4" />
-          <span className={countClass}>({count})</span>
-        </span>
-      ) : (
-        <span className="text-zinc-400">—</span>
-      );
+    token: {
+      type: "files",
+      getCount: options.getCount,
+      iconColorClass: options.iconColorClass,
+      countClass: options.countClass,
     },
     ...overrides,
   };
@@ -90,29 +80,20 @@ export function colRichtext<T, C extends string = string>(
   },
   overrides: Partial<ColumnDef<T, C>> = {},
 ): ColumnDef<T, C> {
-  const {
-    key,
-    header,
-    accessor,
-    weight,
-    className = "text-zinc-500 dark:text-zinc-400",
-  } = options;
+  const { key, header, accessor, weight, className = "text-zinc-500 dark:text-zinc-400" } =
+    options;
   return {
     key,
     header,
     sizing: "flex",
     weight,
-    render: (item) => (
-      <span className={className}>
-        {stripHtml(accessor(item) || "") || "—"}
-      </span>
-    ),
+    token: { type: "richtext", accessor, className },
     ...overrides,
   };
 }
 
 /**
- * Date column — short M/D/YY format via the shared formatter. Handles both
+ * Date column — DD/MM/YY via the shared formatter. Handles both
  * ISO timestamps (completed_at, created_at) and date-only strings (due_date).
  */
 export function colDate<T, C extends string = string>(
@@ -132,9 +113,7 @@ export function colDate<T, C extends string = string>(
     key,
     header,
     sizing: "fixed",
-    render: (item) => (
-      <span className={className}>{formatShortDate(accessor(item) ?? null)}</span>
-    ),
+    token: { type: "date", accessor, className },
     ...overrides,
   };
 }
