@@ -1,27 +1,61 @@
 import type { Task } from "@/types/taskmanager";
 import type { ColumnDef } from "@/components/common/GenericViewPage";
+import type { FieldDef } from "@/components/common/GenericDomainModal";
 import { colPriority, colDate, colRichtext } from "@/components/common/columns";
 
 // ── Sort column type ──
 
 export type SortColumn = "name" | "priority" | "due_date" | "mode" | "description" | "is_completed";
 
-// ── Priority comparison ──
+// ── Form schema for all task modals ──
 
-export function comparePriority(a: string, b: string): number {
-  const order: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-  return (order[a] ?? 99) - (order[b] ?? 99);
-}
+export const TASK_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Task Name" },
+  {
+    key: "priority",
+    type: "select",
+    label: "Priority",
+    defaultValue: "medium",
+    options: [
+      { value: "low", label: "Low" },
+      { value: "medium", label: "Medium" },
+      { value: "high", label: "High" },
+      { value: "critical", label: "Critical" },
+    ],
+  },
+  { key: "due_date", type: "date", label: "Due Date" },
+  {
+    key: "mode",
+    type: "select",
+    label: "Mode",
+    defaultValue: "online",
+    options: [
+      { value: "online", label: "Online" },
+      { value: "offline", label: "Offline" },
+    ],
+  },
+  {
+    key: "description",
+    type: "richtext",
+    label: "Task Description",
+    minHeight: "8rem",
+  },
+  { key: "is_completed", type: "checkbox", label: "Mark complete", defaultValue: false },
+];
 
-// ── Sort configs ──
+// Every field must appear in the layout (GenericDomainModal only renders listed rows).
+export const TASK_LAYOUT: string[][] = [
+  ["name"],
+  ["priority", "due_date", "mode"],
+  ["description"],
+  ["is_completed"],
+];
 
-export const SORT_CONFIGS = [
-  { column: "name" as const, extractor: (t: Task) => t.name.toLowerCase() },
-  { column: "priority" as const, extractor: (t: Task) => t.priority },
-  { column: "due_date" as const, extractor: (t: Task) => (t.due_date ? new Date(t.due_date + "T00:00:00").getTime() : 0) },
-  { column: "mode" as const, extractor: (t: Task) => t.mode.toLowerCase() },
-  { column: "description" as const, extractor: (t: Task) => t.description.replace(/<[^>]*>/g, "").trim().toLowerCase() },
-  { column: "is_completed" as const, extractor: (t: Task) => (t.is_completed ? 1 : 0) },
+// ── Form schema for the note store modal (store pages) ──
+
+export const NOTE_FIELDS: FieldDef[] = [
+  { key: "name", type: "text", label: "Name", placeholder: "Note title" },
+  { key: "content", type: "richtext", label: "Content", minHeight: "10rem" },
 ];
 
 // ── Shared column atoms ──
@@ -44,7 +78,8 @@ export const TASK_DESCRIPTION: ColumnDef<Task, SortColumn> = colRichtext<Task, S
 
 // Sizing model: "fixed" columns get max-content tracks (badges, dates, mode,
 // status always fit their content); "flex" columns share the remaining space
-// and truncate gracefully via CSS — no breakpoint math anywhere.
+// and truncate gracefully via CSS — no breakpoint math anywhere. Cells are
+// declarative tokens; the GenericDataGrid engine renders them internally.
 export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
   {
     key: "name",
@@ -52,11 +87,7 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
     sizing: "flex",
     weight: 2,
     sortColumn: "name",
-    render: (t) => (
-      <span className="font-medium text-zinc-800 dark:text-zinc-100">
-        {t.name || "—"}
-      </span>
-    ),
+    token: { type: "text", accessor: (t) => t.name, color: "strong" },
   },
   TASK_PRIORITY,
   TASK_DUE_DATE,
@@ -65,9 +96,7 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
     header: "Mode",
     sizing: "fixed",
     sortColumn: "mode",
-    render: (t) => (
-      <span className="text-zinc-600 dark:text-zinc-300">{t.mode}</span>
-    ),
+    token: { type: "text", accessor: (t) => t.mode, color: "muted" },
   },
   TASK_DESCRIPTION,
   {
@@ -75,16 +104,13 @@ export const TASK_COLUMNS: ColumnDef<Task, SortColumn>[] = [
     header: "Status",
     sizing: "fixed",
     sortColumn: "is_completed",
-    render: (t) => (
-      <span
-        className={`text-[10px] sm:text-xs ${
-          t.is_completed
-            ? "text-emerald-600 dark:text-emerald-400"
-            : "text-amber-600 dark:text-amber-400"
-        }`}
-      >
-        {t.is_completed ? "Completed" : "Active"}
-      </span>
-    ),
+    token: {
+      type: "boolean",
+      accessor: (t) => t.is_completed,
+      trueLabel: "Completed",
+      trueColorClass: "text-emerald-600 dark:text-emerald-400",
+      falseLabel: "Active",
+      falseColorClass: "text-amber-600 dark:text-amber-400",
+    },
   },
 ];

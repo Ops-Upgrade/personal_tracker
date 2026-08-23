@@ -1,107 +1,31 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useState } from "react";
 import { ROUTES } from "@/routes/paths";
 import type { Expense } from "@/types/expense";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import { useLocalStorage } from "@/lib/useLocalStorage";
-import { useTableSort } from "@/hooks/useTableSort";
+import GenericViewPage from "@/components/common/GenericViewPage";
 import { useExpenseActions } from "@/hooks/useExpenseActions";
 import { useExpenseData } from "@/hooks/useExpenseData";
 import GenericDomainModal from "@/components/common/GenericDomainModal";
-import { normalizeDateForInput } from "@/lib/utils";
-import { EXPENSE_COLUMNS, SORT_CONFIGS, EXPENSE_FIELDS } from "@/components/expense/config";
+import { EXPENSE_COLUMNS, EXPENSE_FIELDS } from "@/components/expense/config";
 
 export default function ExpenseAllPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const { userId, nowYear, nowMonth, isLoading, error, refreshData, expenses, documents } =
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData, expenses } =
     useExpenseData();
-
-  // ── Year / Month filter state from URL params ──
-
-  const urlYear = searchParams.get("year");
-  const urlMonth = searchParams.get("month");
-
-  const initialYear = urlYear ? Number(urlYear) : nowYear || new Date().getFullYear();
-  const initialMonth = urlMonth ? Number(urlMonth) : ("all" as const);
-
-  const [selectedYear, setSelectedYear] = useState(initialYear);
-  const [selectedMonth, setSelectedMonth] = useState<number | "all">(initialMonth);
-  const [activeView, setActiveView] = useLocalStorage<string>("expenseAllView", "all");
-
-  // ── Derived data ──
-
-  const availableYears = useMemo(() => {
-    const currentYear = nowYear || new Date().getFullYear();
-    const yearsFromData = new Set(
-      expenses.map((e) => new Date(e.date).getFullYear()),
-    );
-    yearsFromData.add(currentYear);
-    return Array.from(yearsFromData).sort((a, b) => b - a);
-  }, [expenses, nowYear]);
-
-  const availableMonths = useMemo(() => {
-    const months = new Set<number>();
-    for (const e of expenses) {
-      const d = new Date(e.date);
-      if (d.getFullYear() === selectedYear) {
-        months.add(d.getMonth());
-      }
-    }
-    return Array.from(months).sort((a, b) => a - b);
-  }, [expenses, selectedYear]);
-
-  const expensesForYear = useMemo(
-    () =>
-      expenses.filter((e) => new Date(e.date).getFullYear() === selectedYear),
-    [expenses, selectedYear],
-  );
-
-  const expensesForMonth = useMemo(
-    () =>
-      selectedMonth === "all"
-        ? expensesForYear
-        : expensesForYear.filter(
-            (e) => new Date(e.date).getMonth() === selectedMonth,
-          ),
-    [expensesForYear, selectedMonth],
-  );
-
-  // ── Sort ──
-
-  const { sortState, handleSort, sorted } = useTableSort(
-    "expenseAllSortState",
-    expensesForMonth,
-    SORT_CONFIGS,
-  );
-
-  // ── Modal state ──
 
   const [modalTarget, setModalTarget] = useState<Expense | null>(null);
 
   const closeModal = () => setModalTarget(null);
-
-  // ── CRUD handlers ──
 
   const refresh = useCallback(async () => {
     if (!userId) return;
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { createSaveAdapter, handleExpenseDelete, handleDownloadDocument } =
+  const { handleExpenseDelete, handleDownloadDocument } =
     useExpenseActions({ userId, refresh });
-
-  const emptyMessage =
-    selectedMonth === "all"
-      ? `No expenses recorded in ${selectedYear}.`
-      : `No expenses recorded in ${selectedYear} for the selected month.`;
-
-  // ── Render ──
 
   return (
     <>
@@ -116,74 +40,50 @@ export default function ExpenseAllPage() {
 
         {!isLoading && (
           <GenericViewPage
-            items={sorted}
+            data={expenses}
             columns={EXPENSE_COLUMNS}
             getItemKey={(exp) => exp.id}
-            views={STANDARD_VIEWS.ALL_ONLY}
-            activeView={activeView}
-            onViewChange={setActiveView}
-            yearFilter={{
-              years: availableYears,
-              selectedYear,
-              onChange: (year) => {
-                setSelectedYear(year);
-                setSelectedMonth("all");
-                router.replace(
-                  `${ROUTES.EXPENSE_ALL}?year=${year}`,
-                  { scroll: false },
-                );
+            cacheKeyPrefix="expense_all"
+            defaultSort={{ column: "date", direction: "asc" }}
+            supportedViews={["all", "months"]}
+            getDateKey={(exp) => exp.date}
+            itemNamePlural="expenses"
+            metrics={[
+              {
+                label: "Total spent",
+                value: (items) => items.reduce((sum, e) => sum + e.cost, 0),
+                format: "currency-INR",
               },
-            }}
-            monthFilter={{
-              months: availableMonths,
-              selectedMonth,
-              onChange: (month) => {
-                setSelectedMonth(month);
-                const params = new URLSearchParams();
-                params.set("year", String(selectedYear));
-                if (month !== "all") params.set("month", String(month));
-                router.replace(
-                  `${ROUTES.EXPENSE_ALL}?${params.toString()}`,
-                  { scroll: false },
-                );
-              },
-            }}
-            sortState={sortState}
-            onSortChange={handleSort}
-            emptyMessage={emptyMessage}
+            ]}
             onRowClick={(exp) => setModalTarget(exp)}
-            nowYear={nowYear ?? new Date().getFullYear()}
-            nowMonth={nowMonth ?? new Date().getMonth()}
+            onBulkDelete={async (ids, clearFn) => {
+              for (const id of ids) await handleExpenseDelete(id, "cascade");
+              clearFn();
+            }}
+            nowYear={nowYear ?? undefined}
+            nowMonth={nowMonth ?? undefined}
           />
         )}
       </PageShell>
 
       {modalTarget && userId && (
         <GenericDomainModal
-          key={modalTarget.id}
           mode="record"
-          title="Edit expense"
-          onClose={closeModal}
-          fields={EXPENSE_FIELDS}
-          initialData={{
-            item: modalTarget.item,
-            seller: modalTarget.seller,
-            cost: String(modalTarget.cost),
-            date: normalizeDateForInput(modalTarget.date),
-            reason: modalTarget.reason,
-          }}
-          allowFiles
-          allowLinking={false}
-          userId={userId}
-          attachedDocuments={documents.filter(
-            (d) => d.domain === "expense" && d.linked_id === modalTarget.id,
-          )}
           domain="expense"
-          onSave={createSaveAdapter(modalTarget)}
-          onDeleteWithCascade={async (cascadeMode) => {
-            await handleExpenseDelete(modalTarget.id, cascadeMode);
+          target={{
+            type: "record",
+            id: modalTarget.id,
+            data: modalTarget as unknown as Record<string, unknown>,
           }}
-          deleteLabel="Delete"
+          fields={EXPENSE_FIELDS}
+          userId={userId}
+          onClose={closeModal}
+          onSaved={async () => {
+            await refresh();
+          }}
+          onDeleted={async () => {
+            await refresh();
+          }}
           onDownloadDocument={handleDownloadDocument}
         />
       )}

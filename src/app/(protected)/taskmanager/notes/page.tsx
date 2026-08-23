@@ -1,39 +1,24 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuthBootstrap } from "@/lib/useAuthBootstrap";
-import {
-  fetchNotes,
-} from "@/api/taskmanager";
-import {
-  fetchDocuments,
-} from "@/api/common/documents";
+import { fetchNotes } from "@/api/taskmanager";
+import { fetchDocuments } from "@/api/common/documents";
 import { ROUTES } from "@/routes/paths";
 import { useNoteActions } from "@/hooks/useNoteActions";
 import type { Note } from "@/types/taskmanager";
 import type { Document } from "@/types/document";
 import PageShell from "@/components/common/PageShell";
 import LoadingSpinner from "@/components/common/LoadingSpinner";
-import GenericViewPage, { STANDARD_VIEWS } from "@/components/common/GenericViewPage";
-import type { ColumnDef } from "@/components/common/GenericViewPage";
-import { PaperClipIcon } from "@/components/common/Icons";
-import { useLocalStorage } from "@/lib/useLocalStorage";
-import {
-  getNoteTitle,
-  getUnifiedNotes,
-  type UnifiedNoteRecord,
-} from "@/components/taskmanager/helpers";
-import { colRichtext, colDate } from "@/components/common/columns";
-import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
+import GenericViewPage, { type ColumnDef } from "@/components/common/GenericViewPage";
+import { getNoteTitle } from "@/components/taskmanager/helpers";
+import { NOTE_FIELDS } from "@/components/taskmanager/config";
+import { colRichtext, colDate, colFiles } from "@/components/common/columns";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
 
-const NOTE_FIELDS: FieldDef[] = [
-  { key: "name", type: "text", label: "Name", placeholder: "Note title" },
-  { key: "content", type: "richtext", label: "Content", minHeight: "10rem" },
-];
+type SortColumn = "name" | "date";
 
 export default function NotesPage() {
-  const router = useRouter();
   const [notes, setNotes] = useState<Note[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
 
@@ -46,15 +31,8 @@ export default function NotesPage() {
     setDocuments(docRows);
   }, []);
 
-  const { userId, isLoading, error, refreshData } =
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData } =
     useAuthBootstrap({ loadData });
-
-  const unifiedNotes = useMemo(
-    () => getUnifiedNotes(notes, documents),
-    [notes, documents],
-  );
-
-  const [activeView, setActiveView] = useLocalStorage<string>("notesView", "all");
 
   const [noteModalTarget, setNoteModalTarget] = useState<Note | null>(null);
 
@@ -63,7 +41,7 @@ export default function NotesPage() {
     if (userId) refreshData(userId);
   };
 
-  const { createSaveAdapter, handleNoteDelete, handleDownloadDocument } =
+  const { handleNoteDelete, handleDownloadDocument } =
     useNoteActions({
       userId,
       refresh: async () => {
@@ -71,69 +49,52 @@ export default function NotesPage() {
       },
     });
 
-  const handleSelectDocument = (doc: Document) => {
-    router.push(`${ROUTES.TASK_MANAGER_STORE}#edit-document-${doc.id}`);
-  };
+  // Strict record grid: only Note rows render here — standalone files belong
+  // in the Store. Documents are fetched solely for the modal + files count.
+  const docCountsByNote = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const d of documents) {
+      if (d.domain === "taskmanager" && d.linked_id) {
+        map.set(d.linked_id, (map.get(d.linked_id) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [documents]);
 
-  // ── Column definitions ──
+  // ── Column definitions (declarative tokens — the grid renders them) ──
 
-  const noteColumns: ColumnDef<UnifiedNoteRecord>[] = useMemo(
+  const noteColumns: ColumnDef<Note, SortColumn>[] = useMemo(
     () => [
       {
         key: "name",
         header: "Name",
         sizing: "flex",
         weight: 2,
-        render: (item) =>
-          item.type === "note" ? (
-            <div className="truncate font-medium">{getNoteTitle(item.data)}</div>
-          ) : (
-            <div className="text-zinc-400 dark:text-zinc-500">—</div>
-          ),
+        sortColumn: "name",
+        token: { type: "text", accessor: (n) => getNoteTitle(n), color: "strong" },
       },
-      colRichtext<UnifiedNoteRecord>({
+      colRichtext<Note, SortColumn>({
         key: "note",
         header: "Note",
-        accessor: (item) => (item.type === "note" ? item.data.content : ""),
+        accessor: (n) => n.content,
         weight: 3,
       }),
-      colDate<UnifiedNoteRecord>({
-        key: "date",
-        header: "Date Added",
-        accessor: (item) => item.dateStr,
-        className: "text-zinc-500 dark:text-zinc-400",
+      colDate<Note, SortColumn>(
+        {
+          key: "date",
+          header: "Date Added",
+          accessor: (n) => n.created_at,
+          className: "text-zinc-500 dark:text-zinc-400",
+        },
+        { sortColumn: "date" },
+      ),
+      colFiles<Note, SortColumn>({
+        getCount: (n) => docCountsByNote.get(n.id) ?? 0,
+        iconColorClass: "text-sky-500",
+        countClass: "text-zinc-500 dark:text-zinc-400",
       }),
-      {
-        key: "files",
-        header: "Files",
-        // Flex (not fixed): the document branch renders a variable-length
-        // label in this column, so it must be able to truncate.
-        sizing: "flex",
-        weight: 1,
-        align: "right",
-        render: (item) =>
-          item.type === "note" ? (
-            item.attachedDocs.length > 0 ? (
-              <span
-                className="inline-flex items-center gap-1 text-sky-500"
-                title={`${item.attachedDocs.length} document(s) attached`}
-              >
-                <PaperClipIcon className="h-4 w-4" />
-                <span className="text-zinc-500 dark:text-zinc-400">
-                  ({item.attachedDocs.length})
-                </span>
-              </span>
-            ) : (
-              <span className="text-zinc-400">—</span>
-            )
-          ) : (
-            <div className="truncate text-zinc-500 dark:text-zinc-400">
-              {item.data.label || "Unnamed"}
-            </div>
-          ),
-      },
     ],
-    [],
+    [docCountsByNote],
   );
 
   // ── Render ──
@@ -142,7 +103,7 @@ export default function NotesPage() {
     <PageShell
       backHref={ROUTES.TASK_MANAGER}
       title="Notes"
-      description="All your notes and standalone files."
+      description="All your notes."
       error={error}
       onRetry={() => userId && refreshData(userId)}
     >
@@ -150,49 +111,42 @@ export default function NotesPage() {
 
       {!isLoading && (
         <GenericViewPage
-          items={unifiedNotes}
+          data={notes}
           columns={noteColumns}
-          getItemKey={(item) => item.id}
-          views={STANDARD_VIEWS.ALL_ONLY}
-          activeView={activeView}
-          onViewChange={setActiveView}
-          emptyMessage="None"
-          onRowClick={(item) => {
-            if (item.type === "note") {
-              setNoteModalTarget(item.data);
-            } else {
-              handleSelectDocument(item.data);
-            }
+          getItemKey={(n) => n.id}
+          cacheKeyPrefix="taskmanager_notes"
+          defaultSort={{ column: "date", direction: "desc" }}
+          supportedViews={["all"]}
+          getDateKey={(n) => n.created_at}
+          itemNamePlural="notes"
+          onRowClick={(n) => setNoteModalTarget(n)}
+          onBulkDelete={async (ids, clearFn) => {
+            for (const id of ids) await handleNoteDelete(id, "cascade");
+            clearFn();
           }}
+          nowYear={nowYear ?? undefined}
+          nowMonth={nowMonth ?? undefined}
         />
       )}
 
       {noteModalTarget && userId && (
         <GenericDomainModal
           mode="record"
-          title="Edit note"
-          onClose={closeNoteModal}
+          domain="taskmanager_notes"
+          target={{
+            type: "record",
+            id: noteModalTarget.id,
+            data: noteModalTarget as unknown as Record<string, unknown>,
+          }}
           fields={NOTE_FIELDS}
-          initialData={{
-            name: noteModalTarget.name ?? "",
-            content: noteModalTarget.content ?? "",
-          }}
-          allowFiles
           userId={userId}
-          attachedDocuments={documents.filter(
-            (d) =>
-              d.domain === "taskmanager" &&
-              d.linked_id === noteModalTarget.id,
-          )}
-          standaloneDocuments={documents.filter(
-            (d) => d.domain === "taskmanager" && !d.linked_id,
-          )}
-          domain="taskmanager"
-          onSave={createSaveAdapter(noteModalTarget)}
-          onDeleteWithCascade={async (cascadeMode) => {
-            await handleNoteDelete(noteModalTarget.id, cascadeMode);
+          onClose={closeNoteModal}
+          onSaved={async () => {
+            if (userId) await refreshData(userId);
           }}
-          deleteLabel="Delete"
+          onDeleted={async () => {
+            if (userId) await refreshData(userId);
+          }}
           onDownloadDocument={handleDownloadDocument}
         />
       )}

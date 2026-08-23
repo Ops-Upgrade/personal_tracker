@@ -17,16 +17,6 @@ export const EXPENSE_FIELDS: FieldDef[] = [
 
 export type SortColumn = "item" | "seller" | "cost" | "date" | "reason";
 
-// ── Sort configs ──
-
-export const SORT_CONFIGS = [
-  { column: "item" as const, extractor: (exp: Expense) => exp.item.toLowerCase() },
-  { column: "seller" as const, extractor: (exp: Expense) => (exp.seller ?? "").toLowerCase() },
-  { column: "cost" as const, extractor: (exp: Expense) => exp.cost },
-  { column: "date" as const, extractor: (exp: Expense) => new Date(exp.date + "T00:00:00").getTime() },
-  { column: "reason" as const, extractor: (exp: Expense) => exp.reason.replace(/<[^>]*>/g, "").trim().toLowerCase() },
-];
-
 // ── Shared column atoms ──
 
 export const EXPENSE_DATE: ColumnDef<Expense, SortColumn> = colDate<Expense, SortColumn>(
@@ -48,7 +38,8 @@ export const EXPENSE_FILES: ColumnDef<Expense, SortColumn> = colFiles<Expense, S
 
 // Sizing model: "fixed" columns get max-content tracks (cost, dates, files
 // always fit their content); "flex" columns share the remaining space and
-// truncate gracefully via CSS — no breakpoint math anywhere.
+// truncate gracefully via CSS — no breakpoint math anywhere. Cells are
+// declarative tokens; the GenericDataGrid engine renders them internally.
 export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
   {
     key: "item",
@@ -56,11 +47,7 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
     sizing: "flex",
     weight: 2,
     sortColumn: "item",
-    render: (exp) => (
-      <span className="font-medium text-zinc-800 dark:text-zinc-100">
-        {exp.item || "—"}
-      </span>
-    ),
+    token: { type: "text", accessor: (exp) => exp.item, color: "strong" },
   },
   {
     key: "seller",
@@ -68,22 +55,21 @@ export const EXPENSE_COLUMNS: ColumnDef<Expense, SortColumn>[] = [
     sizing: "flex",
     weight: 1,
     sortColumn: "seller",
-    render: (exp) => (
-      <span className="text-zinc-600 dark:text-zinc-300">
-        {exp.seller || "—"}
-      </span>
-    ),
+    token: { type: "text", accessor: (exp) => exp.seller, color: "muted" },
   },
   {
     key: "cost",
     header: "Cost",
     sizing: "fixed",
     sortColumn: "cost",
-    render: (exp) => (
-      <span className="text-zinc-700 dark:text-zinc-200">
-        ₹ {exp.cost.toLocaleString("en-IN")}
-      </span>
-    ),
+    // Locale grouping renders "₹ 1,23,456" (en-IN) via the token engine.
+    token: {
+      type: "text",
+      accessor: (exp) => exp.cost,
+      prefix: "₹ ",
+      localeFormat: "en-IN",
+      color: "plain",
+    },
   },
   EXPENSE_DATE,
   EXPENSE_REASON,

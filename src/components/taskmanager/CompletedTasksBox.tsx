@@ -7,7 +7,7 @@ import GenericCompletedBox from "@/components/common/GenericCompletedBox";
 import Button from "@/components/common/Button";
 import { TASK_PRIORITY } from "./config";
 import { colDate } from "@/components/common/columns";
-import { sortByCompletedDesc } from "./helpers";
+import { sortByCompletedAsc } from "./helpers";
 
 interface CompletedTasksBoxProps {
   tasks: Task[];
@@ -24,7 +24,10 @@ export default function CompletedTasksBox({
   onSelectTask,
   onReopenTask,
 }: CompletedTasksBoxProps) {
-  const sorted = [...tasks].sort(sortByCompletedDesc);
+  // Newest 5, in chronological order: ascending sort + tail slice keeps
+  // same-day rows in their original order (a descending slice would render
+  // them backwards, and reversing it would flip same-day rows too).
+  const sorted = [...tasks].sort(sortByCompletedAsc).slice(-5);
 
   // Fixed tracks size themselves to content; flex tracks share the rest.
   const columns: ColumnDef<Task>[] = useMemo(
@@ -45,11 +48,13 @@ export default function CompletedTasksBox({
         key: "mode",
         header: "Mode",
         sizing: "fixed",
-        render: (task) => (
-          <span className="text-xs capitalize text-zinc-500 dark:text-zinc-400">
-            {task.mode}
-          </span>
-        ),
+        token: {
+          type: "text",
+          accessor: (task) => task.mode,
+          color: "faint",
+          capitalize: true,
+          size: "xs",
+        },
       },
       colDate<Task>({ key: "date", header: "Date", accessor: (task) => task.completed_at }),
       {

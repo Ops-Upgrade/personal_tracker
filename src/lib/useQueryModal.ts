@@ -12,7 +12,8 @@ import { useRouter, useSearchParams } from "next/navigation";
  * @param items  - The array of records to search when resolving an edit modal.
  * @param prefix - The slug used in the query param (e.g. "medical" → ?modal=new-medical).
  *
- * @returns modalTarget ("create" | T | null), openCreate, openEdit, closeModal
+ * @returns modalTarget ("create" | T | null), openCreate, openEdit,
+ *          openEditId, closeModal
  */
 export function useQueryModal<T extends { id: string }>(
   items: T[],
@@ -47,14 +48,20 @@ export function useQueryModal<T extends { id: string }>(
     [setModalParam, prefix],
   );
 
-  const openEdit = useCallback(
-    (item: T) => setModalParam(`edit-${prefix}-${item.id}`),
+  /** Open the edit modal by record id (no hydrated row needed — e.g. right after a save). */
+  const openEditId = useCallback(
+    (id: string) => setModalParam(`edit-${prefix}-${id}`),
     [setModalParam, prefix],
+  );
+
+  const openEdit = useCallback(
+    (item: T) => openEditId(item.id),
+    [openEditId],
   );
 
   const closeModal = useCallback(() => {
     clearModalParam();
   }, [clearModalParam]);
 
-  return { modalTarget, openCreate, openEdit, closeModal } as const;
+  return { modalTarget, openCreate, openEdit, openEditId, closeModal } as const;
 }

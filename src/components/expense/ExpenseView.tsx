@@ -1,44 +1,25 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback } from "react";
 import { ROUTES } from "@/routes/paths";
-import Button from "@/components/common/Button";
 import { useQueryModal } from "@/lib/useQueryModal";
-import { parseISTDate } from "@/api/serverDate";
-import type { Expense, ExpenseViewMode } from "@/types/expense";
-import { MONTHS } from "@/types/common";
-import { useLocalStorage } from "@/lib/useLocalStorage";
 import { useExpenseActions } from "@/hooks/useExpenseActions";
 import { useExpenseData } from "@/hooks/useExpenseData";
-import ViewToggle from "@/components/common/ViewToggle";
-import type { ViewToggleOption } from "@/components/common/ViewToggle";
-import { List, LayoutGrid } from "lucide-react";
 import { FolderIcon } from "@/components/common/Icons";
-import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import GenericDomainPage from "@/components/common/GenericDomainPage";
-import type { DomainPageContext } from "@/components/common/GenericDomainPage";
-import type { ColumnDef } from "@/components/common/GenericViewPage";
 import GenericDomainModal from "@/components/common/GenericDomainModal";
-import { normalizeDateForInput } from "@/lib/utils";
-import { EXPENSE_FIELDS, EXPENSE_DATE, EXPENSE_REASON, EXPENSE_FILES } from "./config";
-import GenericMonthRow from "@/components/common/GenericMonthRow";
-import YearDropdown from "@/components/common/YearDropdown";
-
-/** SVG icon symbols for the expense view toggle */
-const EXPENSE_VIEW_OPTIONS: readonly ViewToggleOption<ExpenseViewMode>[] = [
-  { value: "single", label: <List className="h-4 w-4" /> },
-  { value: "multi", label: <LayoutGrid className="h-4 w-4" /> },
-];
+import type { Expense } from "@/types/expense";
+import { EXPENSE_FIELDS, EXPENSE_COLUMNS } from "./config";
 
 /**
  * Expense Tracker feature shell.
- * Orchestrates month list, year dropdown, and create/edit expense modals.
  * "View All" navigates to the dedicated /expense/all route with month/year params.
  * Query-param-driven modals via useQueryModal ("expense" prefix).
- * Layout shell delegated to GenericDomainPage (full-width).
+ * All structural rendering (year dropdown, month buckets, view toggle,
+ * single/multi masonry) is owned by GenericDomainPage (full-width).
  */
 export default function ExpenseView() {
-  const { userId, istDate, isLoading, error, refreshData, expenses, documents } =
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData, expenses } =
     useExpenseData();
 
   const refresh = useCallback(async () => {
@@ -46,237 +27,88 @@ export default function ExpenseView() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { createSaveAdapter, handleExpenseDelete, handleDownloadDocument } =
-    useExpenseActions({ userId, refresh });
+  const { handleDownloadDocument } = useExpenseActions({ userId, refresh });
 
   // Query-param-driven modal state via shared hook
-  const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(expenses, "expense");
+  const { modalTarget, openCreate, openEdit, openEditId, closeModal } = useQueryModal(expenses, "expense");
 
-  const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
+  // ── Month row subtitle (total + count per month) ──
 
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [viewMode, setViewMode] = useLocalStorage<ExpenseViewMode>("expenseViewMode", "single");
-
-  // Auto-scroll to the current month tile on load / year / view change
-  useEffect(() => {
-    if (isLoading) return;
-    const timeout = setTimeout(() => {
-      document
-        .getElementById("current-month-tile")
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-    return () => clearTimeout(timeout);
-  }, [isLoading, selectedYear, viewMode]);
-
-  // ── Derived data ──
-
-  const availableYears = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    const yearsFromData = new Set(
-      expenses.map((e) => new Date(e.date).getFullYear())
-    );
-    yearsFromData.add(currentYear);
-    return Array.from(yearsFromData).sort((a, b) => b - a);
-  }, [expenses]);
-
-  const expensesByMonth = useMemo(() => {
-    return MONTHS.map((monthName, monthIndex) => {
-      const filtered = expenses.filter((e) => {
-        const d = new Date(e.date);
-        return d.getFullYear() === selectedYear && d.getMonth() === monthIndex;
-      });
-      return { monthName, monthIndex, expenses: filtered };
-    });
-  }, [expenses, selectedYear]);
-
-  const yearlyTotal = useMemo(() => {
-    return expensesByMonth.reduce((acc, month) => {
-      return acc + month.expenses.reduce((sum, e) => sum + e.cost, 0);
-    }, 0);
-  }, [expensesByMonth]);
-
-  // ── Column definitions for month preview rows ──
-  // Fixed tracks size themselves to content; flex tracks share the rest.
-
-  const expenseColumns: ColumnDef<Expense>[] = useMemo(
-    () => [
-      {
-        key: "item",
-        header: "Item",
-        sizing: "flex",
-        weight: 2,
-        render: (exp) => (
-          <span className="font-medium text-zinc-800 dark:text-zinc-100">
-            {exp.item || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "seller",
-        header: "Seller",
-        sizing: "flex",
-        weight: 1,
-        render: (exp) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {exp.seller || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "cost",
-        header: "Cost",
-        sizing: "fixed",
-        render: (exp) => (
-          <span className="text-zinc-700 dark:text-zinc-200">
-            ₹ {exp.cost.toLocaleString("en-IN")}
-          </span>
-        ),
-      },
-      EXPENSE_DATE,
-      EXPENSE_REASON,
-      EXPENSE_FILES,
-    ],
-    [],
-  );
-
-  // ── Context for GenericDomainPage ──
-
-  const ctx: DomainPageContext = useMemo(
-    () => ({
-      userId,
-      istDate,
-      nowYear: new Date().getFullYear(),
-      nowMonth: new Date().getMonth(),
-      isLoading,
-      error,
-      refreshData,
-    }),
-    [userId, istDate, isLoading, error, refreshData],
-  );
+  const getSubtitle = useCallback((items: Expense[]) => {
+    const total = items.reduce((sum, e) => sum + e.cost, 0);
+    const count = items.length;
+    return <>Total Expense: ₹ {total.toLocaleString("en-IN")} · {count} item{count !== 1 ? "s" : ""}</>;
+  }, []);
 
   // ── Render ──
 
   return (
-    <GenericDomainPage
-      ctx={ctx}
+    <GenericDomainPage<Expense>
+      data={expenses}
+      columns={EXPENSE_COLUMNS}
+      domain="expense"
+      getDateKey={(expense) => expense.date}
+      getItemKey={(expense) => expense.id}
+      supportedViews={["single", "multi"]}
       title="Expenses"
       description="Track and manage your spending."
       backHref={ROUTES.DASHBOARD}
+      onAdd={() => openCreate()}
+      isLoading={isLoading}
+      error={error}
+      onRetry={() => {
+        void refresh();
+      }}
+      nowYear={nowYear}
+      nowMonth={nowMonth}
+      viewCacheKey="expenseViewMode"
       storeHref={ROUTES.EXPENSE_STORE}
       storeLabel="Receipt Store"
       storeIcon={<FolderIcon className="h-5 w-5 text-emerald-500" />}
-      headerStat={
-        !isLoading ? (
+      headerStat={({ selectedYear, itemsForYear }) => {
+        const yearlyTotal = itemsForYear
+          .filter((e) => !!e.date)
+          .reduce((sum, e) => sum + e.cost, 0);
+        return (
           <p className="mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
             Total for {selectedYear}:{" "}
             <span className="font-semibold text-zinc-900 dark:text-zinc-100">
               ₹ {yearlyTotal.toLocaleString("en-IN")}
             </span>
           </p>
-        ) : undefined
-      }
+        );
+      }}
+      viewAllBaseHref={ROUTES.EXPENSE_ALL}
+      getSubtitle={getSubtitle}
+      onRowClick={openEdit}
       modalSlot={
         modalTarget && userId && (
           <GenericDomainModal
-            key={modalTarget === "create" ? "create" : modalTarget.id}
             mode="record"
-            title={modalTarget === "create" ? "Add expense" : "Edit expense"}
-            onClose={closeModal}
-            fields={EXPENSE_FIELDS}
-            initialData={{
-              item: modalTarget === "create" ? "" : modalTarget.item,
-              seller: modalTarget === "create" ? "" : modalTarget.seller,
-              cost: modalTarget === "create" ? "" : String(modalTarget.cost),
-              date:
-                modalTarget === "create"
-                  ? (istDate ?? "")
-                  : normalizeDateForInput(modalTarget.date),
-              reason: modalTarget === "create" ? "" : modalTarget.reason,
-            }}
-            allowFiles
-            allowLinking={false}
-            userId={userId}
-            attachedDocuments={
-              modalTarget !== "create" && modalTarget
-                ? documents.filter(
-                    (d) => d.domain === "expense" && d.linked_id === modalTarget.id,
-                  )
-                : []
-            }
             domain="expense"
-            onSave={createSaveAdapter(
-              modalTarget === "create" ? null : modalTarget,
+            target={
               modalTarget === "create"
-                ? (saved) => openEdit(saved)
-                : undefined,
-            )}
-            onDeleteWithCascade={
-              modalTarget !== "create" && modalTarget
-                ? async (cascadeMode) => {
-                    await handleExpenseDelete(modalTarget.id, cascadeMode);
+                ? undefined
+                : {
+                    type: "record",
+                    id: modalTarget.id,
+                    data: modalTarget as unknown as Record<string, unknown>,
                   }
-                : undefined
             }
-            deleteLabel="Delete"
+            fields={EXPENSE_FIELDS}
+            userId={userId}
+            onClose={closeModal}
+            onSaved={async (saved) => {
+              await refresh();
+              if (modalTarget === "create") openEditId(saved.id);
+            }}
+            onDeleted={async () => {
+              await refresh();
+            }}
             onDownloadDocument={handleDownloadDocument}
           />
         )
       }
-      renderBody={() => (
-        <BoxContainer>
-          <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <ViewToggle
-                value={viewMode}
-                onChange={setViewMode}
-                options={EXPENSE_VIEW_OPTIONS}
-                ariaLabel="Expense view toggle"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="md" onClick={() => openCreate()} disabled={isLoading}>
-                + Add
-              </Button>
-              <YearDropdown
-                years={availableYears}
-                selectedYear={selectedYear}
-                onChange={setSelectedYear}
-              />
-            </div>
-          </header>
-          <div className={`${SCROLLABLE_CLASSES} ${viewMode === "multi" ? "flex flex-col md:block md:columns-2 gap-4 md:gap-4 space-y-4 md:space-y-4" : "flex flex-col gap-4"}`}>
-            {expensesByMonth
-              .map(({ monthName, monthIndex, expenses: monthExpenses }) => {
-                const isCurrentMonth =
-                  istParsed !== null &&
-                  selectedYear === istParsed.year &&
-                  monthIndex === istParsed.month;
-                return (
-                  <div key={monthName} className={viewMode === "multi" ? "break-inside-avoid inline-block w-full mb-4" : ""}>
-                    <GenericMonthRow
-                      monthName={monthName}
-                      monthIndex={monthIndex}
-                      year={selectedYear}
-                      items={monthExpenses}
-                      isCurrentMonth={isCurrentMonth}
-                      getDate={(expense) => expense.date}
-                      getSubtitle={(items) => {
-                        const total = items.reduce((sum, e) => sum + e.cost, 0);
-                        const count = items.length;
-                        return <>Total Expense: ₹ {total.toLocaleString("en-IN")} · {count} item{count !== 1 ? "s" : ""}</>;
-                      }}
-                      columns={expenseColumns}
-                      getItemKey={(expense) => expense.id}
-                      previewCount={5}
-                      onRowClick={(expense) => openEdit(expense)}
-                      viewAllHref={`${ROUTES.EXPENSE_ALL}?year=${selectedYear}&month=${monthIndex}`}
-                    />
-                  </div>
-                );
-              })}
-          </div>
-        </BoxContainer>
-      )}
     />
   );
 }

@@ -5,51 +5,64 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ROUTES } from "@/routes/paths";
 import { FolderIcon } from "@/components/common/Icons";
-import { useLocalStorage } from "@/lib/useLocalStorage";
+import Button from "@/components/common/Button";
+import PriorityBadge from "@/components/common/PriorityBadge";
+import type { ColumnDef } from "@/components/common/GenericViewPage";
 import { useQueryModal } from "@/lib/useQueryModal";
 import { useTaskData } from "@/hooks/useTaskData";
 import GenericDomainPage from "@/components/common/GenericDomainPage";
-import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
-import type { DomainPageContext } from "@/components/common/GenericDomainPage";
-import type { Task, TaskView } from "@/types/taskmanager";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
+import type { Task } from "@/types/taskmanager";
+import { PRIORITIES, type Priority } from "@/types/common";
 import { useNoteActions } from "@/hooks/useNoteActions";
 import { useTaskActions } from "@/hooks/useTaskActions";
-import { getUnifiedNotes } from "./helpers";
-import ActiveTasksBox from "./ActiveTasksBox";
+import { getUnifiedNotes, getPriorityColor } from "./helpers";
+import { TASK_FIELDS, TASK_LAYOUT, NOTE_FIELDS, TASK_PRIORITY, TASK_DUE_DATE } from "./config";
+import { colRichtext } from "@/components/common/columns";
 import CompletedTasksBox from "./CompletedTasksBox";
 import NotesBox from "./NotesBox";
 
-const TASK_FIELDS: FieldDef[] = [
-  { key: "name", type: "text", label: "Task Name" },
-  { key: "priority", type: "select", label: "Priority", options: [
-    { value: "low", label: "Low" }, { value: "medium", label: "Medium" },
-    { value: "high", label: "High" }, { value: "critical", label: "Critical" },
-  ]},
-  { key: "due_date", type: "date", label: "Due Date" },
-  { key: "mode", type: "select", label: "Mode", options: [
-    { value: "online", label: "Online" }, { value: "offline", label: "Offline" },
-  ]},
-  { key: "description", type: "richtext", label: "Task Description", minHeight: "8rem" },
-  { key: "is_completed", type: "checkbox", label: "Mark complete" },
-];
+// ── Dashboard column definitions (GenericDomainPage drops the Priority
+//    column automatically in the priority view) ──
 
-const TASK_LAYOUT: string[][] = [["name"], ["priority", "due_date", "mode"], ["description"], ["is_completed"]];
-
-const NOTE_FIELDS: FieldDef[] = [
-  { key: "name", type: "text", label: "Name", placeholder: "Note title" },
-  { key: "content", type: "richtext", label: "Content", minHeight: "10rem" },
+const ACTIVE_TASK_COLUMNS: ColumnDef<Task>[] = [
+  {
+    key: "name",
+    header: "Task Name",
+    sizing: "flex",
+    weight: 2,
+    render: (task) => (
+      <span className="font-semibold text-zinc-800 dark:text-zinc-100">
+        {task.name}
+      </span>
+    ),
+  },
+  TASK_PRIORITY,
+  TASK_DUE_DATE,
+  {
+    key: "mode",
+    header: "Mode",
+    sizing: "fixed",
+    token: { type: "text", accessor: (task) => task.mode, color: "muted" },
+  },
+  colRichtext<Task>({
+    key: "description",
+    header: "Description",
+    accessor: (task) => task.description,
+    weight: 2,
+    className: "text-zinc-700 dark:text-zinc-200",
+  }),
 ];
 
 /**
  * Task Manager feature shell.
  * Query-param-driven modals via useQueryModal ("task" and "note" prefixes).
- * Layout shell delegated to GenericDomainPage (dual-column).
+ * All structural rendering (year dropdown, month buckets, view toggle,
+ * priority grouping) is owned by GenericDomainPage.
  */
 export default function TaskManagerView() {
   const router = useRouter();
-  const { userId, istDate, nowYear, nowMonth, isLoading, error, refreshData, tasks, notes, documents } = useTaskData({ includeNotes: true, includeDocuments: true });
-
-  const [activeView, setActiveView] = useLocalStorage<TaskView>("taskManagerActiveView", "months");
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData, tasks, notes, documents } = useTaskData({ includeNotes: true, includeDocuments: true });
 
   // ── Derived data ──
 
@@ -72,6 +85,7 @@ export default function TaskManagerView() {
     modalTarget: taskModalTarget,
     openCreate: openNewTask,
     openEdit: openEditTask,
+    openEditId: openEditTaskId,
     closeModal: closeTaskModal,
   } = useQueryModal(tasks, "task");
 
@@ -79,6 +93,7 @@ export default function TaskManagerView() {
     modalTarget: noteModalTarget,
     openCreate: openNewNote,
     openEdit: openEditNote,
+    openEditId: openEditNoteId,
     closeModal: closeNoteModal,
   } = useQueryModal(notes, "note");
 
@@ -89,32 +104,72 @@ export default function TaskManagerView() {
     await refreshData(userId);
   }, [userId, refreshData]);
 
-  const { createSaveAdapter: createTaskSaveAdapter, handleTaskDelete, handleToggleComplete } =
-    useTaskActions({ userId, refresh });
+  const { handleToggleComplete } = useTaskActions({ userId, refresh });
 
-  const { createSaveAdapter: createNoteSaveAdapter, handleNoteDelete, handleDownloadDocument } =
-    useNoteActions({
-      userId,
-      refresh: async () => {
-        if (userId) await refreshData(userId);
-      },
-    });
+  const { handleDownloadDocument } = useNoteActions({
+    userId,
+    refresh: async () => {
+      if (userId) await refreshData(userId);
+    },
+  });
 
-  // ── Context for GenericDomainPage ──
+  // ── Row helpers passed to GenericDomainPage ──
 
-  const ctx: DomainPageContext = useMemo(
-    () => ({ userId, istDate, nowYear, nowMonth, isLoading, error, refreshData }),
-    [userId, istDate, nowYear, nowMonth, isLoading, error, refreshData],
+  const rowAction = useCallback(
+    (task: Task) => (
+      <Button
+        variant="success"
+        size="sm"
+        className="w-[85px]"
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation();
+          handleToggleComplete(task, true);
+        }}
+      >
+        Complete
+      </Button>
+    ),
+    [handleToggleComplete],
+  );
+
+  const getSubtitle = useCallback(
+    (items: Task[]) => (
+      <>{items.length} task{items.length !== 1 ? "s" : ""}</>
+    ),
+    [],
   );
 
   // ── Render ──
 
   return (
-    <GenericDomainPage
-      ctx={ctx}
+    <GenericDomainPage<Task>
+      data={activeTasks}
+      columns={ACTIVE_TASK_COLUMNS}
+      domain="taskmanager"
+      getDateKey={(task) => task.due_date}
+      getItemKey={(task) => task.id}
+      supportedViews={["months", "priority"]}
+      priorities={PRIORITIES}
+      getPriorityKey={(task) => task.priority}
+      getPriorityColor={(p) => getPriorityColor(p as Priority)}
+      renderPriorityBadge={(p) => <PriorityBadge priority={p as Priority} showTextOnMobile />}
       title="Task Manager"
       description="Track active tasks, completed tasks, and notes."
       backHref={ROUTES.DASHBOARD}
+      onAdd={openNewTask}
+      isLoading={isLoading}
+      error={error}
+      onRetry={() => {
+        void refresh();
+      }}
+      nowYear={nowYear}
+      nowMonth={nowMonth}
+      viewCacheKey="taskManagerActiveView"
+      viewAllBaseHref={ROUTES.TASK_MANAGER_ALL}
+      onRowClick={openEditTask}
+      rowClassName={(task) => `border-l-[3px] ${getPriorityColor(task.priority).border}`}
+      rowAction={rowAction}
+      getSubtitle={getSubtitle}
       completedSlot={
         <CompletedTasksBox
           tasks={completedTasks}
@@ -151,85 +206,57 @@ export default function TaskManagerView() {
         <>
           {taskModalTarget && (
             <GenericDomainModal
-              key={taskModalTarget === "create" ? "create" : taskModalTarget.id}
               mode="record"
-              title={taskModalTarget === "create" ? "Add task" : "Edit task"}
-              onClose={closeTaskModal}
+              domain="taskmanager"
+              target={
+                taskModalTarget === "create"
+                  ? undefined
+                  : {
+                      type: "record",
+                      id: taskModalTarget.id,
+                      data: taskModalTarget as unknown as Record<string, unknown>,
+                    }
+              }
               fields={TASK_FIELDS}
               layout={TASK_LAYOUT}
-              initialData={{
-                name: taskModalTarget === "create" ? "" : taskModalTarget.name,
-                priority: taskModalTarget === "create" ? "medium" : taskModalTarget.priority,
-                due_date: taskModalTarget === "create" ? (istDate ?? "") : (taskModalTarget.due_date ?? ""),
-                mode: taskModalTarget === "create" ? "online" : taskModalTarget.mode,
-                description: taskModalTarget === "create" ? "" : taskModalTarget.description,
-                is_completed: taskModalTarget === "create" ? false : taskModalTarget.is_completed,
+              onClose={closeTaskModal}
+              onSaved={async (saved) => {
+                await refresh();
+                if (taskModalTarget === "create") openEditTaskId(saved.id);
               }}
-              onSave={createTaskSaveAdapter(
-                taskModalTarget === "create" ? null : taskModalTarget,
-                taskModalTarget === "create"
-                  ? (saved) => openEditTask(saved)
-                  : undefined,
-              )}
-              onDelete={
-                taskModalTarget !== "create"
-                  ? async () => { await handleTaskDelete(taskModalTarget.id); }
-                  : undefined
-              }
-              deleteLabel="Delete"
-              maxWidthClassName="max-w-lg"
+              onDeleted={async () => {
+                await refresh();
+              }}
             />
           )}
           {noteModalTarget && userId && (
             <GenericDomainModal
-              key={noteModalTarget === "create" ? "create" : noteModalTarget.id}
               mode="record"
-              title={noteModalTarget === "create" ? "Add note" : "Edit note"}
-              onClose={closeNoteModal}
-              fields={NOTE_FIELDS}
-              initialData={{
-                name: noteModalTarget === "create" ? "" : noteModalTarget.name,
-                content: noteModalTarget === "create" ? "" : noteModalTarget.content,
-              }}
-              allowFiles
-              userId={userId}
-              attachedDocuments={
-                noteModalTarget !== "create"
-                  ? documents.filter((d) => d.domain === "taskmanager" && d.linked_id === noteModalTarget.id)
-                  : []
-              }
-              standaloneDocuments={documents.filter((d) => d.domain === "taskmanager" && !d.linked_id)}
-              domain="taskmanager"
-              onSave={createNoteSaveAdapter(
-                noteModalTarget === "create" ? null : noteModalTarget,
+              domain="taskmanager_notes"
+              target={
                 noteModalTarget === "create"
-                  ? (saved) => openEditNote(saved)
-                  : undefined,
-              )}
-              onDeleteWithCascade={
-                noteModalTarget !== "create"
-                  ? async (cascadeMode) => { await handleNoteDelete(noteModalTarget.id, cascadeMode); }
-                  : undefined
+                  ? undefined
+                  : {
+                      type: "record",
+                      id: noteModalTarget.id,
+                      data: noteModalTarget as unknown as Record<string, unknown>,
+                    }
               }
-              deleteLabel="Delete"
+              fields={NOTE_FIELDS}
+              userId={userId}
+              onClose={closeNoteModal}
+              onSaved={async (saved) => {
+                await refresh();
+                if (noteModalTarget === "create") openEditNoteId(saved.id);
+              }}
+              onDeleted={async () => {
+                await refresh();
+              }}
               onDownloadDocument={handleDownloadDocument}
             />
           )}
         </>
       }
-      renderBody={(pageCtx) => (
-        <ActiveTasksBox
-          tasks={activeTasks}
-          isLoading={pageCtx.isLoading}
-          view={activeView}
-          nowYear={pageCtx.nowYear}
-          nowMonth={pageCtx.nowMonth}
-          onViewChange={setActiveView}
-          onAdd={openNewTask}
-          onSelectTask={openEditTask}
-          onMarkComplete={(task: Task) => handleToggleComplete(task, true)}
-        />
-      )}
     />
   );
 }

@@ -4,10 +4,10 @@ import { MONTH_NAMES } from "@/lib/constants";
 
 interface MonthDropdownProps {
   /** Kept for backward compatibility — the dropdown now renders all 12 months
-   *  from MONTH_NAMES regardless of this prop. */
+   *  from MONTH_NAMES plus an "Unscheduled" bucket regardless of this prop. */
   months?: number[];
-  selectedMonth: number | "all";
-  onChange: (month: number | "all") => void;
+  selectedMonth: number | "all" | "unscheduled";
+  onChange: (month: number | "all" | "unscheduled") => void;
 }
 
 /**
@@ -27,11 +27,13 @@ export default function MonthDropdown({
       value={selectedMonth}
       onChange={(e) => {
         const val = e.target.value;
-        onChange(val === "all" ? "all" : Number(val));
+        if (val === "all" || val === "unscheduled") onChange(val);
+        else onChange(Number(val));
       }}
       className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
     >
       <option value="all">All Months</option>
+      <option value="unscheduled">Unscheduled</option>
       {MONTH_NAMES.map((name, idx) => (
         <option key={idx} value={idx}>
           {name}

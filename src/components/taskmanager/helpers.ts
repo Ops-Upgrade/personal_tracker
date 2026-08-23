@@ -1,13 +1,11 @@
-import type { Task, Note } from "@/types/taskmanager";
-import type { Priority } from "@/types/common";
+import type { Note } from "@/types/taskmanager";
 import type { Document } from "@/types/document";
-import { PRIORITIES } from "@/types/common";
 import { trunc } from "@/lib/viewHelpers";
 
-// Re-export shared utilities (except byPriority which we wrap)
+// Re-export shared utilities
 export {
   sortByCompletedDesc,
-  completedByMonths,
+  sortByCompletedAsc,
 } from "@/lib/viewHelpers";
 
 // Re-export trunc (imported above for local use in getNoteTitle)
@@ -15,13 +13,6 @@ export { trunc };
 
 // Re-export priority colors from shared location
 export { getPriorityColor } from "@/lib/priorityColors";
-
-// Re-import byPriority from shared for wrapping
-import { byPriority as sharedByPriority } from "@/lib/viewHelpers";
-
-export function byPriority(tasks: Task[]): Record<Priority, Task[]> {
-  return sharedByPriority(tasks, PRIORITIES) as Record<Priority, Task[]>;
-}
 
 /** Extract a display title from a note, with fallback for legacy notes lacking a name. */
 export function getNoteTitle(note: Note): string {

@@ -1,296 +1,103 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback } from "react";
 import { ROUTES } from "@/routes/paths";
-import Button from "@/components/common/Button";
 import { useQueryModal } from "@/lib/useQueryModal";
-import { parseISTDate } from "@/api/serverDate";
-import type { MedicalRecord } from "@/types/medical";
-import { MONTHS } from "@/types/common";
-import { useLocalStorage } from "@/lib/useLocalStorage";
-import ViewToggle from "@/components/common/ViewToggle";
-import type { ViewToggleOption } from "@/components/common/ViewToggle";
-import { List, LayoutGrid, Table } from "lucide-react";
 import { FolderIcon } from "@/components/common/Icons";
-import BoxContainer, { SCROLLABLE_CLASSES } from "@/components/common/BoxContainer";
 import GenericDomainPage from "@/components/common/GenericDomainPage";
-import type { DomainPageContext } from "@/components/common/GenericDomainPage";
-import type { ColumnDef } from "@/components/common/GenericViewPage";
-import GenericDomainModal, { type FieldDef } from "@/components/common/GenericDomainModal";
-import { useMedicalActions } from "@/hooks/useMedicalActions";
+import GenericDomainModal from "@/components/common/GenericDomainModal";
 import { useMedicalData } from "@/hooks/useMedicalData";
-import { MEDICAL_DATE, MEDICAL_DIAGNOSIS, MEDICAL_FILES } from "./config";
-import MedicalTable from "./MedicalTable";
-import GenericMonthRow from "@/components/common/GenericMonthRow";
-import YearDropdown from "@/components/common/YearDropdown";
-
-type MedicalViewMode = "all" | "single" | "multi";
-
-/** SVG icon symbols for the medical view toggle */
-const MEDICAL_VIEW_OPTIONS: readonly ViewToggleOption<MedicalViewMode>[] = [
-  { value: "all", label: <Table className="h-4 w-4" /> },
-  { value: "single", label: <List className="h-4 w-4" /> },
-  { value: "multi", label: <LayoutGrid className="h-4 w-4" />, hideOnMobile: true },
-];
-
-/** Schema for the medical record create/edit modal */
-const MEDICAL_FIELDS: FieldDef[] = [
-  { key: "name", type: "text", label: "Name" },
-  { key: "clinic", type: "text", label: "Clinic / Doctor" },
-  { key: "date", type: "date", label: "Date" },
-  { key: "diagnosis_timeline", type: "richtext", label: "Diagnosis Timeline", minHeight: "8rem" },
-];
+import type { MedicalRecord } from "@/types/medical";
+import { MEDICAL_FIELDS, MEDICAL_COLUMNS } from "./config";
 
 /**
  * Medical Records feature shell.
- * Orchestrates month list, year dropdown, and create/edit medical record modals.
  * "View All" navigates to the dedicated /medical/all route with month/year params.
  * Query-param-driven modals via useQueryModal ("medical" prefix).
- * Layout shell delegated to GenericDomainPage (full-width).
+ * All structural rendering (year dropdown, month buckets, view toggle,
+ * all/single/multi layouts) is owned by GenericDomainPage (full-width).
  */
 export default function MedicalView() {
-  const { userId, istDate, isLoading, error, refreshData, records, documents } =
+  const { userId, nowYear, nowMonth, isLoading, error, refreshData, records } =
     useMedicalData();
 
-  const istParsed = useMemo(() => (istDate ? parseISTDate(istDate) : null), [istDate]);
-
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [viewMode, setViewMode] = useLocalStorage<MedicalViewMode>("medicalViewMode", "all");
-
   // Query-param-driven modal state via shared hook
-  const { modalTarget, openCreate, openEdit, closeModal } = useQueryModal(records, "medical");
+  const { modalTarget, openCreate, openEdit, openEditId, closeModal } = useQueryModal(records, "medical");
 
-  // Auto-scroll to the current month tile on load / view change
-  useEffect(() => {
-    if (isLoading || viewMode === "all") return;
-    const timeout = setTimeout(() => {
-      document
-        .getElementById("current-month-tile")
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
-    return () => clearTimeout(timeout);
-  }, [isLoading, selectedYear, viewMode]);
+  // ── Month row subtitle (record count per month) ──
 
-  // ── Derived data ──
-
-  const availableYears = useMemo(() => {
-    const currentYear = new Date().getFullYear();
-    const yearsFromData = new Set(
-      records.map((r) => new Date(r.date).getFullYear())
-    );
-    yearsFromData.add(currentYear);
-    return Array.from(yearsFromData).sort((a, b) => b - a);
-  }, [records]);
-
-  const recordsByMonth = useMemo(() => {
-    return MONTHS.map((monthName, monthIndex) => {
-      const filtered = records.filter((r) => {
-        const d = new Date(r.date);
-        return d.getFullYear() === selectedYear && d.getMonth() === monthIndex;
-      });
-      return { monthName, monthIndex, records: filtered };
-    });
-  }, [records, selectedYear]);
-
-  const recordsForSelectedYear = useMemo(() => {
-    return records.filter((r) => new Date(r.date).getFullYear() === selectedYear);
-  }, [records, selectedYear]);
-
-  const totalRecords = recordsForSelectedYear.length;
-
-  // ── Column definitions for month preview rows ──
-  // Fixed tracks size themselves to content; flex tracks share the rest.
-
-  const medicalColumns: ColumnDef<MedicalRecord>[] = useMemo(
-    () => [
-      {
-        key: "name",
-        header: "Name",
-        sizing: "flex",
-        weight: 2,
-        render: (rec) => (
-          <span className="font-medium text-zinc-800 dark:text-zinc-100">
-            {rec.name || "—"}
-          </span>
-        ),
-      },
-      {
-        key: "clinic",
-        header: "Clinic",
-        sizing: "flex",
-        weight: 1,
-        render: (rec) => (
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {rec.clinic || "—"}
-          </span>
-        ),
-      },
-      MEDICAL_DATE,
-      MEDICAL_DIAGNOSIS,
-      MEDICAL_FILES,
-    ],
-    [],
-  );
-
-  // ── CRUD handlers ──
-
-  const refresh = useCallback(async () => {
-    if (!userId) return;
-    await refreshData(userId);
-  }, [userId, refreshData]);
-
-  const { createSaveAdapter, handleDelete } = useMedicalActions({ userId, refresh });
-
-  // ── Context for GenericDomainPage ──
-
-  const ctx: DomainPageContext = useMemo(
-    () => ({
-      userId,
-      istDate,
-      nowYear: new Date().getFullYear(),
-      nowMonth: new Date().getMonth(),
-      isLoading,
-      error,
-      refreshData,
-    }),
-    [userId, istDate, isLoading, error, refreshData],
-  );
+  const getSubtitle = useCallback((items: MedicalRecord[]) => {
+    const count = items.length;
+    return <>{count} record{count !== 1 ? "s" : ""}</>;
+  }, []);
 
   // ── Render ──
 
   return (
-    <GenericDomainPage
-      ctx={ctx}
+    <GenericDomainPage<MedicalRecord>
+      data={records}
+      columns={MEDICAL_COLUMNS}
+      domain="medical"
+      getDateKey={(record) => record.date}
+      getItemKey={(record) => record.id}
+      supportedViews={["all", "single", "multi"]}
+      emptyMessage="No medical records found."
       title="Medical Records"
       description="Track and manage your medical history."
       backHref={ROUTES.DASHBOARD}
+      onAdd={() => openCreate()}
+      isLoading={isLoading}
+      error={error}
+      onRetry={() => {
+        if (userId) void refreshData(userId);
+      }}
+      nowYear={nowYear}
+      nowMonth={nowMonth}
+      viewCacheKey="medicalViewMode"
       storeHref={ROUTES.MEDICAL_STORE}
       storeLabel="Document Store"
       storeIcon={<FolderIcon className="h-5 w-5 text-red-500" />}
-      headerStat={
-        !isLoading ? (
+      headerStat={({ itemsForYear }) => {
+        const totalRecords = itemsForYear.filter((r) => !!r.date).length;
+        return (
           <p className="mt-2 text-base font-medium text-zinc-700 dark:text-zinc-300">
             Total Records:{" "}
             <span className="font-semibold text-zinc-900 dark:text-zinc-100">
               {totalRecords} record{totalRecords !== 1 ? "s" : ""}
             </span>
           </p>
-        ) : undefined
-      }
+        );
+      }}
+      viewAllBaseHref={ROUTES.MEDICAL_ALL}
+      getSubtitle={getSubtitle}
+      onRowClick={openEdit}
       modalSlot={
         modalTarget && userId && (
           <GenericDomainModal
-            key={modalTarget === "create" ? "create" : modalTarget.id}
             mode="record"
-            title={
-              modalTarget === "create"
-                ? "Add medical record"
-                : "Edit medical record"
-            }
-            onClose={closeModal}
-            fields={MEDICAL_FIELDS}
-            initialData={{
-              name: modalTarget === "create" ? "" : modalTarget.name,
-              clinic: modalTarget === "create" ? "" : modalTarget.clinic,
-              date:
-                modalTarget === "create"
-                  ? (istDate ?? "")
-                  : modalTarget.date,
-              diagnosis_timeline:
-                modalTarget === "create"
-                  ? ""
-                  : modalTarget.diagnosis_timeline,
-            }}
-            allowFiles
-            allowLinking={false}
-            userId={userId}
-            attachedDocuments={
-              modalTarget !== "create"
-                ? documents.filter(
-                    (d) => d.domain === "medical" && d.linked_id === modalTarget.id,
-                  )
-                : []
-            }
-            standaloneDocuments={[]}
             domain="medical"
-            onSave={createSaveAdapter(
-              modalTarget === "create" ? null : modalTarget,
+            target={
               modalTarget === "create"
-                ? (saved) => openEdit(saved)
-                : undefined,
-            )}
-            onDelete={
-              modalTarget !== "create"
-                ? async () => {
-                    await handleDelete(modalTarget.id);
+                ? undefined
+                : {
+                    type: "record",
+                    id: modalTarget.id,
+                    data: modalTarget as unknown as Record<string, unknown>,
                   }
-                : undefined
             }
-            deleteLabel="Delete"
+            fields={MEDICAL_FIELDS}
+            userId={userId}
+            onClose={closeModal}
+            onSaved={async (saved) => {
+              await refreshData(userId);
+              if (modalTarget === "create") openEditId(saved.id);
+            }}
+            onDeleted={async () => {
+              await refreshData(userId);
+            }}
           />
         )
       }
-      renderBody={() => (
-        <BoxContainer>
-          <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <ViewToggle
-                value={viewMode}
-                onChange={setViewMode}
-                options={MEDICAL_VIEW_OPTIONS}
-                ariaLabel="Medical view toggle"
-                hideContainerOnMobile={false}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="md" onClick={() => openCreate()} disabled={isLoading}>
-                + Add
-              </Button>
-              <YearDropdown
-                years={availableYears}
-                selectedYear={selectedYear}
-                onChange={setSelectedYear}
-              />
-            </div>
-          </header>
-          {viewMode === "all" ? (
-            <div className={SCROLLABLE_CLASSES}>
-              <MedicalTable records={recordsForSelectedYear} onSelectRecord={openEdit} />
-            </div>
-          ) : (
-            <div className={`${SCROLLABLE_CLASSES} ${viewMode === "multi" ? "flex flex-col md:block md:columns-2 gap-4 md:gap-4 space-y-4 md:space-y-4" : "flex flex-col gap-4"}`}>
-              {recordsByMonth
-                .map(({ monthName, monthIndex, records: monthRecords }) => {
-                  const isCurrentMonth =
-                    istParsed !== null &&
-                    selectedYear === istParsed.year &&
-                    monthIndex === istParsed.month;
-                  return (
-                    <div key={`month-${monthName}`} className={viewMode === "multi" ? "break-inside-avoid inline-block w-full mb-4" : ""}>
-                      <GenericMonthRow
-                        monthName={monthName}
-                        monthIndex={monthIndex}
-                        year={selectedYear}
-                        items={monthRecords}
-                        isCurrentMonth={isCurrentMonth}
-                        getDate={(record) => record.date}
-                        getSubtitle={(items) => {
-                          const count = items.length;
-                          return <>{count} record{count !== 1 ? "s" : ""}</>;
-                        }}
-                        columns={medicalColumns}
-                        getItemKey={(record) => record.id}
-                        previewCount={5}
-                        onRowClick={(record) => openEdit(record)}
-                        viewAllHref={`${ROUTES.MEDICAL_ALL}?year=${selectedYear}&month=${monthIndex}`}
-                      />
-                    </div>
-                  );
-                })}
-            </div>
-          )}
-        </BoxContainer>
-      )}
     />
   );
 }

@@ -3,10 +3,11 @@
 import { type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { ColumnDef } from "./GenericViewPage";
-import GenericDataGrid from "./GenericDataGrid";
+import type { SortState } from "./SortableHeader";
+import GenericDataGrid, { type GridSelection } from "./GenericDataGrid";
 import Button from "./Button";
 
-export interface GenericPriorityListProps<T> {
+export interface GenericPriorityListProps<T, C extends string = string> {
   /** Ordered list of priority values (determines render order). */
   priorities: readonly string[];
   /** Returns items for a given priority value. */
@@ -16,9 +17,14 @@ export interface GenericPriorityListProps<T> {
   /** Renders the priority label / badge in the section header. */
   renderBadge: (priority: string) => ReactNode;
   /** Column definitions for rendering items. */
-  columns: ColumnDef<T>[];
+  columns: ColumnDef<T, C>[];
   /** Stable unique key for each item. */
   getItemKey: (item: T) => string;
+
+  /** Forwarded to the inner GenericDataGrid — keeps grouped headers sortable. */
+  sortState?: SortState<C> | null;
+  /** Forwarded to the inner GenericDataGrid. */
+  onSortChange?: (next: SortState<C>) => void;
 
   /** When set, slices items to this count and shows a "View All" button. */
   previewCount?: number;
@@ -36,20 +42,25 @@ export interface GenericPriorityListProps<T> {
   rowAction?: (item: T) => ReactNode;
   /** Per-row CSS class modifier (e.g. priority-colored left border). */
   getItemClassName?: (item: T) => string;
+
+  /** Forwarded to the inner GenericDataGrid (checkbox track). */
+  selection?: GridSelection;
 }
 
 /**
  * Renders items grouped by priority, each group inside a coloured section.
- * Used by both GenericActiveBox (preview mode with previewCount=5) and
- * GenericViewPage (full mode without previewCount).
+ * Used by GenericDomainPage dashboards (preview mode with previewCount=5)
+ * and GenericViewPage (full mode without previewCount).
  */
-export default function GenericPriorityList<T>({
+export default function GenericPriorityList<T, C extends string = string>({
   priorities,
   getItems,
   getColors,
   renderBadge,
   columns,
   getItemKey,
+  sortState,
+  onSortChange,
   previewCount,
   viewAllHref,
   hideEmpty = false,
@@ -57,7 +68,8 @@ export default function GenericPriorityList<T>({
   rowClassName,
   rowAction,
   getItemClassName,
-}: GenericPriorityListProps<T>) {
+  selection,
+}: GenericPriorityListProps<T, C>) {
   const router = useRouter();
 
   return (
@@ -84,10 +96,13 @@ export default function GenericPriorityList<T>({
                   items={preview}
                   columns={columns}
                   getItemKey={getItemKey}
+                  sortState={sortState}
+                  onSortChange={onSortChange}
                   onRowClick={onRowClick}
                   rowClassName={rowClassName}
                   rowAction={rowAction}
                   getItemClassName={getItemClassName}
+                  selection={selection}
                 />
                 {previewCount && viewAllHref && (
                   <div className="mt-2 flex justify-end">
