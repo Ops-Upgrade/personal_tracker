@@ -6,6 +6,22 @@ import Link from "next/link";
 import { login } from "@/api/auth";
 import { ROUTES } from "@/routes/paths";
 import Button from "@/components/common/Button";
+import type { AuthErrorCode } from "@/types";
+
+/**
+ * Hardcoded safe messages — the ONLY text this unauthenticated surface
+ * ever renders for a login failure. Raw Supabase/crypto detail is never
+ * returned by login() and never logged.
+ *
+ * "invalid_credentials" and "crypto_setup_failed" map to the IDENTICAL
+ * message on purpose: crypto_setup_failed only occurs after valid
+ * credentials, so a distinct string would confirm the account exists.
+ */
+const USER_MESSAGES: Record<AuthErrorCode, string> = {
+  invalid_credentials: "Invalid email or password.",
+  crypto_setup_failed: "Invalid email or password.",
+  unknown: "Something went wrong. Please try again.",
+};
 
 /**
  * Login form component — email and password only, no signup.
@@ -26,12 +42,7 @@ export default function LoginForm() {
     const result = await login(email, password);
 
     if (!result.success) {
-      const isCryptoError = result.error?.startsWith("Encryption setup failed");
-      setError(
-        isCryptoError
-          ? `${result.error} (If you are in private browsing, IndexedDB may be blocked.)`
-          : (result.error ?? "Login failed. Please try again.")
-      );
+      setError(USER_MESSAGES[result.errorCode ?? "unknown"]);
       setLoading(false);
       return;
     }
