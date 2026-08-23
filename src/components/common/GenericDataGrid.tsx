@@ -244,7 +244,7 @@ export default function GenericDataGrid<T, C extends string = string>({
     >
       {/* Column headers — one subgrid row spanning all tracks */}
       <div
-        className="col-span-full grid grid-cols-subgrid items-center gap-x-2 border-b border-zinc-200 px-2 pb-2 pl-[3px] dark:border-zinc-700"
+        className="group col-span-full grid grid-cols-subgrid items-center gap-x-2 border-b border-zinc-200 px-2 pb-2 pl-[3px] dark:border-zinc-700"
         style={{ gridTemplateColumns: "subgrid" }}
       >
         {selection && (
@@ -256,7 +256,11 @@ export default function GenericDataGrid<T, C extends string = string>({
                 selection.selectedKeys.size === selection.itemsLength
               }
               onChange={(e) => selection.onSelectAll(e.target.checked)}
-              className="h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-100"
+              className={`h-4 w-4 cursor-pointer rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:focus:ring-zinc-100 transition-opacity ${
+                selection.selectedKeys.size > 0
+                  ? "opacity-100"
+                  : "opacity-100 md:opacity-0 md:group-hover:opacity-100"
+              }`}
               aria-label="Select all rows"
             />
           </div>

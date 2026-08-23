@@ -23,7 +23,10 @@ import {
 import { LinkSlashIcon, PaperClipIcon } from "@/components/common/Icons";
 import BackButton from "@/components/common/BackButton";
 import BoxContainer from "@/components/common/BoxContainer";
-import BulkActionBar from "@/components/common/BulkActionBar";
+import BulkActionBar, {
+  BulkActionDeleteButton,
+  BulkActionRenameButton,
+} from "@/components/common/BulkActionBar";
 import Button from "@/components/common/Button";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import DataListView from "@/components/common/DataListView";
@@ -840,14 +843,8 @@ function GenericDocStore<T extends { id: string }>({
           onClearSelection={() => clearSelection()}
           bulkActionBar={
             <BulkActionBar selectedCount={selectedIds.size} onClear={clearSelection}>
-              <button onClick={() => { setBulkRenameBase(""); setShowBulkRename(true); }}
-                className="inline-flex items-center gap-1.5 rounded-md bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 transition-colors">
-                <Pencil className="h-4 w-4" /> Rename
-              </button>
-              <button onClick={() => setShowBulkDelete(true)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors">
-                <Trash2 className="h-4 w-4" /> Delete
-              </button>
+              <BulkActionRenameButton onClick={() => { setBulkRenameBase(""); setShowBulkRename(true); }} />
+              <BulkActionDeleteButton onClick={() => setShowBulkDelete(true)} />
               {canBulkLink && (
                 <button onClick={() => setShowBulkLink(true)} disabled={!allBulkUnlinked}
                   className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${theme.lightBg}`}>
@@ -1191,10 +1188,7 @@ function GenericRecordStore<T extends { id: string }>({
   // Bulk actions bar
   const bulkActions = (
     <BulkActionBar selectedCount={selectedIds.size} onClear={clearSelection}>
-      <button onClick={() => setIsBulkDeleting(true)}
-        className="inline-flex items-center gap-1.5 rounded-md bg-red-50 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors">
-        <Trash2 className="h-4 w-4" /> Delete
-      </button>
+      <BulkActionDeleteButton onClick={() => setIsBulkDeleting(true)} />
     </BulkActionBar>
   );
 

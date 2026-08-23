@@ -13,8 +13,7 @@ import GenericMonthsList from "./GenericMonthsList";
 import YearDropdown from "./YearDropdown";
 import MonthDropdown from "./MonthDropdown";
 import PriorityBadge from "./PriorityBadge";
-import BulkActionBar from "./BulkActionBar";
-import Button from "./Button";
+import BulkActionBar, { BulkActionDeleteButton } from "./BulkActionBar";
 import type { Priority } from "@/types/common";
 import { PRIORITIES, MONTHS } from "@/types/common";
 import { getPriorityColor } from "@/lib/priorityColors";
@@ -549,13 +548,9 @@ export default function GenericViewPage<T, C extends string = string>({
   const bulkActionBar =
     onBulkDelete && selectedIds.size > 0 ? (
       <BulkActionBar selectedCount={selectedIds.size} onClear={handleClearSelection}>
-        <Button
-          variant="danger"
-          size="sm"
+        <BulkActionDeleteButton
           onClick={() => onBulkDelete(Array.from(selectedIds), handleClearSelection)}
-        >
-          Delete
-        </Button>
+        />
       </BulkActionBar>
     ) : undefined;
 

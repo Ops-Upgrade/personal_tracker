@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { Calendar as CalendarIcon, X } from "lucide-react";
 import { DayPicker } from "react-day-picker";
 import { format, isValid, parse } from "date-fns";
@@ -38,9 +39,24 @@ function toDisplay(raw: string): string {
 }
 
 /**
+ * Upper bound on the rendered calendar width (7 × 40px cells + padding and
+ * border ≈ 300px). Only used to keep the popover clear of the right viewport
+ * edge — over-clamping by a few pixels is harmless, clipping is not.
+ */
+const POPOVER_MAX_WIDTH = 320;
+
+/** Gap between the input and the popover, and the minimum viewport inset. */
+const POPOVER_OFFSET = 4;
+const VIEWPORT_INSET = 8;
+
+/**
  * Editable date input replacing the native `<input type="date">`:
  * a free-typing DD/MM/YYYY text field plus a react-day-picker calendar
  * popover, with calendar and clear (X) buttons on the right.
+ *
+ * The popover is portalled to `document.body` and positioned with `fixed`
+ * viewport coordinates: rendered inline it was clipped by the `overflow-y-auto`
+ * boundary of any scrollable ancestor (notably GenericDomainModal).
  */
 export default function DatePicker({
   label,
@@ -51,7 +67,9 @@ export default function DatePicker({
 }: DatePickerProps) {
   const [inputValue, setInputValue] = useState(() => toDisplay(value));
   const [open, setOpen] = useState(false);
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   // Re-sync the local text when the parent value changes externally (e.g.
   // modal reset). Uses the React "adjust state during render" pattern —
@@ -62,16 +80,53 @@ export default function DatePicker({
     setInputValue(toDisplay(value));
   }
 
+  /**
+   * Measures the anchor and opens. The rect is captured here rather than in an
+   * effect because effects run after paint — the popover would render one frame
+   * unpositioned at the end of `<body>` before jumping into place.
+   */
+  const openPopover = () => {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setPopoverStyle({
+      position: "fixed",
+      top: rect.bottom + POPOVER_OFFSET,
+      left: Math.max(
+        VIEWPORT_INSET,
+        Math.min(rect.left, window.innerWidth - POPOVER_MAX_WIDTH - VIEWPORT_INSET),
+      ),
+    });
+    setOpen(true);
+  };
+
   // Close the popover on outside pointer interactions.
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (e: PointerEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as Node;
+      // The popover lives outside rootRef (portalled to body), so it needs its
+      // own containment check — otherwise pointerdown on a day would unmount
+      // the calendar before the click landed and onSelect would never fire.
+      if (rootRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
+
+  // The fixed coordinates are a snapshot of the anchor at open time, so any
+  // scroll or resize strands the popover. Capture phase is required to see
+  // scrolls inside the modal's own overflow container, which don't bubble.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    document.addEventListener("scroll", close, { capture: true });
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("scroll", close, { capture: true });
+      window.removeEventListener("resize", close);
+    };
   }, [open]);
 
   const selectedDay = useMemo(() => {
@@ -123,7 +178,7 @@ export default function DatePicker({
         <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
           <button
             type="button"
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => (open ? setOpen(false) : openPopover())}
             disabled={disabled}
             className={INPUT_ACTION_CLASSES}
             title="Open calendar"
@@ -144,11 +199,20 @@ export default function DatePicker({
             </button>
           )}
         </div>
-        {open && !disabled && (
-          <div className="absolute left-0 top-full z-50 mt-1 rounded-lg border border-zinc-200 bg-white p-2 text-zinc-800 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-            <DayPicker mode="single" selected={selectedDay} onSelect={handleDaySelect} />
-          </div>
-        )}
+        {open &&
+          !disabled &&
+          // z-50 matches the highest modal overlay (VaultLockScreen); as a
+          // later sibling of the app root in <body> it wins the tie by DOM order.
+          createPortal(
+            <div
+              ref={popoverRef}
+              style={popoverStyle}
+              className="z-50 rounded-lg border border-zinc-200 bg-white p-2 text-zinc-800 shadow-lg dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            >
+              <DayPicker mode="single" selected={selectedDay} onSelect={handleDaySelect} />
+            </div>,
+            document.body,
+          )}
       </div>
     </div>
   );

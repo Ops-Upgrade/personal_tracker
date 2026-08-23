@@ -43,7 +43,7 @@ export default function TaskManagerAllPage() {
             getItemKey={(t) => t.id}
             cacheKeyPrefix="taskmanager_all"
             defaultSort={{ column: "due_date", direction: "asc" }}
-            supportedViews={["all", "months", "priority"]}
+            supportedViews={["all", "priority"]}
             getDateKey={(t) => t.due_date}
             getPriorityKey={(t) => t.priority}
             itemNamePlural="tasks"

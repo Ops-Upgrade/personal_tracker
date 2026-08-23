@@ -81,7 +81,7 @@ export default function DataListView({
     <>
       {/* Header */}
       {(viewMode !== undefined || onSearchChange || onAdd || hasSelection) && (
-        <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
           <div className="order-1 flex flex-row items-center gap-3">
             {viewMode !== undefined && onViewModeChange && (
               <ViewToggle

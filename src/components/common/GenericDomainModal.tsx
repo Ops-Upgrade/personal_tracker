@@ -1190,7 +1190,7 @@ function GenericDomainModalInner({
 
   const computedMaxWidth =
     maxWidthClassName ??
-    (actualShowRightPanel ? "max-w-6xl" : "max-w-md");
+    (actualShowRightPanel ? "max-w-6xl" : "max-w-lg");
 
   // =========================================================================
   // Link dropdown extras (for record mode with standalone document linking)
@@ -1455,7 +1455,7 @@ function GenericDomainModalInner({
     const rows =
       effLayout && effLayout.length > 0
         ? effLayout
-        : [fields.map((f) => f.key)];
+        : fields.map((f) => [f.key]);
 
     return (
       <div className="flex flex-col space-y-3">
@@ -1498,7 +1498,7 @@ function GenericDomainModalInner({
     const rows =
       effLayout && effLayout.length > 0
         ? effLayout
-        : [fields.map((f) => f.key)];
+        : fields.map((f) => [f.key]);
 
     return (
       <fieldset disabled={inlineFormDisabled || isSaving} className="space-y-3">

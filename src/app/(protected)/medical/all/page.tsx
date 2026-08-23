@@ -44,7 +44,7 @@ export default function MedicalAllPage() {
             getItemKey={(rec) => rec.id}
             cacheKeyPrefix="medical_all"
             defaultSort={{ column: "date", direction: "asc" }}
-            supportedViews={["all", "months"]}
+            supportedViews={["all"]}
             getDateKey={(rec) => rec.date}
             itemNamePlural="medical records"
             onRowClick={(rec) => setModalTarget(rec)}

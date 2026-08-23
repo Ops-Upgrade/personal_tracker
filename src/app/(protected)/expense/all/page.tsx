@@ -45,7 +45,7 @@ export default function ExpenseAllPage() {
             getItemKey={(exp) => exp.id}
             cacheKeyPrefix="expense_all"
             defaultSort={{ column: "date", direction: "asc" }}
-            supportedViews={["all", "months"]}
+            supportedViews={["all"]}
             getDateKey={(exp) => exp.date}
             itemNamePlural="expenses"
             metrics={[
