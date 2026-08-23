@@ -9,6 +9,7 @@
 Personal tracker app for 1–3 trusted users to track expenses, tasks, and more.
 No public signup — users are pre-created in Supabase dashboard.
 Target deployment: Vercel with custom domain `personal.ops-upgrade.net`.
+**Status: Live in production at [personal.ops-upgrade.net](https://personal.ops-upgrade.net) since 2026-08-10.**
 
 ---
 
@@ -118,7 +119,7 @@ src/
 │   │   ├── TileView.tsx        # Tile grid view for generic document store
 │   │   ├── ViewToggle.tsx      # Toggle between list/tile views
 │   │   ├── RichTextEditor.tsx  # Tiptap-powered global rich text area
-│   │   ├── GenericViewPage.tsx # Generic "View All" page (sortable data grids)
+│   │   ├── GenericViewPage.tsx # Generic "View All" page (data + config in; year/month state, sorting, selection internal)
 │   │   ├── GenericDomainPage.tsx # Generic domain shell (header, layout, loading state)
 │   │   ├── GenericDomainModal.tsx # Schema-driven modal replacing all domain modals
 │   │   ├── GenericDataGrid.tsx # Data grid with auto-sizing tracks + subgrid alignment
@@ -284,23 +285,33 @@ Applied via `next.config.ts` `headers()` on all routes:
 | 2026-07-15 | Media Tracker feature completed: `/media` route, `media` + `media_collections` tables (HLD documented in schema.md), 4 TMDB proxy routes (`/api/tmdb/*`), encrypted CRUD API layer (`src/api/media/`), 12 UI components (MediaView orchestrator, DefaultView with Watching/Unwatched/Watched lanes, CollectionView, DiscoverView with TMDB search, MoviePage, TvSeriesPage with episode matrix, EpisodePage, CollectionDetailPage, MediaCard with inline status/rating, CollectionModal with color picker, CollectionFilterBar, TmdbAttribution), dashboard tile integration (violet), `next.config.ts` TMDB image domain + CSP update, StarRating common component. |
 | 2026-07-24 | Vault feature completed: `/vault` route with PIN-protected access, server-side Argon2id PIN hashing with brute-force protection (10 attempts / 10-min sliding window, permanent DB-persisted lockout), 4 sub-sections (Personal Records, Password Manager, Bank Manager, Document Vault), `vault_entries` encrypted table + RLS, vault storage bucket folder, 2×2 gray-themed dashboard tile replacing Analytics placeholder, 30-second navigation-away grace period. |
 | 2026-08-09 | Global Architecture Refactor: Eliminated structural duplication by standardizing list views, store views, main domain shells, media details, and modals into generic composable components (`GenericViewPage`, `GenericStorePage`, `GenericDomainPage`, `GenericMediaPage`, `GenericDomainModal`). Replaced domain-specific modals and duplicate list pages. Added `/all` query-param-driven routes for Task Manager, Education, Expense, and Medical domains. |
-| 2026-08-15 | Column Definition Deduplication (per `plans/note-column-deduplication.md`): Added shared column factories in `common/columns.tsx` (`colPriority`, `colFiles`, `colRichtext`, `colDate`); domain configs export atomic columns (`TASK_PRIORITY`, `EDU_FILES`, …) composed from them; all widgets/pages assemble per-view arrays from atoms. Date formatting consolidated into a single timezone-safe `formatShortDate` in `lib/format.ts`; local `formatDate`/`formatShortDate` copies deleted everywhere. `taskmanager/completed` months view reuses the completion columns (sorting is inert there). |
-| 2026-08-16 | Media Manager Stage 11 complete: vitest test suite introduced in three tiers. Tier 1 — 29 hermetic pure-function unit tests (`src/api/media/__tests__/media.test.ts`) pinning the status-bubbling / override invariants. Tier 2 — handler logic extracted to `src/api/media/handlers.ts` (pages now call it) + 29 DB integration tests walking Tables A/B/C of the plan matrix with the two known regressions pinned as named tests (`media.integration.test.ts`, dummy test user, gated behind `.env.test.local`, `npm run test:integration`). Tier 3 — 5 collection-independence tests (`collections.integration.test.ts`). Three doc-vs-code deviations documented in PLAN-mediamanager.md Stage 11. |
+| 2026-08-10 | **App deployed to production** at `personal.ops-upgrade.net` on Vercel. All env vars set, redirect URLs configured in Supabase Auth, user accounts created. |
+| 2026-08-15 | Column Definition Deduplication (per `plans/note-column-deduplication.md`): Added shared column factories in `common/columns.tsx` (`colPriority`, `colFiles`, `colRichtext`, `colDate`); domain configs export atomic columns composed from them; all widgets/pages assemble per-view arrays from atoms. Date formatting consolidated into `lib/format.ts` `formatShortDate` (timezone-safe); local copies deleted everywhere. |
+| 2026-08-16 | Media Manager Stage 11 complete: vitest test suite introduced in three tiers — Tier 1 (35 hermetic unit tests, `src/api/media/__tests__/`), Tier 2 (29 DB integration tests against a dummy test user, `npm run test:integration`, gated behind `.env.test.local`), Tier 3 (5 collection-independence tests). Handler logic extracted to `handlers.ts`. |
+| 2026-08-17 | Cross-cutting QoL fixes: "Unscheduled" bucket for dateless items added across all domain views; `DataListView.tsx` extracted for shared bulk selection; selection checkboxes + bulk-delete action bar added to all 6 list pages; `formatShortDate` switched to Indian DD/MM/YY; newest-5 previews fixed; `/all` pages get default sort state; expense total metric added to `/expense/all`. |
+| 2026-08-18 | Dateless records: removed required-date guardrails on expense/medical; "Unscheduled" month filter shows dateless records. Native `<input type="date">` replaced with `common/DatePicker.tsx` (DD/MM/YYYY free-typing, react-day-picker v10 popover, clear button). Priority grouped views now have working sort headers. |
+| 2026-08-22 | Global Refactor Stage 7 Pass 1: `GenericViewPage` rewritten to accept raw data and internally own the year dropdown (URL-synced), month filtering, 3-state sort, selection checkboxes + bulk delete, and declarative `ColumnToken` cells. All 7 list routes gutted to ~40-line configs; route-level `useSelection`/`useTableSort` call sites deleted. |
+| 2026-08-22 | Global Refactor Stage 7 Pass 2: `GenericStorePage` rewritten as a self-contained smart component with a domain adapter registry (`common/store/storeAdapters.ts`). Internally owns data loading, CRUD, modal instantiation, search bar, and view toggle. All 9 store routes gutted to ~25-line declarative configs. |
+| 2026-08-23 | Global Refactor Stage 7 Pass 3: `GenericDomainModal` upgraded to a fully self-contained engine with form state, deep dirty checking, file staging queues, and automatic save routing via `common/modalDomainConfig.ts`. The 10 legacy domain modal wrappers deleted. All adopting views/routes migrated to the declarative `target` API. |
+| 2026-08-23 | Global Refactor Stage 7 Pass 4: `GenericDomainPage` upgraded to the dashboard engine — internally owns year dropdown + strict year filtering (fixes all-years gap), month bucketing with Unscheduled, priority/month/multi views, and masonry layout. `renderBody` closures banned; `GenericActiveBox` and domain active-box wrappers deleted. The 4 dashboards gutted to declarative config. |
+| 2026-08-23 | Tier 1 test suite extended to all Stage 7 layers: `viewHelpers.test.ts` (all 8 exports — sort comparators, `stripHtml`, `trunc`, `getUniqueFileName`, `groupByStatus`), `storeAdapters.test.ts` (all 9 domain keys — dispatch, capability flags, `modalInitialData` plaintext hygiene), `storage/routes.test.ts` (R2 auth guard, folder allowlist, UUID filename validation, user-scoped `{folder}/{userId}/{file}` path enforcement on upload/download/delete). `stripHtml` entity decode order fixed (`&amp;` last to prevent `&amp;lt;` double-decode). 247 tests total. No source bugs surfaced. |
+| 2026-08-23 | Tier 1 crypto test suite added covering all of `src/lib/crypto/primitives.ts` and `manager.ts`: IV uniqueness (10,000 calls, zero collisions), AES-GCM tamper detection, wrong-key rejection, encrypt/decrypt + blob round-trips, wrap/unwrap with extractable flag, `rewrapDEK` atomicity (Supabase failure leaves IndexedDB untouched; wrong old password blocked before any write). Argon2id mocked with FNV-1a stand-in (password/salt-sensitive) to correctly exercise wrong-password rejection. 285 tests total. No source bugs surfaced. |
 
 ---
 
 ## What's Not Built Yet
 
 - Cross-subdomain deployment (config-only change when ready)
-- Phase 10: manual testing of crypto flows
+- Argon2id `deriveKEK` timing benchmark on slowest device not formally recorded (Phase 10 item — login feels responsive in production, parameters meet OWASP 2024+ minimums)
 
 ---
 
-## Production Deployment Checklist
+## Production Deployment
 
-- [ ] Set env vars on Vercel (`PUBLISHABLE_KEY`, `COOKIE_DOMAIN=.ops-upgrade.com`)
-- [ ] Set Build Command to `npm run build` in Vercel project settings (pins `next build --webpack`; Vercel's preset otherwise runs Turbopack, which works but diverges from local dev)
-- [ ] Add redirect URLs in Supabase Auth settings for each subdomain
-- [ ] Add custom domain(s) in Vercel project settings
-- [ ] Create user accounts in Supabase dashboard (no signup flow)
-- [ ] Run Phase 10 testing checklist (see [`PLAN-crypto.md`](./PLAN-crypto.md))
+**Live at:** `personal.ops-upgrade.net` (Vercel, since 2026-08-10)
+
+- Env vars set on Vercel (`PUBLISHABLE_KEY`, `COOKIE_DOMAIN=.ops-upgrade.com`)
+- Build Command: `npm run build` (pins `next build --webpack`; avoids Turbopack divergence)
+- Redirect URLs configured in Supabase Auth settings
+- Custom domain added in Vercel project settings
+- User accounts created in Supabase dashboard
