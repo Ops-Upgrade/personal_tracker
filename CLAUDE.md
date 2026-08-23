@@ -82,7 +82,7 @@ Use `getServerDateIST()` from `src/api/serverDate.ts` to get the current IST cal
 |---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable API key (note: NOT `ANON_KEY`) |
-| `NEXT_PUBLIC_COOKIE_DOMAIN` | `localhost` in dev, `.ops-upgrade.com` in prod |
+| `NEXT_PUBLIC_COOKIE_DOMAIN` | `localhost` in dev, `.ops-upgrade.net` in prod |
 
 ## Common tasks
 

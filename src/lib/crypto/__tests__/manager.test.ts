@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchUserKeys, upsertUserKeys } from "@/api/auth";
+import type { Session } from "@supabase/supabase-js";
+import { fetchUserKeys, getSession, insertUserKeys, upsertUserKeys } from "@/api/auth";
 import { saveDEK } from "@/lib/crypto/store";
-import { generateRecoveryPhrase, rewrapDEK } from "@/lib/crypto/manager";
+import { bootstrapCrypto, generateRecoveryPhrase, rewrapDEK } from "@/lib/crypto/manager";
 import {
   decrypt,
   deriveKEK,
@@ -56,6 +57,8 @@ vi.mock("hash-wasm", () => ({
 }));
 vi.mock("@/api/auth", () => ({
   fetchUserKeys: vi.fn(),
+  getSession: vi.fn(),
+  insertUserKeys: vi.fn(),
   upsertUserKeys: vi.fn(),
   hasRecoveryKey: vi.fn(),
   upsertRecoveryKey: vi.fn(),
@@ -74,6 +77,17 @@ const EMAIL = "user@example.com";
 const OLD_PASSWORD = "old-password";
 const NEW_PASSWORD = "new-password";
 
+/** Minimal session whose user matches USER_ID — the bootstrap guard's happy path. */
+const mockSession = {
+  user: {
+    id: USER_ID,
+    app_metadata: {},
+    user_metadata: {},
+    aud: "authenticated",
+    created_at: "2026-01-01T00:00:00Z",
+  },
+} as unknown as Session;
+
 /** The original DEK, kept so tests can prove key material survives a rewrap. */
 let realDEK: CryptoKey;
 /** The user_keys row as Supabase returns it after first-login bootstrap. */
@@ -90,6 +104,8 @@ beforeAll(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchUserKeys).mockResolvedValue(keyRow);
+  vi.mocked(getSession).mockResolvedValue(mockSession);
+  vi.mocked(insertUserKeys).mockResolvedValue(undefined);
   vi.mocked(upsertUserKeys).mockResolvedValue(undefined);
   vi.mocked(saveDEK).mockResolvedValue(undefined);
 });
@@ -111,6 +127,89 @@ describe("generateRecoveryPhrase", () => {
 
   it("is long enough to encode 32 random bytes (> 20 characters)", () => {
     expect(generateRecoveryPhrase().length).toBeGreaterThan(20);
+  });
+});
+
+// ── bootstrapCrypto ──
+
+describe("bootstrapCrypto", () => {
+  it("throws when there is no active session", async () => {
+    vi.mocked(getSession).mockResolvedValue(null);
+
+    await expect(bootstrapCrypto(USER_ID, OLD_PASSWORD, EMAIL)).rejects.toThrow(
+      "Active session missing or mismatched"
+    );
+
+    expect(fetchUserKeys).not.toHaveBeenCalled();
+    expect(insertUserKeys).not.toHaveBeenCalled();
+    expect(saveDEK).not.toHaveBeenCalled();
+  });
+
+  it("throws when the session user does not match the requested user", async () => {
+    vi.mocked(getSession).mockResolvedValue({
+      ...mockSession,
+      user: { ...mockSession.user, id: "someone-else" },
+    });
+
+    await expect(bootstrapCrypto(USER_ID, OLD_PASSWORD, EMAIL)).rejects.toThrow(
+      "Active session missing or mismatched"
+    );
+
+    expect(insertUserKeys).not.toHaveBeenCalled();
+    expect(saveDEK).not.toHaveBeenCalled();
+  });
+
+  it("unwraps and stores the existing DEK without writing a key row", async () => {
+    await bootstrapCrypto(USER_ID, OLD_PASSWORD, EMAIL);
+
+    expect(insertUserKeys).not.toHaveBeenCalled();
+    expect(upsertUserKeys).not.toHaveBeenCalled();
+    expect(saveDEK).toHaveBeenCalledTimes(1);
+    expect(saveDEK).toHaveBeenCalledWith(USER_ID, expect.anything());
+
+    // The stored DEK must unlock the real user_keys row from beforeAll.
+    const storedDek = vi.mocked(saveDEK).mock.calls[0][1] as CryptoKey;
+    const kek = await deriveKEK(OLD_PASSWORD, keyRow.salt);
+    const recovered = await unwrapDEK(keyRow.wrapped_dek, keyRow.iv, kek);
+    const probe = await encrypt("bootstrap probe", recovered);
+    expect(await decrypt(probe.iv, probe.ciphertext, storedDek)).toBe(
+      "bootstrap probe"
+    );
+  });
+
+  it("uses plain insert (not upsert) for the first-login branch", async () => {
+    vi.mocked(fetchUserKeys).mockResolvedValue(null);
+
+    await bootstrapCrypto(USER_ID, OLD_PASSWORD, EMAIL);
+
+    expect(insertUserKeys).toHaveBeenCalledTimes(1);
+    expect(upsertUserKeys).not.toHaveBeenCalled();
+
+    const [userId, email, salt, iv, wrappedDek] =
+      vi.mocked(insertUserKeys).mock.calls[0];
+    expect(userId).toBe(USER_ID);
+    expect(email).toBe(EMAIL);
+    expect(() => atob(salt)).not.toThrow();
+    expect(() => atob(iv)).not.toThrow();
+    expect(() => atob(wrappedDek)).not.toThrow();
+    expect(saveDEK).toHaveBeenCalledWith(USER_ID, expect.anything());
+  });
+
+  it("keeps the old keys intact when a duplicate row makes the insert fail", async () => {
+    vi.mocked(fetchUserKeys).mockResolvedValue(null);
+    vi.mocked(insertUserKeys).mockRejectedValue(
+      new Error(
+        "Encryption keys already exist for this account but could not be read. Refusing to overwrite them. Please sign in again."
+      )
+    );
+
+    await expect(bootstrapCrypto(USER_ID, OLD_PASSWORD, EMAIL)).rejects.toThrow(
+      "Refusing to overwrite"
+    );
+
+    // The failure must not leave a fresh DEK in IndexedDB — the real row's
+    // DEK still governs every encrypted record.
+    expect(saveDEK).not.toHaveBeenCalled();
   });
 });
 

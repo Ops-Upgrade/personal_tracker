@@ -29,7 +29,7 @@ export default function LoginForm() {
       const isCryptoError = result.error?.startsWith("Encryption setup failed");
       setError(
         isCryptoError
-          ? "Login succeeded but encryption setup failed. Your browser may not support the required features (IndexedDB / Web Crypto). Please try a different browser."
+          ? `${result.error} (If you are in private browsing, IndexedDB may be blocked.)`
           : (result.error ?? "Login failed. Please try again.")
       );
       setLoading(false);

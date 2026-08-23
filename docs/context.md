@@ -211,7 +211,7 @@ src/
 - **Cookie-based sessions** via `@supabase/ssr` (not localStorage).
 - **Persistent login** — cookies survive browser close/reopen.
 - **Multi-device** — independent refresh tokens per device.
-- **Cross-subdomain ready** — `NEXT_PUBLIC_COOKIE_DOMAIN` env var controls cookie domain. Set to `localhost` for dev, `.ops-upgrade.com` for production.
+- **Cross-subdomain ready** — `NEXT_PUBLIC_COOKIE_DOMAIN` env var controls cookie domain. Set to `localhost` for dev, `.ops-upgrade.net` for production.
 - **Proxy** refreshes session + redirects unauthed users to `/login`.
 - **Protected layout** validates session server-side as defense-in-depth.
 
@@ -310,7 +310,7 @@ Applied via `next.config.ts` `headers()` on all routes:
 
 **Live at:** `personal.ops-upgrade.net` (Vercel, since 2026-08-10)
 
-- Env vars set on Vercel (`PUBLISHABLE_KEY`, `COOKIE_DOMAIN=.ops-upgrade.com`)
+- Env vars set on Vercel (`PUBLISHABLE_KEY`, `COOKIE_DOMAIN=.ops-upgrade.net`)
 - Build Command: `npm run build` (pins `next build --webpack`; avoids Turbopack divergence)
 - Redirect URLs configured in Supabase Auth settings
 - Custom domain added in Vercel project settings

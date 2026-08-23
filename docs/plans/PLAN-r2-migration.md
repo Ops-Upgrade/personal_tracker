@@ -802,8 +802,8 @@ The `remove()` signature changed from `remove(fileName)` to `remove(userId, file
        {
          "AllowedOrigins": [
            "http://localhost:3000",
-           "https://ops-upgrade.com",
-           "https://*.ops-upgrade.com"
+           "https://ops-upgrade.net",
+           "https://*.ops-upgrade.net"
          ],
          "AllowedMethods": ["GET", "PUT", "HEAD"],
          "AllowedHeaders": ["Content-Type"],
