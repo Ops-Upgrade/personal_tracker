@@ -51,13 +51,6 @@ export const TASK_LAYOUT: string[][] = [
   ["is_completed"],
 ];
 
-// ── Form schema for the note store modal (store pages) ──
-
-export const NOTE_FIELDS: FieldDef[] = [
-  { key: "name", type: "text", label: "Name", placeholder: "Note title" },
-  { key: "content", type: "richtext", label: "Content", minHeight: "10rem" },
-];
-
 // ── Shared column atoms ──
 
 export const TASK_PRIORITY: ColumnDef<Task, SortColumn> = colPriority<Task, SortColumn>({

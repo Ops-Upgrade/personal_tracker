@@ -20,6 +20,10 @@ declare module "@tiptap/core" {
       setFontSize: (size: string) => ReturnType;
       unsetFontSize: () => ReturnType;
     };
+    fontFamily: {
+      setFontFamily: (family: string) => ReturnType;
+      unsetFontFamily: () => ReturnType;
+    };
   }
 }
 
@@ -65,6 +69,48 @@ const FontSize = Extension.create({
   },
 });
 
+const FontFamily = Extension.create({
+  name: "fontFamily",
+
+  addOptions() {
+    return {
+      types: ["textStyle"],
+    };
+  },
+
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          fontFamily: {
+            default: null,
+            parseHTML: (el: HTMLElement) =>
+              el.style.fontFamily?.replace(/["']/g, "") || null,
+            renderHTML: (attrs: Record<string, string | null>) => {
+              if (!attrs.fontFamily) return {};
+              return { style: `font-family: ${attrs.fontFamily}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+
+  addCommands() {
+    return {
+      setFontFamily:
+        (family: string) =>
+        ({ chain }) =>
+          chain().setMark("textStyle", { fontFamily: family }).run(),
+      unsetFontFamily:
+        () =>
+        ({ chain }) =>
+          chain().setMark("textStyle", { fontFamily: null }).removeEmptyTextStyle().run(),
+    };
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -80,6 +126,14 @@ interface RichTextEditorProps {
   className?: string;
   /** Minimum height for the editor area (default: "12rem") */
   minHeight?: string;
+  /** When true, hides the top toolbar */
+  hideToolbar?: boolean;
+  /** When true, removes borders, rounded corners, and max-height scrolling constraints */
+  borderless?: boolean;
+  /** Optional callback when editor is initialized */
+  onEditorReady?: (editor: Editor) => void;
+  /** Optional callback when editor receives focus */
+  onFocus?: (editor: Editor) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +195,10 @@ export default function RichTextEditor({
   disabled = false,
   className = "",
   minHeight = "12rem",
+  hideToolbar = false,
+  borderless = false,
+  onEditorReady,
+  onFocus,
 }: RichTextEditorProps) {
   const editor = useEditor({
     immediatelyRender: true,
@@ -157,6 +215,7 @@ export default function RichTextEditor({
       }),
       TextStyle,
       FontSize,
+      FontFamily,
       TextAlign.configure({
         types: ["paragraph"],
         alignments: ["left", "center", "right", "justify"],
@@ -169,8 +228,9 @@ export default function RichTextEditor({
     editable: !disabled,
     editorProps: {
       attributes: {
-        class:
-          "prose prose-sm max-w-none min-h-[var(--editor-min-h)] max-h-[35vh] overflow-y-auto rounded-b-lg border border-t-0 border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-500",
+        class: borderless
+          ? "prose prose-base max-w-none text-zinc-900 dark:text-zinc-100 outline-none focus:outline-none focus:ring-0 select-text cursor-text min-h-[var(--editor-min-h)] flex-1"
+          : "prose prose-sm max-w-none min-h-[var(--editor-min-h)] max-h-[35vh] overflow-y-auto rounded-b-lg border border-t-0 border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-500",
         style: `--editor-min-h: ${minHeight}`,
       },
     },
@@ -185,7 +245,19 @@ export default function RichTextEditor({
       },
       [onChange],
     ),
+    onFocus: useCallback(
+      ({ editor: ed }: { editor: Editor }) => {
+        onFocus?.(ed);
+      },
+      [onFocus],
+    ),
   });
+
+  useEffect(() => {
+    if (editor && onEditorReady) {
+      onEditorReady(editor);
+    }
+  }, [editor, onEditorReady]);
 
   // Sync external value changes into the editor (e.g. form reset, undo)
   useEffect(() => {
@@ -204,11 +276,12 @@ export default function RichTextEditor({
   return (
     <div className={`flex flex-col ${className}`}>
       {/* Toolbar */}
-      <div
-        className={`flex flex-wrap items-center gap-0.5 rounded-t-lg border border-zinc-300 bg-zinc-50 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900 ${
-          disabled ? "pointer-events-none opacity-50" : ""
-        }`}
-      >
+      {!hideToolbar && (
+        <div
+          className={`flex flex-wrap items-center gap-0.5 rounded-t-lg border border-zinc-300 bg-zinc-50 px-2 py-1.5 dark:border-zinc-700 dark:bg-zinc-900 ${
+            disabled ? "pointer-events-none opacity-50" : ""
+          }`}
+        >
         {/* Font size dropdown */}
         <select
           value={currentFontSize ?? ""}
@@ -327,9 +400,10 @@ export default function RichTextEditor({
           </svg>
         </ToolbarButton>
       </div>
+      )}
 
       {/* Editor content */}
-      <EditorContent editor={editor} />
+      <EditorContent editor={editor} className={borderless ? "flex-1 flex flex-col min-h-0" : ""} />
     </div>
   );
 }

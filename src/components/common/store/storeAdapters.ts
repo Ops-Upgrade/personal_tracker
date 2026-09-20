@@ -27,12 +27,6 @@ import type {
   VaultRecordItem,
 } from "@/types/vault";
 import {
-  fetchNotes,
-  createNote,
-  updateNote,
-  deleteNote,
-} from "@/api/taskmanager";
-import {
   fetchEducations,
   createEducation,
   updateEducation,

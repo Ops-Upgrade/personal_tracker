@@ -6,7 +6,6 @@ export { login, logout, getSession } from "./auth";
 export { fetchUserKeys, insertUserKeys, upsertUserKeys } from "./auth";
 export type { UserKeysRow } from "./auth";
 export { fetchTasks, createTask, updateTask, deleteTask } from "./taskmanager";
-export { fetchNotes, createNote, updateNote, deleteNote } from "./taskmanager";
 export { fetchExpenses, createExpense, updateExpense, deleteExpense } from "./expense";
 export { fetchEducations, createEducation, updateEducation, deleteEducation } from "./education";
 export {
@@ -49,3 +48,27 @@ export {
   getMediaDetails,
   getSeasonDetails,
 } from "./media";
+export {
+  uploadNoteImage,
+  downloadNoteImage,
+  deleteNoteImage,
+  fetchNotebooks,
+  createNotebook,
+  updateNotebook,
+  deleteNotebook,
+  reorderNotebooks,
+  fetchSections,
+  createSection,
+  updateSection,
+  deleteSection,
+  reorderSections,
+  fetchPages,
+  createPage,
+  updatePageMeta,
+  deletePage,
+  reorderPages,
+  gcPageImages,
+  getPageContent,
+  savePageContent,
+  RevisionConflictError,
+} from "./notes";

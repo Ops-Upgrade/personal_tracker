@@ -50,7 +50,8 @@ export type ModalDomainKey =
   | "vault_documents"
   | "vault_passwords"
   | "vault_banks"
-  | "vault_bank_details";
+  | "vault_bank_details"
+  | "notes";
 
 /**
  * Declarative modal target.
@@ -424,6 +425,79 @@ const medicalModalConfig = docLinkedModalConfig(asDocAdapter<MedicalRecord>("med
 
 const vaultDocumentsConfig = docLinkedModalConfig(asDocAdapter<PersonalRecord>("vault"));
 
+const notesModalConfig: ModalDomainConfig = {
+  label: "notes",
+  docDomain: "notes",
+  allowFiles: true,
+  allowLinking: false,
+  canCreateParent: false,
+  deleteKind: "simple",
+  deleteLabel: "Delete",
+  initialDataFor: () => ({}),
+  fetchContext: async (userId) => ({
+    documents: await fetchDocuments(userId),
+    parentRecords: [],
+  }),
+  modalTitle: (_type, isEdit) => (isEdit ? "Edit Document" : "Add Document"),
+  saveRecord: async () => {
+    throw new Error("Notes domain only supports document mode in modal.");
+  },
+  deleteRecord: async () => {},
+  saveDocument: async (userId, target, fileActions) => {
+    const nowIso = new Date().toISOString();
+    const existing = target?.data as unknown as Document | undefined;
+    const firstNewFile = fileActions.newFiles[0];
+    let docId: string;
+    if (existing) {
+      if (firstNewFile) {
+        const stored = await replaceDocumentFile(userId, existing, firstNewFile);
+        await updateDocument(userId, existing.id, {
+          ...existing,
+          label: firstNewFile.label,
+          ...stored,
+          domain: "notes",
+          updated_at: nowIso,
+        });
+      } else {
+        await updateDocument(userId, existing.id, {
+          ...existing,
+          domain: "notes",
+          updated_at: nowIso,
+        });
+      }
+      docId = existing.id;
+    } else {
+      if (!firstNewFile) throw new Error("File is required for new documents.");
+      const { fileName, iv, mimeType } = await uploadDocumentFile(userId, firstNewFile.file);
+      const newDoc = await createDocument(userId, {
+        label: firstNewFile.label,
+        file_name: fileName,
+        file_iv: iv,
+        file_mime: mimeType,
+        domain: "notes",
+        linked_id: "",
+        updated_at: nowIso,
+      });
+      docId = newDoc.id;
+    }
+    return {
+      id: docId,
+      name: firstNewFile?.label ?? existing?.label ?? "Document",
+    };
+  },
+  deleteDocument: async (userId, target) => {
+    const doc = target.data as unknown as Document;
+    if (doc.file_name) {
+      try {
+        await deleteDocumentFile(userId, doc.file_name);
+      } catch {
+        // Best-effort
+      }
+    }
+    await deleteDocument(doc.id);
+  },
+};
+
 // ============================================================
 // Record-store configs (vault records / passwords / banks / pins)
 // ============================================================
@@ -554,6 +628,8 @@ export function getModalDomainConfig(
       return vaultBanksConfig;
     case "vault_bank_details":
       return vaultBankDetailsConfig(scope);
+    case "notes":
+      return notesModalConfig;
     default:
       throw new Error(`Unknown modal domain: ${domain}`);
   }
