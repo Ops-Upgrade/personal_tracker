@@ -136,13 +136,9 @@ export default function FormattingSidebar({
           <div className="mt-2 grid grid-cols-2 gap-2">
             <button
               type="button"
-              onClick={() => dispatch({ type: "SET_POINTER_TOOL", payload: "textbox" })}
-              className={`flex items-center justify-center gap-1.5 rounded-lg border py-2 font-medium shadow-sm transition-colors ${
-                state.pointerTool === "textbox"
-                  ? "border-blue-500 bg-blue-50 text-blue-900 dark:bg-blue-950/50 dark:text-blue-200"
-                  : "border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700"
-              }`}
-              title="Click and drag on canvas to draw a text box"
+              onClick={onAddFloatingText}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-zinc-200 bg-white py-2 font-medium text-zinc-700 shadow-sm hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-700"
+              title="Insert text box on canvas"
             >
               <Type className="h-3.5 w-3.5" />
               Text Box

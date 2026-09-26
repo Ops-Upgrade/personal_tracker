@@ -26,7 +26,7 @@ export interface PaneState {
   activePageId: string;
 }
 
-export type PointerTool = "default" | "textbox" | "pen" | "eraser";
+export type PointerTool = "default" | "pen" | "eraser";
 
 export interface SelectionState {
   kind: "text" | "image" | "none";

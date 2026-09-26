@@ -130,7 +130,10 @@ export default function FloatingBlock({
       <div
         className="h-[calc(100%-24px)] w-full overflow-auto p-2"
         onContextMenu={(e) => onContextMenu(e, block.id)}
-        onPointerDown={(e) => e.stopPropagation()}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          onSelect(block.id);
+        }}
         onClick={(e) => {
           e.stopPropagation();
           onSelect(block.id);

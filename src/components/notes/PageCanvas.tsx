@@ -16,7 +16,49 @@ import InkCanvas from "./InkCanvas";
 import ConflictBanner from "./ConflictBanner";
 import BlockContextMenu from "./BlockContextMenu";
 import { useDebouncedSave } from "./useDebouncedSave";
+import type { Editor } from "@tiptap/react";
 import type { CanvasBlock, InkStroke, PageContent } from "@/types/notes";
+
+function isPointOnText(x: number, y: number): boolean {
+  if (typeof document === "undefined") return false;
+  let range: Range | null = null;
+  if (typeof document.caretRangeFromPoint === "function") {
+    range = document.caretRangeFromPoint(x, y);
+  } else if (typeof (document as any).caretPositionFromPoint === "function") {
+    const pos = (document as any).caretPositionFromPoint(x, y);
+    if (pos && pos.offsetNode) {
+      range = document.createRange();
+      range.setStart(pos.offsetNode, pos.offset);
+      range.collapse(true);
+    }
+  }
+
+  if (!range) return false;
+
+  const node = range.startContainer;
+  if (node.nodeType !== Node.TEXT_NODE) return false;
+
+  const text = node.textContent || "";
+  if (!text.trim()) return false;
+
+  try {
+    const charRange = document.createRange();
+    const offset = range.startOffset;
+    const start = Math.max(0, Math.min(offset, text.length - 1));
+    charRange.setStart(node, start);
+    charRange.setEnd(node, Math.min(start + 1, text.length));
+    const rect = charRange.getBoundingClientRect();
+
+    return (
+      y >= rect.top - 6 &&
+      y <= rect.bottom + 6 &&
+      x >= rect.left - 10 &&
+      x <= rect.right + 10
+    );
+  } catch {
+    return false;
+  }
+}
 
 interface PageCanvasProps {
   userId: string;
@@ -90,14 +132,12 @@ export default function PageCanvas({
     };
   }, [userId, pageId, state.pageContents, dispatch]);
 
-  // Compute dynamic sheet dimensions
+  // Compute sheet dimensions: fixed width (900px) and capped dynamic height
   const { sheetW, sheetH } = useMemo(() => {
-    let maxRight = 900;
     let maxBottom = 1200;
 
     if (content?.blocks) {
       for (const block of content.blocks) {
-        maxRight = Math.max(maxRight, block.x + block.w + 80);
         maxBottom = Math.max(maxBottom, block.y + block.h + 120);
       }
     }
@@ -105,15 +145,14 @@ export default function PageCanvas({
     if (content?.strokes) {
       for (const stroke of content.strokes) {
         for (const pt of stroke.points) {
-          maxRight = Math.max(maxRight, pt[0] + 80);
           maxBottom = Math.max(maxBottom, pt[1] + 120);
         }
       }
     }
 
     return {
-      sheetW: Math.max(900, maxRight),
-      sheetH: Math.max(1200, maxBottom),
+      sheetW: 900,
+      sheetH: Math.min(Math.max(1200, maxBottom), 5000),
     };
   }, [content?.blocks, content?.strokes]);
 
@@ -447,23 +486,50 @@ export default function PageCanvas({
     [handleUploadImageFile]
   );
 
+  // Tracks whether a drag gesture has committed to "create text box" mode
+  const dragCommittedRef = useRef(false);
+
   // Empty paper click / drag hit testing
   const handleSheetPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (state.pointerTool !== "default" && state.pointerTool !== "textbox") return;
+      // If tool is pen or eraser, let InkCanvas handle drawing
+      if (state.pointerTool !== "default") return;
+
+      const target = e.target as HTMLElement;
+
+      // Ignore drag handles and resize handles of floating blocks or buttons
       if (
-        (e.target as HTMLElement).closest(".rnd-drag-handle") ||
-        (e.target as HTMLElement).closest(".floating-block-container")
+        target.closest(".rnd-drag-handle") ||
+        target.classList.contains("react-resizable-handle") ||
+        target.closest(".react-resizable-handle") ||
+        target.closest("button")
       ) {
         return;
       }
 
+      // Ignore clicks inside any existing floating block (text box or image)
+      if (target.closest(".floating-block-container")) {
+        return;
+      }
+
+      // If clicking directly on actual text characters, let TipTap handle it
+      if (isPointOnText(e.clientX, e.clientY)) {
+        return;
+      }
+
+      // Start tracking a potential drag-to-create, but DON'T capture or
+      // preventDefault yet — let the event reach TipTap so clicking on empty
+      // space inside the editor still places the cursor normally.
       const rect = sheetRef.current?.getBoundingClientRect();
       if (!rect) return;
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
 
-      setDragBox({ startX: x, startY: y, currentX: x, currentY: y });
+      dragCommittedRef.current = false;
+      setDragBox({
+        startX: e.clientX - rect.left,
+        startY: e.clientY - rect.top,
+        currentX: e.clientX - rect.left,
+        currentY: e.clientY - rect.top,
+      });
     },
     [state.pointerTool]
   );
@@ -476,6 +542,28 @@ export default function PageCanvas({
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
+      const dx = x - dragBox.startX;
+      const dy = y - dragBox.startY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      // Once dragged >= 8px, commit to drag-to-create mode
+      if (dist >= 8 && !dragCommittedRef.current) {
+        dragCommittedRef.current = true;
+        try {
+          sheetRef.current?.setPointerCapture(e.pointerId);
+        } catch {}
+        // Clear any text selection TipTap might have started
+        if (typeof window !== "undefined") {
+          const sel = window.getSelection();
+          if (sel) sel.removeAllRanges();
+        }
+      }
+
+      // Once committed, prevent TipTap from also handling move events
+      if (dragCommittedRef.current) {
+        e.stopPropagation();
+      }
+
       setDragBox((prev) => (prev ? { ...prev, currentX: x, currentY: y } : null));
     },
     [dragBox]
@@ -487,118 +575,82 @@ export default function PageCanvas({
       const { startX, startY, currentX, currentY } = dragBox;
       setDragBox(null);
 
+      const committed = dragCommittedRef.current;
+      dragCommittedRef.current = false;
+
+      try {
+        if (sheetRef.current?.hasPointerCapture(e.pointerId)) {
+          sheetRef.current.releasePointerCapture(e.pointerId);
+        }
+      } catch {}
+
+      if (committed && typeof window !== "undefined") {
+        const sel = window.getSelection();
+        if (sel) sel.removeAllRanges();
+      }
+
       const dx = currentX - startX;
       const dy = currentY - startY;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
-      // Check if user was selecting text with cursor
-      const selectedText =
-        typeof window !== "undefined"
-          ? window.getSelection()?.toString().trim()
-          : "";
-
-      if (dist < 8) {
-        // Click on empty space: if in textbox mode, create a standard box at click position
-        if (state.pointerTool === "textbox") {
-          if (!pageId) return;
-          const newBlock: CanvasBlock = {
-            id:
-              typeof crypto !== "undefined" && crypto.randomUUID
-                ? crypto.randomUUID()
-                : Math.random().toString(36).substring(2, 9),
-            type: "text",
-            role: "floating",
-            x: Math.max(0, startX - 100),
-            y: Math.max(0, startY - 50),
-            w: 220,
-            h: 120,
-            z: (content?.blocks.length || 0) + 1,
-            html: "",
-          };
-
-          dispatch({
-            type: "MUTATE_PAGE_CONTENT",
-            payload: {
-              pageId,
-              mutator: (prev) => ({
-                ...prev,
-                blocks: [...prev.blocks, newBlock],
-              }),
-            },
-          });
-
-          dispatch({
-            type: "SET_SELECTION",
-            payload: { kind: "text", blockId: newBlock.id },
-          });
-
-          dispatch({ type: "SET_POINTER_TOOL", payload: "default" });
-          return;
+      if (dist < 8 || !committed) {
+        // Simple click — let children handle it.
+        // If on outer empty paper (not inside TipTap or floating block), deselect.
+        const target = e.target as HTMLElement;
+        if (
+          !target.closest(".tiptap") &&
+          !target.closest(".floating-block-container") &&
+          state.selection.blockId
+        ) {
+          dispatch({ type: "SET_SELECTION", payload: { kind: "none" } });
         }
-
-        // In default cursor mode, clicking empty space outside flow block selects flow block
-        const isOverFlowBlock = (e.target as HTMLElement).closest(".tiptap");
-        if (!isOverFlowBlock) {
-          const flow = content?.blocks.find(
-            (b) => b.type === "text" && b.role === "flow"
-          );
-          if (flow) {
-            dispatch({
-              type: "SET_SELECTION",
-              payload: { kind: "text", blockId: flow.id },
-            });
-            flowEditorRef.current?.commands?.focus("end");
-          }
-        }
-      } else {
-        // Drag >= 8px: if text was selected, do not create a box
-        if (selectedText && selectedText.length > 0 && state.pointerTool !== "textbox") {
-          return;
-        }
-
-        if (!pageId) return;
-        const boxX = Math.min(startX, currentX);
-        const boxY = Math.min(startY, currentY);
-        const boxW = Math.max(160, Math.abs(dx));
-        const boxH = Math.max(80, Math.abs(dy));
-
-        const newBlock: CanvasBlock = {
-          id:
-            typeof crypto !== "undefined" && crypto.randomUUID
-              ? crypto.randomUUID()
-              : Math.random().toString(36).substring(2, 9),
-          type: "text",
-          role: "floating",
-          x: boxX,
-          y: boxY,
-          w: boxW,
-          h: boxH,
-          z: (content?.blocks.length || 0) + 1,
-          html: "",
-        };
-
-        dispatch({
-          type: "MUTATE_PAGE_CONTENT",
-          payload: {
-            pageId,
-            mutator: (prev) => ({
-              ...prev,
-              blocks: [...prev.blocks, newBlock],
-            }),
-          },
-        });
-
-        dispatch({
-          type: "SET_SELECTION",
-          payload: { kind: "text", blockId: newBlock.id },
-        });
-
-        if (state.pointerTool === "textbox") {
-          dispatch({ type: "SET_POINTER_TOOL", payload: "default" });
-        }
+        return;
       }
+
+      // Drag >= 8px with commitment: create a new floating text box
+      if (!pageId) return;
+      const boxX = Math.min(startX, currentX);
+      const boxY = Math.min(startY, currentY);
+      const boxW = Math.max(160, Math.abs(dx));
+      const boxH = Math.max(80, Math.abs(dy));
+
+      const maxZ =
+        content?.blocks && content.blocks.length > 0
+          ? Math.max(...content.blocks.map((b) => b.z || 0), 1)
+          : 1;
+
+      const newBlock: CanvasBlock = {
+        id:
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : Math.random().toString(36).substring(2, 9),
+        type: "text",
+        role: "floating",
+        x: boxX,
+        y: boxY,
+        w: boxW,
+        h: boxH,
+        z: maxZ + 1,
+        html: "",
+      };
+
+      dispatch({
+        type: "MUTATE_PAGE_CONTENT",
+        payload: {
+          pageId,
+          mutator: (prev) => ({
+            ...prev,
+            blocks: [...prev.blocks, newBlock],
+          }),
+        },
+      });
+
+      dispatch({
+        type: "SET_SELECTION",
+        payload: { kind: "text", blockId: newBlock.id },
+      });
     },
-    [dragBox, content?.blocks, pageId, state.pointerTool, dispatch]
+    [dragBox, content?.blocks, pageId, state.selection.blockId, dispatch]
   );
 
   if (!pageId) {
@@ -665,12 +717,10 @@ export default function PageCanvas({
             width: `${sheetW}px`,
             minHeight: `${sheetH}px`,
           }}
-          onPointerDown={handleSheetPointerDown}
-          onPointerMove={handleSheetPointerMove}
-          onPointerUp={handleSheetPointerUp}
-          className={`relative rounded-xl border border-zinc-200/80 bg-white p-8 shadow-sm transition-all dark:border-zinc-800/80 dark:bg-zinc-900 select-text ${
-            state.pointerTool === "textbox" ? "cursor-crosshair" : ""
-          }`}
+          onPointerDownCapture={handleSheetPointerDown}
+          onPointerMoveCapture={handleSheetPointerMove}
+          onPointerUpCapture={handleSheetPointerUp}
+          className="relative rounded-xl border border-zinc-200/80 bg-white p-8 shadow-sm transition-all dark:border-zinc-800/80 dark:bg-zinc-900 select-text"
         >
           {/* Flow document body (blocks[0]) */}
           {flowBlock && (

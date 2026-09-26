@@ -124,3 +124,8 @@ body {
   pointer-events: none;
   z-index: 2;
 }
+
+/* ── TipTap Prose Bold Color Inheritance ── */
+.prose :where(strong):not(:where([class~="not-prose"],[class~="not-prose"] *)) {
+  color: currentColor;
+}
