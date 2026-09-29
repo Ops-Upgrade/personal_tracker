@@ -7,6 +7,7 @@ import { ROUTES } from "./paths";
 export const PUBLIC_ROUTES: string[] = [
   ROUTES.LOGIN,
   ROUTES.FORGOT_PASSWORD,
+  ROUTES.LOGOUT,
   "/api/auth/recovery-data",
   "/api/auth/reset-password",
 ];

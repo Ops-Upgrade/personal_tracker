@@ -1,3 +1,4 @@
+import { coreSignOut } from "@ops-upgrade/auth-core";
 import { createClient } from "@/lib/supabase/client";
 import { bootstrapCrypto, clearDEK, rewrapDEK } from "@/lib/crypto";
 import type { AuthResult } from "@/types";
@@ -63,11 +64,9 @@ export async function logout(): Promise<AuthResult> {
     await clearDEK(session.user.id);
   }
 
-  const { error } = await supabase.auth.signOut();
-
-  if (error) {
-    return { success: false, errorCode: "unknown" };
-  }
+  // coreSignOut signs out with scope: "local" (this device only) and
+  // throws on failure instead of returning an error object.
+  await coreSignOut(supabase);
 
   return { success: true };
 }
