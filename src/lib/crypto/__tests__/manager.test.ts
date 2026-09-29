@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Session } from "@supabase/supabase-js";
+import type { Session } from "@ops-upgrade/auth-core";
 import { fetchUserKeys, getSession, insertUserKeys, upsertUserKeys } from "@/api/auth";
 import { saveDEK } from "@/lib/crypto/store";
 import { bootstrapCrypto, generateRecoveryPhrase, rewrapDEK } from "@/lib/crypto/manager";
