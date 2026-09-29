@@ -86,7 +86,7 @@ const mockSession = {
     aud: "authenticated",
     created_at: "2026-01-01T00:00:00Z",
   },
-} as unknown as Session;
+} as any;
 
 /** The original DEK, kept so tests can prove key material survives a rewrap. */
 let realDEK: CryptoKey;
@@ -149,7 +149,7 @@ describe("bootstrapCrypto", () => {
     vi.mocked(getSession).mockResolvedValue({
       ...mockSession,
       user: { ...mockSession.user, id: "someone-else" },
-    });
+    } as any);
 
     await expect(bootstrapCrypto(USER_ID, OLD_PASSWORD, EMAIL)).rejects.toThrow(
       "Active session missing or mismatched"
