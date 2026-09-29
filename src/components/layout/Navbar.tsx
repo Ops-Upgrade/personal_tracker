@@ -3,17 +3,12 @@
 import { useEffect, useState, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { logout } from "@/api/auth";
 import { getServerDateIST, formatISTDisplay } from "@/api/serverDate";
 import { ROUTES } from "@/routes/paths";
 import { useTheme } from "@wrksz/themes/client";
 import ThemeSwitcher from "@/components/common/ThemeSwitcher";
 import { useScrollDirection } from "@/hooks/useScrollDirection";
 import { Menu, X } from "lucide-react";
-import { clearDiscoverCache } from "@/components/media/views/DiscoverView";
-import { clearDefaultViewCache } from "@/components/media/views/DefaultView";
-import { clearCollectionViewCache } from "@/components/media/views/CollectionView";
 
 interface NavbarProps {
   userEmail: string;
@@ -26,7 +21,6 @@ interface NavbarProps {
  * Displays app logo, user avatar + name (or email fallback), current IST date.
  */
 export default function Navbar({ userEmail, userName, userAvatarUrl }: NavbarProps) {
-  const router = useRouter();
   const { resolvedTheme } = useTheme();
   const scrollDirection = useScrollDirection();
   const [dateDisplay, setDateDisplay] = useState<string>("");
@@ -57,13 +51,10 @@ export default function Navbar({ userEmail, userName, userAvatarUrl }: NavbarPro
       ? "/images/logo-with-name.png"
       : "/images/logo-with-name-light.png";
 
-  async function handleLogout() {
-    await logout();
-    clearDiscoverCache();
-    clearDefaultViewCache();
-    clearCollectionViewCache();
-    router.push(ROUTES.LOGIN);
-    router.refresh();
+  function handleLogout() {
+    // Full navigation to /logout — the page owns DEK teardown,
+    // cache clears, and the local-scope sign-out.
+    window.location.href = ROUTES.LOGOUT;
   }
 
   return (
