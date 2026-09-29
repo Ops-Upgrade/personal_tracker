@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import { encryptField, decryptField } from "@/lib/crypto";
 import type { Education, EducationPlaintext } from "@/types/education";
 

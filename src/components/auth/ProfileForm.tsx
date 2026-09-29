@@ -2,7 +2,7 @@
 
 import { useState, useRef, type FormEvent, type ChangeEvent } from "react";
 import Image from "next/image";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import Button from "@/components/common/Button";
 import ImageCropperModal from "@/components/common/ImageCropperModal";
 import { Pencil } from "lucide-react";

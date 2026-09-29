@@ -78,7 +78,11 @@ const OLD_PASSWORD = "old-password";
 const NEW_PASSWORD = "new-password";
 
 /** Minimal session whose user matches USER_ID — the bootstrap guard's happy path. */
-const mockSession = {
+const mockSession: Session = {
+  access_token: "mock-access-token",
+  refresh_token: "mock-refresh-token",
+  expires_in: 3600,
+  token_type: "bearer",
   user: {
     id: USER_ID,
     app_metadata: {},
@@ -86,7 +90,7 @@ const mockSession = {
     aud: "authenticated",
     created_at: "2026-01-01T00:00:00Z",
   },
-} as any;
+};
 
 /** The original DEK, kept so tests can prove key material survives a rewrap. */
 let realDEK: CryptoKey;
@@ -149,7 +153,7 @@ describe("bootstrapCrypto", () => {
     vi.mocked(getSession).mockResolvedValue({
       ...mockSession,
       user: { ...mockSession.user, id: "someone-else" },
-    } as any);
+    });
 
     await expect(bootstrapCrypto(USER_ID, OLD_PASSWORD, EMAIL)).rejects.toThrow(
       "Active session missing or mismatched"

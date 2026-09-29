@@ -49,7 +49,7 @@ const { argon2idMock, createClientMock, state, CORRECT_HASH } = vi.hoisted(() =>
 });
 
 vi.mock("hash-wasm", () => ({ argon2id: argon2idMock }));
-vi.mock("@/lib/supabase/server", () => ({ createClient: createClientMock }));
+vi.mock("@ops-upgrade/auth-core", () => ({ createServerClient: createClientMock }));
 
 function seedKeys(overrides: Record<string, unknown> = {}) {
   state.keysRow = {

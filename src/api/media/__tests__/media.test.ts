@@ -17,8 +17,8 @@ import type { EpisodeTracking, SeasonTracking } from "@/types/media";
  * docs/plans/PLAN-mediamanager.md exactly.
  */
 
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: vi.fn(),
+vi.mock("@ops-upgrade/auth-core", () => ({
+  createBrowserClient: vi.fn(),
 }));
 
 vi.mock("@/lib/crypto", () => ({
