@@ -22,7 +22,7 @@ import {
  * KMS, or R2 — the adapters are only *constructed* here, never executed.
  */
 
-vi.mock("@/lib/supabase/client", () => ({ createClient: vi.fn() }));
+vi.mock("@ops-upgrade/auth-core", () => ({ createBrowserClient: vi.fn() }));
 vi.mock("@/lib/crypto", () => ({ encryptField: vi.fn(), decryptField: vi.fn() }));
 vi.mock("@/api/taskmanager", () => ({
   fetchNotes: vi.fn(),

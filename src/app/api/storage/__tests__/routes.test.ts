@@ -6,7 +6,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient as createClient } from "@ops-upgrade/auth-core";
 import { POST as uploadPOST } from "@/app/api/storage/upload/route";
 import { POST as downloadPOST } from "@/app/api/storage/download/route";
 import { POST as deletePOST } from "@/app/api/storage/delete/route";
@@ -21,14 +21,14 @@ import { POST as deletePOST } from "@/app/api/storage/delete/route";
  * from the session (never from the request), and download/delete must refuse a
  * key whose prefix belongs to anyone else.
  *
- * Only `@/lib/supabase/server` is mocked for auth, so the real
+ * Only `createServerClient` (from `@ops-upgrade/auth-core`) is mocked for auth, so the real
  * `getAuthenticatedUserId()` helper (getClaims + `claims.sub` extraction) is
  * under test too. The AWS SDK is mocked so nothing reaches the network.
  */
 
 const { sendMock } = vi.hoisted(() => ({ sendMock: vi.fn(async () => ({})) }));
 
-vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+vi.mock("@ops-upgrade/auth-core", () => ({ createServerClient: vi.fn() }));
 vi.mock("@/lib/r2", () => ({
   getR2Client: vi.fn(() => ({ send: sendMock })),
   R2_BUCKET: "personal-tracker",

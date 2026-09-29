@@ -1,5 +1,4 @@
-import { coreSignOut } from "@ops-upgrade/auth-core";
-import { createClient } from "@/lib/supabase/client";
+import { coreSignOut, createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import { bootstrapCrypto, clearDEK, rewrapDEK } from "@/lib/crypto";
 import type { AuthResult } from "@/types";
 

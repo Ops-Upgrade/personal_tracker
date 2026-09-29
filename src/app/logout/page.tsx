@@ -7,6 +7,7 @@ import { clearDEK } from "@/lib/crypto";
 import { clearDiscoverCache } from "@/components/media/views/DiscoverView";
 import { clearDefaultViewCache } from "@/components/media/views/DefaultView";
 import { clearCollectionViewCache } from "@/components/media/views/CollectionView";
+import { resolveLogoutRedirect } from "./resolveLogoutRedirect";
 import { ROUTES } from "@/routes/paths";
 
 function SigningOut() {
@@ -18,8 +19,14 @@ function SigningOut() {
 }
 
 /**
- * Owns the full client-side logout sequence:
- * DEK teardown → media view cache clears → local-scope sign-out → redirect.
+ * Owns the full client-side logout sequence, executed as three independent
+ * steps so a failure in one never blocks the others:
+ *
+ *   1. DEK teardown — grab the userId, wipe the DEK from IndexedDB + memory.
+ *   2. Media view cache clears + local-scope sign-out (this device only).
+ *   3. Unconditional navigation — strictly validated cross-subdomain
+ *      redirect, else the app's own login page.
+ *
  * Reached from the Navbar (this app) and from other *.ops-upgrade.net
  * subdomains via ?redirect=.
  */
@@ -29,39 +36,47 @@ function LogoutHandler() {
 
   useEffect(() => {
     async function run() {
-      // 1-2. Grab the userId, then wipe the DEK from IndexedDB + memory.
       try {
-        const {
-          data: { session },
-        } = await createBrowserClient().auth.getSession();
-        const userId = session?.user.id;
-        if (userId) {
-          await clearDEK(userId);
+        // Step 1: wipe the DEK from IndexedDB + memory.
+        try {
+          const {
+            data: { session },
+          } = await createBrowserClient().auth.getSession();
+          const userId = session?.user.id;
+          if (userId) {
+            await clearDEK(userId);
+          }
+        } catch (error) {
+          console.error("Logout: clearDEK failed", error);
         }
-      } catch {
-        // Best-effort — sign-out proceeds regardless.
-      }
-
-      // 3. Clear per-view media caches.
-      clearDiscoverCache();
-      clearDefaultViewCache();
-      clearCollectionViewCache();
-
-      // 4. Sign out this device only (scope: "local").
-      try {
-        await coreSignOut(createBrowserClient());
-      } catch {
-        // Session cookies may already be gone — navigation proceeds.
-      }
-
-      // 5-6. Validated cross-subdomain redirect, else login.
-      const redirect = searchParams.get("redirect");
-      const isValidRedirect =
-        redirect === "ops-upgrade.net" || redirect?.endsWith(".ops-upgrade.net");
-      if (isValidRedirect) {
-        window.location.href = `https://${redirect}`;
-      } else {
-        router.replace(ROUTES.LOGIN);
+        // Step 2: clear each media cache independently, then sign out this device only.
+        for (const clear of [
+          clearDiscoverCache,
+          clearDefaultViewCache,
+          clearCollectionViewCache,
+        ]) {
+          try {
+            clear();
+          } catch (error) {
+            console.error("Logout: cache clear failed", error);
+          }
+        }
+        try {
+          await coreSignOut(createBrowserClient());
+        } catch (error) {
+          console.error("Logout: coreSignOut failed", error);
+        }
+      } finally {
+        // Step 3: unconditional navigation — validated redirect, else login.
+        const target = resolveLogoutRedirect(
+          searchParams.get("redirect"),
+          process.env.NODE_ENV === "production",
+        );
+        if (target) {
+          window.location.href = target;
+        } else {
+          router.replace(ROUTES.LOGIN);
+        }
       }
     }
     run();
