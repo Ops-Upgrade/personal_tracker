@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createEncryptedFileStorage } from "@/api/common/encryptedFileStorage";
+import { uploadFile, downloadFile, deleteFile } from "@/api/common/encryptedFileStorage";
 import { MAX_FILE_SIZE } from "@/lib/fileConstants";
 
 /**
  * Tier 1-C — the client-side encrypted file pipeline.
- * Upload/download/remove orchestrate encryptBlob/decryptBlob around the
- * presigned-URL API routes; the {folder}/{userId}/{fileName} key is the
- * tenancy boundary in R2.
+ * Upload/download/delete orchestrate encryptBlob/decryptBlob around the
+ * presigned-URL API routes; the routes build the documents/{userId}/{fileName}
+ * key server-side, so the client only ever sends { fileName }.
  */
 
 const { encryptBlobMock, decryptBlobMock, fetchMock } = vi.hoisted(() => ({
@@ -23,8 +23,6 @@ vi.mock("@/lib/crypto", () => ({
   encryptBlob: encryptBlobMock,
   decryptBlob: decryptBlobMock,
 }));
-
-const storage = createEncryptedFileStorage({ bucket: "documents", folder: "ignored" });
 
 function jsonResponse(body: unknown, ok = true, status = 200, statusText = "OK") {
   return {
@@ -49,19 +47,19 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("upload", () => {
+describe("uploadFile", () => {
   it("rejects files over the 45 MB limit before any network call", async () => {
     const file = makeFile();
     Object.defineProperty(file, "size", { value: MAX_FILE_SIZE + 1 });
 
-    await expect(storage.upload("u1", file)).rejects.toThrow(
+    await expect(uploadFile("u1", file)).rejects.toThrow(
       "File must be under 45 MB.",
     );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("rejects unsupported MIME types", async () => {
-    await expect(storage.upload("u1", makeFile("a.txt", "text/plain"))).rejects.toThrow(
+    await expect(uploadFile("u1", makeFile("a.txt", "text/plain"))).rejects.toThrow(
       "Unsupported file type. Allowed: PDF, JPEG, PNG, WEBP.",
     );
   });
@@ -69,7 +67,7 @@ describe("upload", () => {
   it("throws when the upload-URL route fails", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "boom" }, false, 500, "err"));
 
-    await expect(storage.upload("u1", makeFile())).rejects.toThrow(
+    await expect(uploadFile("u1", makeFile())).rejects.toThrow(
       "Failed to get upload URL: boom",
     );
   });
@@ -79,17 +77,17 @@ describe("upload", () => {
       .mockResolvedValueOnce(jsonResponse({ url: "https://r2.test/presigned" }))
       .mockResolvedValueOnce(jsonResponse({}, false, 403, "Forbidden"));
 
-    await expect(storage.upload("u1", makeFile())).rejects.toThrow(
+    await expect(uploadFile("u1", makeFile())).rejects.toThrow(
       "Failed to upload file to storage: Forbidden",
     );
   });
 
-  it("encrypts the file, posts the tenancy-scoped key, and returns the stored metadata", async () => {
+  it("encrypts the file, posts only the fileName, and returns the stored metadata", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ url: "https://r2.test/presigned" }))
       .mockResolvedValueOnce(jsonResponse({}));
 
-    const result = await storage.upload("u1", makeFile());
+    const result = await uploadFile("u1", makeFile());
 
     expect(encryptBlobMock).toHaveBeenCalledWith("u1", expect.any(File));
     expect(result.iv).toBe("test-iv");
@@ -98,18 +96,17 @@ describe("upload", () => {
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/storage/upload");
-    const body = JSON.parse(init.body as string) as { folder: string; fileName: string };
-    expect(body.folder).toBe("documents");
-    expect(body.fileName).toBe(result.fileName);
+    const body = JSON.parse(init.body as string) as { fileName: string };
+    expect(body).toEqual({ fileName: result.fileName });
   });
 });
 
-describe("download", () => {
+describe("downloadFile", () => {
   it("requires both fileName and iv", async () => {
-    await expect(storage.download("u1", null, "iv")).rejects.toThrow(
+    await expect(downloadFile("u1", null, "iv")).rejects.toThrow(
       "Missing file info for download.",
     );
-    await expect(storage.download("u1", "f.enc", null)).rejects.toThrow(
+    await expect(downloadFile("u1", "f.enc", null)).rejects.toThrow(
       "Missing file info for download.",
     );
   });
@@ -119,7 +116,7 @@ describe("download", () => {
       jsonResponse({ error: "nope" }, false, 404, "Not Found"),
     );
 
-    await expect(storage.download("u1", "f.enc", "iv")).rejects.toThrow(
+    await expect(downloadFile("u1", "f.enc", "iv")).rejects.toThrow(
       "Download failed: nope",
     );
   });
@@ -130,20 +127,20 @@ describe("download", () => {
       .mockResolvedValueOnce(jsonResponse({}, false, 404, "Gone"));
 
     await expect(
-      storage.download("u1", "f.enc", "iv", "application/pdf"),
+      downloadFile("u1", "f.enc", "iv", "application/pdf"),
     ).rejects.toThrow("Failed to download file from storage: Gone");
   });
 
-  it("downloads with the tenancy-scoped key and decrypts the blob", async () => {
+  it("downloads with only the fileName posted and decrypts the blob", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ url: "https://r2.test/presigned" }))
       .mockResolvedValueOnce(jsonResponse({}));
 
-    const blob = await storage.download("u1", "f.enc", "iv-x", "application/pdf");
+    const blob = await downloadFile("u1", "f.enc", "iv-x", "application/pdf");
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/storage/download");
-    expect(JSON.parse(init.body as string)).toEqual({ key: "documents/u1/f.enc" });
+    expect(JSON.parse(init.body as string)).toEqual({ fileName: "f.enc" });
     expect(decryptBlobMock).toHaveBeenCalledWith(
       "u1",
       expect.any(ArrayBuffer),
@@ -154,21 +151,21 @@ describe("download", () => {
   });
 });
 
-describe("remove", () => {
-  it("deletes via the tenancy-scoped key", async () => {
+describe("deleteFile", () => {
+  it("deletes via only the fileName posted", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({}));
 
-    await storage.remove("u1", "f.enc");
+    await deleteFile("u1", "f.enc");
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/storage/delete");
-    expect(JSON.parse(init.body as string)).toEqual({ key: "documents/u1/f.enc" });
+    expect(JSON.parse(init.body as string)).toEqual({ fileName: "f.enc" });
   });
 
   it("throws when the delete route fails", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "x" }, false, 500, "err"));
 
-    await expect(storage.remove("u1", "f.enc")).rejects.toThrow(
+    await expect(deleteFile("u1", "f.enc")).rejects.toThrow(
       "Failed to delete file: x",
     );
   });

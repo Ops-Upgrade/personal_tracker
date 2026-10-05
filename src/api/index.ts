@@ -17,10 +17,10 @@ export {
   fetchDocumentsByDomain,
 } from "./common/documents";
 export {
-  uploadDocumentFile,
-  downloadDocumentFile,
-  deleteDocumentFile,
-} from "./common/documentStorage";
+  uploadFile,
+  downloadFile,
+  deleteFile,
+} from "./common/encryptedFileStorage";
 export {
   fetchMedicalRecords,
   createMedicalRecord,

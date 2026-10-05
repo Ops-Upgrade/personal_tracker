@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import { deleteExpense } from "@/api/expense";
 import { fetchDocuments, updateDocument, deleteDocument } from "@/api/common/documents";
-import { downloadDocumentFile, deleteDocumentFile } from "@/api/common/documentStorage";
+import { downloadFile, deleteFile } from "@/api/common/encryptedFileStorage";
 
 interface UseExpenseActionsParams {
   userId: string | null;
@@ -37,7 +37,7 @@ export function useExpenseActions({ userId, refresh }: UseExpenseActionsParams) 
         for (const doc of expenseDocs) {
           if (doc.file_name) {
             try {
-              await deleteDocumentFile(userId, doc.file_name);
+              await deleteFile(userId, doc.file_name);
             } catch {
               /* best-effort */
             }
@@ -54,7 +54,7 @@ export function useExpenseActions({ userId, refresh }: UseExpenseActionsParams) 
   const handleDownloadDocument = useCallback(
     async (doc: Document) => {
       if (!userId) throw new Error("No active session.");
-      const blob = await downloadDocumentFile(
+      const blob = await downloadFile(
         userId,
         doc.file_name,
         doc.file_iv,

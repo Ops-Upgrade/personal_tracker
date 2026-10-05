@@ -63,9 +63,9 @@ import {
   deleteDocument,
 } from "@/api/common/documents";
 import {
-  uploadDocumentFile,
-  deleteDocumentFile,
-} from "@/api/common/documentStorage";
+  uploadFile,
+  deleteFile,
+} from "@/api/common/encryptedFileStorage";
 import { normalizeDateForInput } from "@/lib/utils";
 import { EDUCATION_LAYOUT } from "@/components/education/config";
 import { BANK_LAYOUT, PASSWORD_LAYOUT, PIN_LAYOUT } from "@/components/vault/storeConfig";
@@ -258,7 +258,7 @@ async function saveDocLinkedRecord<
     currentDocIds = currentDocIds.filter((id) => id !== docId);
     if (doc.file_name) {
       try {
-        await deleteDocumentFile(userId, doc.file_name);
+        await deleteFile(userId, doc.file_name);
       } catch {
         /* best-effort */
       }
@@ -275,7 +275,7 @@ async function saveDocLinkedRecord<
   const newDocIds = [...currentDocIds];
   const firstNewFile = fileActions.newFiles[0];
   if (firstNewFile) {
-    const { fileName, iv, mimeType } = await uploadDocumentFile(userId, firstNewFile.file);
+    const { fileName, iv, mimeType } = await uploadFile(userId, firstNewFile.file);
     const doc = await createDocument(userId, {
       label: firstNewFile.label,
       file_name: fileName,
@@ -336,7 +336,7 @@ async function deleteDocLinkedRecord(
     for (const doc of recordDocs) {
       if (doc.file_name) {
         try {
-          await deleteDocumentFile(userId, doc.file_name);
+          await deleteFile(userId, doc.file_name);
         } catch {
           /* best-effort */
         }
@@ -481,7 +481,7 @@ async function saveVaultRecordWithFiles(
     if (doc) {
       if (doc.file_name) {
         try {
-          await deleteDocumentFile(userId, doc.file_name);
+          await deleteFile(userId, doc.file_name);
         } catch {
           /* best-effort */
         }
@@ -509,7 +509,7 @@ async function saveVaultRecordWithFiles(
   }
   for (const nf of fileActions.newFiles) {
     try {
-      const { fileName, iv, mimeType } = await uploadDocumentFile(userId, nf.file);
+      const { fileName, iv, mimeType } = await uploadFile(userId, nf.file);
       await createDocument(userId, {
         label: nf.label,
         file_name: fileName,
@@ -552,7 +552,7 @@ async function deleteVaultRecordWithFiles(
   for (const doc of attached) {
     if (doc.file_name) {
       try {
-        await deleteDocumentFile(userId, doc.file_name);
+        await deleteFile(userId, doc.file_name);
       } catch {
         /* best-effort */
       }

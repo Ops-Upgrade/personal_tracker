@@ -60,9 +60,9 @@ vi.mock("@/api/common/documents", () => ({
   updateDocument: vi.fn(),
   deleteDocument: vi.fn(),
 }));
-vi.mock("@/api/common/documentStorage", () => ({
-  uploadDocumentFile: vi.fn(),
-  deleteDocumentFile: vi.fn(),
+vi.mock("@/api/common/encryptedFileStorage", () => ({
+  uploadFile: vi.fn(),
+  deleteFile: vi.fn(),
 }));
 
 // ── Helpers ──

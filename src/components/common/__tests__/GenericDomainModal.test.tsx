@@ -35,8 +35,8 @@ vi.mock("@/components/common/FileUploadZone", () => ({
   default: () => <div data-testid="file-upload-zone" />,
 }));
 
-vi.mock("@/api/common/documentStorage", () => ({
-  downloadDocumentFile: vi.fn(async () => new Blob()),
+vi.mock("@/api/common/encryptedFileStorage", () => ({
+  downloadFile: vi.fn(async () => new Blob()),
 }));
 
 const FIELDS: FieldDef[] = [
