@@ -80,13 +80,13 @@ vi.mock("@/api/common/documents", () => ({
   fetchDocuments: vi.fn(async () => []),
 }));
 
-vi.mock("@/api/common/documentStorage", () => ({
-  uploadDocumentFile: vi.fn(async () => ({
+vi.mock("@/api/common/encryptedFileStorage", () => ({
+  uploadFile: vi.fn(async () => ({
     fileName: "file.enc",
     iv: "iv",
     mimeType: "application/pdf",
   })),
-  deleteDocumentFile: vi.fn(async () => {}),
+  deleteFile: vi.fn(async () => {}),
 }));
 
 vi.mock("@/components/common/store/storeAdapters", () => {

@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { fetchDocuments, deleteDocument } from "@/api/common/documents";
-import { deleteDocumentFile } from "@/api/common/documentStorage";
+import { deleteFile } from "@/api/common/encryptedFileStorage";
 import { deleteMedicalRecord } from "@/api/medical";
 
 interface UseMedicalActionsParams {
@@ -28,7 +28,7 @@ export function useMedicalActions({ userId, refresh }: UseMedicalActionsParams) 
       // Always cascade-delete attached documents
       for (const doc of recordDocs) {
         if (doc.file_name) {
-          try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+          try { await deleteFile(userId, doc.file_name); } catch { /* best-effort */ }
         }
         try { await deleteDocument(doc.id); } catch { /* best-effort */ }
       }
