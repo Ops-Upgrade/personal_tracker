@@ -19,7 +19,7 @@ import {
   fetchDocuments,
   updateDocument,
 } from "@/api/common/documents";
-import { deleteDocumentFile, uploadDocumentFile } from "@/api/common/documentStorage";
+import { deleteFile, uploadFile } from "@/api/common/encryptedFileStorage";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import type { Education } from "@/types/education";
 import type { Expense } from "@/types/expense";
@@ -186,12 +186,12 @@ async function replaceDocumentFile(
 ): Promise<{ file_name: string; file_iv: string; file_mime: string }> {
   if (existing.file_name) {
     try {
-      await deleteDocumentFile(userId, existing.file_name);
+      await deleteFile(userId, existing.file_name);
     } catch {
       // Best-effort — the parent save must not fail on a stale object.
     }
   }
-  const { fileName, iv, mimeType } = await uploadDocumentFile(userId, entry.file);
+  const { fileName, iv, mimeType } = await uploadFile(userId, entry.file);
   return { file_name: fileName, file_iv: iv, file_mime: mimeType };
 }
 
@@ -237,7 +237,7 @@ async function saveStoreDocument<T extends { id: string }>(
     docId = existing.id;
   } else {
     if (!firstNewFile) throw new Error("File is required for new documents.");
-    const { fileName, iv, mimeType } = await uploadDocumentFile(userId, firstNewFile.file);
+    const { fileName, iv, mimeType } = await uploadFile(userId, firstNewFile.file);
     const newDoc = await createDocument(userId, {
       label: firstNewFile.label,
       file_name: fileName,
@@ -280,7 +280,7 @@ async function deleteStoreDocument<T extends { id: string }>(
   }
   if (doc.file_name) {
     try {
-      await deleteDocumentFile(userId, doc.file_name);
+      await deleteFile(userId, doc.file_name);
     } catch {
       // Best-effort — deleting the row must still succeed.
     }

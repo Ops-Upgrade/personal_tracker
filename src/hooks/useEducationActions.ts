@@ -5,7 +5,7 @@ import type { Education } from "@/types/education";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import { deleteEducation, updateEducation } from "@/api/education";
 import { fetchDocuments, updateDocument, deleteDocument } from "@/api/common/documents";
-import { downloadDocumentFile, deleteDocumentFile } from "@/api/common/documentStorage";
+import { downloadFile, deleteFile } from "@/api/common/encryptedFileStorage";
 
 interface UseEducationActionsParams {
   userId: string | null;
@@ -39,7 +39,7 @@ export function useEducationActions({ userId, refresh }: UseEducationActionsPara
       } else {
         for (const doc of eduDocs) {
           if (doc.file_name) {
-            try { await deleteDocumentFile(userId, doc.file_name); } catch { /* best-effort */ }
+            try { await deleteFile(userId, doc.file_name); } catch { /* best-effort */ }
           }
           await deleteDocument(doc.id);
         }
@@ -54,7 +54,7 @@ export function useEducationActions({ userId, refresh }: UseEducationActionsPara
   const handleDownloadDocument = useCallback(
     async (doc: Document) => {
       if (!userId) throw new Error("No active session.");
-      const blob = await downloadDocumentFile(
+      const blob = await downloadFile(
         userId,
         doc.file_name,
         doc.file_iv,

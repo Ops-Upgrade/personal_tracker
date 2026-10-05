@@ -80,7 +80,7 @@ export async function updateEducation(
  * Permanently delete an education by ID.
  *
  * NOTE: Callers are responsible for cleaning up any associated document files
- * in R2 storage (see deleteDocumentFile). This function only removes the
+ * in R2 storage (see deleteFile). This function only removes the
  * database row — storage cleanup happens at the UI layer in EducationView.
  */
 export async function deleteEducation(educationId: string): Promise<void> {

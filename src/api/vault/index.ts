@@ -12,9 +12,3 @@ export {
   updateVaultEntry,
   deleteVaultEntry,
 } from "./vaultEntries";
-
-export {
-  uploadVaultDocument,
-  downloadVaultDocument,
-  deleteVaultDocument,
-} from "./vaultDocumentStorage";
