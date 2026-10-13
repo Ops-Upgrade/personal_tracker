@@ -100,7 +100,12 @@ function NotesViewContent({ userId }: { userId: string }) {
 
   // Add image trigger shortcut
   const handleAddImageClick = () => {
-    const input = document.querySelector('input[type="file"][accept="image/*"]') as HTMLInputElement;
+    const activePageId = state.panes[0]?.activePageId;
+    const input =
+      (activePageId
+        ? (document.getElementById(`note-image-input-${activePageId}`) as HTMLInputElement)
+        : null) ||
+      (document.querySelector('input[type="file"][accept="image/*"]') as HTMLInputElement);
     if (input) input.click();
   };
 

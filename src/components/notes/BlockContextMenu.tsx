@@ -7,11 +7,14 @@ import {
   ChevronDown,
   ChevronsDown,
   Trash2,
+  Crop,
 } from "lucide-react";
 
 interface BlockContextMenuProps {
   x: number;
   y: number;
+  isImage?: boolean;
+  onCrop?: () => void;
   onBringToFront: () => void;
   onBringForward: () => void;
   onSendBackward: () => void;
@@ -23,6 +26,8 @@ interface BlockContextMenuProps {
 export default function BlockContextMenu({
   x,
   y,
+  isImage,
+  onCrop,
   onBringToFront,
   onBringForward,
   onSendBackward,
@@ -56,6 +61,22 @@ export default function BlockContextMenu({
       style={{ left: `${x}px`, top: `${y}px` }}
       className="fixed z-50 min-w-[160px] rounded-lg border border-zinc-200 bg-white p-1 text-xs shadow-xl dark:border-zinc-800 dark:bg-zinc-900"
     >
+      {isImage && onCrop && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              onCrop();
+              onClose();
+            }}
+            className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800 font-medium"
+          >
+            <Crop className="h-3.5 w-3.5 text-blue-500" />
+            Crop Image
+          </button>
+          <div className="my-1 border-t border-zinc-200 dark:border-zinc-800" />
+        </>
+      )}
       <button
         type="button"
         onClick={() => {

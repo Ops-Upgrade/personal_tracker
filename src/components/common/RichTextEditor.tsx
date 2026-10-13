@@ -6,7 +6,35 @@ import StarterKit from "@tiptap/starter-kit";
 import TextAlign from "@tiptap/extension-text-align";
 import Highlight from "@tiptap/extension-highlight";
 import { TextStyle } from "@tiptap/extension-text-style";
-import { Extension } from "@tiptap/core";
+import { Extension, Node } from "@tiptap/core";
+
+// Custom Image node for inline images inside text boxes
+const CustomImage = Node.create({
+  name: "image",
+  group: "block",
+  selectable: true,
+  draggable: true,
+  atom: true,
+  addAttributes() {
+    return {
+      src: { default: null },
+      alt: { default: null },
+      title: { default: null },
+    };
+  },
+  parseHTML() {
+    return [{ tag: "img[src]" }];
+  },
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "img",
+      {
+        ...HTMLAttributes,
+        class: "max-w-full h-auto rounded my-2 block select-none",
+      },
+    ];
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Custom FontSize extension (uses TextStyle as the backing mark)
@@ -223,6 +251,7 @@ export default function RichTextEditor({
       Highlight.configure({
         multicolor: true,
       }),
+      CustomImage,
     ],
     content: value,
     editable: !disabled,
@@ -232,6 +261,33 @@ export default function RichTextEditor({
           ? "prose prose-base prose-neutral dark:prose-invert max-w-none text-zinc-900 dark:text-zinc-100 outline-none focus:outline-none focus:ring-0 select-text cursor-text min-h-[var(--editor-min-h)] flex-1"
           : "prose prose-sm prose-neutral dark:prose-invert max-w-none min-h-[var(--editor-min-h)] max-h-[35vh] overflow-y-auto rounded-b-lg border border-t-0 border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-zinc-500",
         style: `--editor-min-h: ${minHeight}`,
+      },
+      handlePaste: (view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+
+        for (let i = 0; i < items.length; i++) {
+          if (items[i].type.startsWith("image/")) {
+            const file = items[i].getAsFile();
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                const src = e.target?.result as string;
+                if (src && view.state.schema.nodes.image) {
+                  const node = view.state.schema.nodes.image.create({
+                    src,
+                    alt: file.name,
+                  });
+                  const transaction = view.state.tr.replaceSelectionWith(node);
+                  view.dispatch(transaction);
+                }
+              };
+              reader.readAsDataURL(file);
+              return true;
+            }
+          }
+        }
+        return false;
       },
     },
     onUpdate: useCallback(

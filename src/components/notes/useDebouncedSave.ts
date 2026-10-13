@@ -113,17 +113,18 @@ export function useDebouncedSave(userId: string, pageId: string | null) {
   }, [userId, pageId, content, dirty, lastSyncedRevision, performSave]);
 
   const saveNow = useCallback(
-    async (overrideRevision?: number) => {
+    async (contentOverride?: PageContent, overrideRevision?: number) => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
       }
-      if (!content) return false;
+      const target = contentOverride || content;
+      if (!target) return false;
       const rev =
         overrideRevision !== undefined
           ? overrideRevision
-          : (lastSyncedRevision ?? content.revision);
-      return performSave(content, rev);
+          : (lastSyncedRevision ?? target.revision);
+      return performSave(target, rev);
     },
     [content, lastSyncedRevision, performSave]
   );

@@ -8,13 +8,14 @@ import React, {
   useMemo,
 } from "react";
 import { useNotesStore } from "./useNotesStore";
-import { getPageContent, uploadNoteImage, deleteNoteImage } from "@/api/notes";
+import { getPageContent, uploadNoteImage, deleteNoteImage, downloadNoteImage } from "@/api/notes";
 import { createDocument, deleteDocument, fetchDocuments } from "@/api/common/documents";
 import RichTextEditor from "@/components/common/RichTextEditor";
 import FloatingBlock from "./FloatingBlock";
 import InkCanvas from "./InkCanvas";
 import ConflictBanner from "./ConflictBanner";
 import BlockContextMenu from "./BlockContextMenu";
+import ImageCropModal from "./ImageCropModal";
 import { useDebouncedSave } from "./useDebouncedSave";
 import type { Editor } from "@tiptap/react";
 import type { CanvasBlock, InkStroke, PageContent } from "@/types/notes";
@@ -89,6 +90,12 @@ export default function PageCanvas({
     blockId: string;
   } | null>(null);
 
+  // Image cropping state
+  const [cropTarget, setCropTarget] = useState<{
+    blockId: string;
+    imageUrl: string;
+  } | null>(null);
+
   // Drag-to-create state on empty sheet
   const [dragBox, setDragBox] = useState<{
     startX: number;
@@ -111,15 +118,42 @@ export default function PageCanvas({
       try {
         const fetched = await getPageContent(userId, pageId!);
         if (isMounted) {
+          // Self-heal: filter out any image blocks whose documents were deleted from the database
+          const imageBlocks = fetched.blocks.filter((b) => b.type === "image" && b.document_id);
+          let sanitizedBlocks = fetched.blocks;
+          if (imageBlocks.length > 0) {
+            try {
+              const docs = await fetchDocuments(userId);
+              const validDocIds = new Set(docs.map((d) => d.id));
+              sanitizedBlocks = fetched.blocks.filter((b) => {
+                if (b.type === "image" && b.document_id) {
+                  return validDocIds.has(b.document_id);
+                }
+                return true;
+              });
+            } catch (docErr) {
+              console.warn("Could not verify image documents:", docErr);
+            }
+          }
+
+          const hasOrphans = sanitizedBlocks.length !== fetched.blocks.length;
+          const finalContent = hasOrphans
+            ? { ...fetched, blocks: sanitizedBlocks }
+            : fetched;
+
           dispatch({
             type: "SET_PAGE_CONTENT",
             payload: {
               pageId: pageId!,
-              content: fetched,
-              dirty: false,
+              content: finalContent,
+              dirty: hasOrphans,
               lastSyncedRevision: fetched.revision,
             },
           });
+
+          if (hasOrphans) {
+            saveNow(finalContent);
+          }
         }
       } catch (err) {
         console.error("Failed to load page content:", err);
@@ -130,7 +164,56 @@ export default function PageCanvas({
     return () => {
       isMounted = false;
     };
-  }, [userId, pageId, state.pageContents, dispatch]);
+  }, [userId, pageId, state.pageContents, dispatch, saveNow]);
+
+  // Self-heal: verify image blocks on page once loaded to prune orphaned ghost boxes
+  const prunedPagesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!userId || !pageId || !content || prunedPagesRef.current.has(pageId)) return;
+    const imageBlocks = content.blocks.filter((b) => b.type === "image" && b.document_id);
+    if (imageBlocks.length === 0) return;
+
+    let cancelled = false;
+    async function pruneOrphans() {
+      try {
+        const docs = await fetchDocuments(userId);
+        if (cancelled) return;
+        const validDocIds = new Set(docs.map((d) => d.id));
+        const pruned = content!.blocks.filter((b) => {
+          if (b.type === "image" && b.document_id) {
+            return validDocIds.has(b.document_id);
+          }
+          return true;
+        });
+
+        if (pruned.length !== content!.blocks.length) {
+          prunedPagesRef.current.add(pageId!);
+          const updatedContent = {
+            ...content!,
+            blocks: pruned,
+          };
+          dispatch({
+            type: "MUTATE_PAGE_CONTENT",
+            payload: {
+              pageId: pageId!,
+              mutator: (prev) => ({
+                ...prev,
+                blocks: pruned,
+              }),
+            },
+          });
+          saveNow(updatedContent);
+        }
+      } catch (err) {
+        console.warn("Failed to prune orphan image blocks:", err);
+      }
+    }
+
+    pruneOrphans();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, pageId, content, dispatch, saveNow]);
 
   // Compute sheet dimensions: fixed width (900px) and capped dynamic height
   const { sheetW, sheetH } = useMemo(() => {
@@ -317,10 +400,19 @@ export default function PageCanvas({
   );
 
   const handleDeleteBlock = useCallback(
-    async (blockId: string) => {
+    async (blockId: string, passedBlock?: CanvasBlock) => {
       if (!pageId) return;
 
-      const blockToDelete = content?.blocks.find((b) => b.id === blockId);
+      const currentContent = state.pageContents.get(pageId)?.content || content;
+      if (!currentContent) return;
+
+      const currentBlocks = currentContent.blocks;
+      const blockToDelete = passedBlock || currentBlocks.find((b) => b.id === blockId);
+      const updatedBlocks = currentBlocks.filter((b) => b.id !== blockId);
+      const updatedContent = {
+        ...currentContent,
+        blocks: updatedBlocks,
+      };
 
       dispatch({
         type: "MUTATE_PAGE_CONTENT",
@@ -337,27 +429,58 @@ export default function PageCanvas({
         dispatch({ type: "SET_SELECTION", payload: { kind: "none" } });
       }
 
+      // Persist deletion immediately using the explicitly mutated content
+      saveNow(updatedContent);
+
       // If this was an image block, delete from R2 and documents table if not referenced elsewhere
       if (blockToDelete?.type === "image" && blockToDelete.document_id && userId) {
-        const otherRef = content?.blocks.some(
-          (b) => b.id !== blockId && b.type === "image" && b.document_id === blockToDelete.document_id
+        const docId = blockToDelete.document_id;
+        const otherRef = updatedBlocks.some(
+          (b) => b.type === "image" && b.document_id === docId
         );
         if (!otherRef) {
           try {
             const docs = await fetchDocuments(userId);
-            const doc = docs.find((d) => d.id === blockToDelete.document_id);
+            const doc = docs.find((d) => d.id === docId);
             if (doc?.file_name) {
               await deleteNoteImage(userId, doc.file_name);
             }
-            await deleteDocument(blockToDelete.document_id);
+            await deleteDocument(docId);
           } catch (err) {
             console.error("Failed to clean up image from storage:", err);
           }
         }
       }
     },
-    [pageId, content?.blocks, userId, state.selection.blockId, dispatch]
+    [pageId, state.pageContents, content, userId, state.selection.blockId, dispatch, saveNow]
   );
+
+  // Keyboard Delete / Backspace listener for selected canvas blocks
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (!state.selection.blockId) return;
+
+      // Do not delete canvas block if focus is inside an input, textarea, or contenteditable editor
+      const activeEl = document.activeElement;
+      if (
+        activeEl?.tagName === "INPUT" ||
+        activeEl?.tagName === "TEXTAREA" ||
+        activeEl?.closest(".tiptap") ||
+        activeEl?.getAttribute("contenteditable") === "true"
+      ) {
+        return;
+      }
+
+      e.preventDefault();
+      handleDeleteBlock(state.selection.blockId);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [state.selection.blockId, handleDeleteBlock]);
 
   // Ink stroke operations
   const handleAddStroke = useCallback(
@@ -445,9 +568,94 @@ export default function PageCanvas({
     [userId, pageId, content?.blocks.length, dispatch]
   );
 
+  // Apply cropped image
+  const handleApplyCrop = useCallback(
+    async (croppedFile: File, newWidth: number, newHeight: number) => {
+      if (!cropTarget || !userId || !pageId) return;
+      const { blockId } = cropTarget;
+      setCropTarget(null);
+
+      const currentBlocks = state.pageContents.get(pageId)?.content.blocks || content?.blocks;
+      const currentBlock = currentBlocks?.find((b) => b.id === blockId);
+      const oldDocId = currentBlock?.type === "image" ? currentBlock.document_id : undefined;
+
+      try {
+        const { fileName, iv, mimeType } = await uploadNoteImage(userId, croppedFile);
+        const doc = await createDocument(userId, {
+          label: croppedFile.name || "Cropped image",
+          file_name: fileName,
+          file_iv: iv,
+          file_mime: mimeType,
+          domain: "notes",
+          linked_id: pageId,
+          updated_at: new Date().toISOString(),
+        });
+
+        const currentContent = state.pageContents.get(pageId)?.content || content;
+        const updatedBlocks = (currentContent?.blocks || []).map((b) => {
+          if (b.id !== blockId) return b;
+          const aspect = newWidth / (newHeight || 1);
+          const w = b.w;
+          const h = Math.round(w / aspect);
+          return {
+            ...b,
+            document_id: doc.id,
+            w,
+            h,
+          };
+        });
+        const updatedContent = currentContent ? { ...currentContent, blocks: updatedBlocks } : undefined;
+
+        dispatch({
+          type: "MUTATE_PAGE_CONTENT",
+          payload: {
+            pageId,
+            mutator: (prev) => ({
+              ...prev,
+              blocks: updatedBlocks,
+            }),
+          },
+        });
+
+        if (updatedContent) {
+          saveNow(updatedContent);
+        }
+
+        // Wipe the old pre-crop image from R2 and Supabase documents table
+        if (oldDocId) {
+          try {
+            const docs = await fetchDocuments(userId);
+            const oldDoc = docs.find((d) => d.id === oldDocId);
+            if (oldDoc?.file_name) {
+              await deleteNoteImage(userId, oldDoc.file_name);
+            }
+            await deleteDocument(oldDocId);
+          } catch (cleanupErr) {
+            console.error("Failed to clean up old image after crop:", cleanupErr);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to save cropped image:", err);
+      }
+    },
+    [cropTarget, userId, pageId, state.pageContents, content, dispatch, saveNow]
+  );
+
   // Paste / Drop capture for images
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
+      const target = e.target as HTMLElement;
+      // If paste is occurring inside an active floating text box or flow editor,
+      // do NOT intercept it here — allow the text editor to handle it inline.
+      if (
+        target?.closest(".floating-block-container") ||
+        target?.closest(".tiptap") ||
+        document.activeElement?.closest(".floating-block-container") ||
+        document.activeElement?.closest(".tiptap")
+      ) {
+        return;
+      }
+
       const items = e.clipboardData?.items;
       if (!items) return;
 
@@ -678,6 +886,7 @@ export default function PageCanvas({
       {/* Hidden file input for image upload */}
       <input
         ref={fileInputRef}
+        id={`note-image-input-${pageId}`}
         type="file"
         accept="image/*"
         className="hidden"
@@ -766,7 +975,8 @@ export default function PageCanvas({
                 e.preventDefault();
                 setContextMenu({ x: e.clientX, y: e.clientY, blockId });
               }}
-              onDelete={handleDeleteBlock}
+              onDelete={(blockId, blk) => handleDeleteBlock(blockId, blk || block)}
+              onCrop={(blockId, url) => setCropTarget({ blockId, imageUrl: url })}
             />
           ))}
 
@@ -802,12 +1012,44 @@ export default function PageCanvas({
         <BlockContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
+          isImage={
+            content?.blocks.find((b) => b.id === contextMenu.blockId)?.type ===
+            "image"
+          }
+          onCrop={async () => {
+            const block = content?.blocks.find((b) => b.id === contextMenu.blockId);
+            if (block?.type === "image" && block.document_id && userId) {
+              try {
+                const docs = await fetchDocuments(userId);
+                const doc = docs.find((d) => d.id === block.document_id);
+                if (doc?.file_name && doc?.file_iv) {
+                  const blob = await downloadNoteImage(userId, doc.file_name, doc.file_iv);
+                  const url = URL.createObjectURL(blob);
+                  setCropTarget({ blockId: block.id, imageUrl: url });
+                }
+              } catch (err) {
+                console.error("Failed to prepare image for cropping:", err);
+              }
+            }
+          }}
           onBringToFront={() => handleBringToFront(contextMenu.blockId)}
           onBringForward={() => handleBringForward(contextMenu.blockId)}
           onSendBackward={() => handleSendBackward(contextMenu.blockId)}
           onSendToBack={() => handleSendToBack(contextMenu.blockId)}
-          onDelete={() => handleDeleteBlock(contextMenu.blockId)}
+          onDelete={() => {
+            const blk = content?.blocks.find((b) => b.id === contextMenu.blockId);
+            handleDeleteBlock(contextMenu.blockId, blk);
+          }}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Image Crop Modal */}
+      {cropTarget && (
+        <ImageCropModal
+          image={cropTarget.imageUrl}
+          onCropComplete={handleApplyCrop}
+          onClose={() => setCropTarget(null)}
         />
       )}
     </div>
