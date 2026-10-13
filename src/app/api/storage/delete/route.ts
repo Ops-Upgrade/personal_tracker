@@ -3,11 +3,18 @@ import { DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getR2Client, R2_BUCKET } from "@/lib/r2";
 import { getAuthenticatedUserId } from "../_helpers/auth";
 
+/** R2 object names are always server-generated UUIDs with an .enc extension. */
+const FILE_NAME_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.enc$/i;
+
 /**
  * POST /api/storage/delete
  *
  * Request body (JSON):
- *   key: string — full object key (e.g. "expenses/{userId}/{uuid}.enc")
+ *   fileName: string — generated UUID.enc filename
+ *
+ * The object key is always documents/{userId}/{fileName} — {userId} comes
+ * from the session, so callers can only delete objects in their own folder.
  *
  * Response: 200 on success.
  *
@@ -21,23 +28,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { key?: string };
+  let body: { fileName?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { key } = body;
-  if (!key) {
-    return NextResponse.json({ error: "Missing required field: key" }, { status: 400 });
+  const { fileName } = body;
+  if (!fileName) {
+    return NextResponse.json(
+      { error: "Missing required field: fileName" },
+      { status: 400 }
+    );
   }
 
-  // Ownership check: key must contain the user's ID
-  const parts = key.split("/");
-  if (parts.length !== 3 || parts[1] !== userId) {
-    return NextResponse.json({ error: "Access denied" }, { status: 403 });
+  // Validate fileName matches expected pattern: UUID.enc
+  if (!FILE_NAME_PATTERN.test(fileName)) {
+    return NextResponse.json({ error: "Invalid fileName format" }, { status: 400 });
   }
+
+  // Unified documents/ store — the user scope comes from the session only
+  const key = `documents/${userId}/${fileName}`;
 
   await getR2Client().send(
     new DeleteObjectCommand({

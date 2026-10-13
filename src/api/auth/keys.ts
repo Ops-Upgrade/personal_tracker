@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 
 export interface UserKeysRow {
   salt: string;

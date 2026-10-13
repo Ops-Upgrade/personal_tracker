@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/proxy";
+import { getSessionForRequest } from "@ops-upgrade/auth-core";
 import { PUBLIC_ROUTES, AUTH_ROUTE, DEFAULT_AUTHENTICATED_ROUTE } from "@/routes/config";
 
 const isPreviewEnv = process.env.VERCEL_ENV === "preview";
@@ -52,14 +52,15 @@ function buildCsp(nonce: string) {
  * 1. Generates a per-request nonce for a strict CSP.
  * 2. Sets the nonce on the request BEFORE createClient so it survives
  *    any internal NextResponse recreation during token refresh.
- * 3. Refreshes the Supabase session via getClaims() (keeps tokens alive).
+ * 3. Refreshes the Supabase session via getSessionForRequest() (keeps tokens alive).
  * 4. Redirects unauthenticated users away from protected routes.
  * 5. Redirects authenticated users away from the login page.
  * 6. Appends the final CSP header to every returned response.
  *
- * IMPORTANT: Do not run code between createClient and getClaims().
- * getClaims() validates the JWT signature against the project's public keys
- * every time — unlike getSession(), which is not guaranteed to revalidate.
+ * getSessionForRequest() validates the JWT signature against the project's
+ * public keys every time — unlike getSession(), which is not guaranteed to
+ * revalidate. It also clears stale sb-* cookies on refresh errors, so no
+ * separate error handling is needed here.
  */
 export async function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
@@ -69,22 +70,7 @@ export async function proxy(request: NextRequest) {
   request.headers.set("x-nonce", nonce);
   request.headers.set("Content-Security-Policy", cspDirectives);
 
-  const { supabase, response } = createClient(request);
-
-  // Refresh the session — getClaims() is safe to trust because it
-  // validates the JWT signature against published public keys.
-  const { data, error } = await supabase.auth.getClaims();
-  const user = data?.claims;
-
-  // If the refresh token is stale/invalid, clear the auth cookies
-  // so we don't keep retrying on every request.
-  if (error) {
-    request.cookies.getAll().forEach(({ name }) => {
-      if (name.startsWith("sb-")) {
-        response.cookies.delete(name);
-      }
-    });
-  }
+  const { user, response } = await getSessionForRequest(request);
 
   const { pathname } = request.nextUrl;
 

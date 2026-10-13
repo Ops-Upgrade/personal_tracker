@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient as createClient } from "@ops-upgrade/auth-core";
 import { argon2id } from "hash-wasm";
 
 // ── Argon2id parameters for PIN hashing ──

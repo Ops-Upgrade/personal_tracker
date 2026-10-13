@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient } from "@/lib/supabase-admin";
 import { verifyResetToken } from "../_helpers/resetToken";
 import { ipLimiter, emailLimiter } from "@/lib/rate-limit";
 

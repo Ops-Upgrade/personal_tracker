@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient as createClient } from "@ops-upgrade/auth-core";
 import Link from "next/link";
 import { ROUTES } from "@/routes/paths";
 

@@ -8,7 +8,7 @@ import {
   fetchDocumentsByDomain,
   updateDocument,
 } from "@/api/common/documents";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import type { DocumentPlaintext } from "@/types/document";
 
 /**
@@ -91,8 +91,8 @@ const { supabaseMock, encryptFieldMock, decryptFieldMock, state } = vi.hoisted((
   };
 });
 
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: vi.fn(() => supabaseMock),
+vi.mock("@ops-upgrade/auth-core", () => ({
+  createBrowserClient: vi.fn(() => supabaseMock),
 }));
 vi.mock("@/lib/crypto", () => ({
   encryptField: encryptFieldMock,

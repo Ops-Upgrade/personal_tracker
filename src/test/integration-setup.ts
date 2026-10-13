@@ -13,7 +13,7 @@ import { clearMediaCache } from "@/api/media";
  *
  * - Fails FAST (throws at load) when the test credentials are absent — the
  *   suite never silently skips.
- * - Mocks only the two browser-only boundaries: `@/lib/supabase/client`
+ * - Mocks only the two browser-only boundaries: `@ops-upgrade/auth-core`
  *   (createBrowserClient → the real signed-in supabase-js client) and
  *   `@/lib/crypto/store` (IndexedDB → in-memory Map). Everything else —
  *   encryption, the media API layer, RLS — is the real production path.
@@ -54,8 +54,8 @@ const clientHolder = vi.hoisted(() => ({
   client: null as SupabaseClient | null,
 }));
 
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => {
+vi.mock("@ops-upgrade/auth-core", () => ({
+  createBrowserClient: () => {
     if (!clientHolder.client) {
       throw new Error(
         "Integration test Supabase client not initialized (beforeAll failed?).",

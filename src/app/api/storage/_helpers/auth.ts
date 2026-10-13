@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient as createClient } from "@ops-upgrade/auth-core";
 
 /**
  * Validate the caller's Supabase session from cookies.

@@ -1,5 +1,5 @@
 import LoginForm from "@/components/auth/LoginForm";
-import ThemeSwitcher from "@/components/common/ThemeSwitcher";
+import { ThemeSwitcher } from "@ops-upgrade/auth-core/ui";
 import LoginLogo from "./LoginLogo";
 
 export const metadata = {

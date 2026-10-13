@@ -1,5 +1,5 @@
 import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
-import ThemeSwitcher from "@/components/common/ThemeSwitcher";
+import { ThemeSwitcher } from "@ops-upgrade/auth-core/ui";
 import LoginLogo from "../login/LoginLogo";
 
 export const metadata = {

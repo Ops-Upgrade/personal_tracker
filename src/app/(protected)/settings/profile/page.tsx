@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import { ROUTES } from "@/routes/paths";
 import ProfileForm from "@/components/auth/ProfileForm";
 import ChangePasswordForm from "@/components/auth/ChangePasswordForm";

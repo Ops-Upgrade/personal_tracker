@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { getSession } from "@/api/auth";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import { getServerDateIST, parseISTDate } from "@/api/serverDate";
 
 export interface UseAuthBootstrapOptions {

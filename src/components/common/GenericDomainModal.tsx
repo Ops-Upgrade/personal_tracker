@@ -27,7 +27,7 @@ import {
 import { InputField, SelectField, CheckboxField } from "./FormField";
 import RichTextEditor from "./RichTextEditor";
 import { Pencil } from "lucide-react";
-import { downloadDocumentFile } from "@/api/common/documentStorage";
+import { downloadFile } from "@/api/common/encryptedFileStorage";
 import { trunc } from "@/lib/viewHelpers";
 import { getUniqueFileName } from "@/lib/viewHelpers";
 import {
@@ -816,7 +816,7 @@ function GenericDomainModalInner({
       // Generic R2 download
       if (doc.file_name && doc.file_iv && doc.file_mime) {
         try {
-          const blob = await downloadDocumentFile(
+          const blob = await downloadFile(
             userId,
             doc.file_name,
             doc.file_iv,
@@ -876,7 +876,7 @@ function GenericDomainModalInner({
       if (!doc || !doc.file_name || !doc.file_iv || !doc.file_mime) {
         throw new Error("Cannot load preview.");
       }
-      return downloadDocumentFile(
+      return downloadFile(
         userId,
         doc.file_name,
         doc.file_iv,

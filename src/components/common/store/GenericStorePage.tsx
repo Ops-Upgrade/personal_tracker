@@ -52,9 +52,9 @@ import {
   deleteDocument,
 } from "@/api/common/documents";
 import {
-  downloadDocumentFile,
-  deleteDocumentFile,
-} from "@/api/common/documentStorage";
+  downloadFile,
+  deleteFile,
+} from "@/api/common/encryptedFileStorage";
 import { useSelection } from "@/hooks/useSelection";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import type { VaultRecordItem } from "@/types/vault";
@@ -484,7 +484,7 @@ function GenericDocStore<T extends { id: string }>({
     const d = allDocuments.find((x) => x.id === docId);
     if (!d) return;
     try {
-      const blob = await downloadDocumentFile(userId, d.file_name, d.file_iv, d.file_mime);
+      const blob = await downloadFile(userId, d.file_name, d.file_iv, d.file_mime);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -523,7 +523,7 @@ function GenericDocStore<T extends { id: string }>({
         await adapter.unlinkFromParent(userId, d.id, d.linked_id);
       }
       if (d.file_name) {
-        try { await deleteDocumentFile(userId, d.file_name); } catch { /* best-effort */ }
+        try { await deleteFile(userId, d.file_name); } catch { /* best-effort */ }
       }
       await deleteDocument(d.id);
       await refreshAll();
@@ -602,7 +602,7 @@ function GenericDocStore<T extends { id: string }>({
         } else if (!cascade && d.linked_id && adapter.unlinkFromParent) {
           await adapter.unlinkFromParent(userId, d.id, d.linked_id);
         }
-        if (d.file_name) { try { await deleteDocumentFile(userId, d.file_name); } catch { /* best-effort */ } }
+        if (d.file_name) { try { await deleteFile(userId, d.file_name); } catch { /* best-effort */ } }
         await deleteDocument(d.id);
       }
       await refreshAll();

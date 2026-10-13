@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient as createClient } from "@ops-upgrade/auth-core";
 import { DEFAULT_AUTHENTICATED_ROUTE, AUTH_ROUTE } from "@/routes/config";
 
 /**

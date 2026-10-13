@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createServerClient as createClient } from "@ops-upgrade/auth-core";
 import { AUTH_ROUTE } from "@/routes/config";
 import VaultClientLayout from "./VaultClientLayout";
 
