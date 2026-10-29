@@ -7,6 +7,7 @@ export const ROUTES = {
   LOGIN: "/login",
   FORGOT_PASSWORD: "/forgot-password",
   LOGOUT: "/logout",
+  SECURITY: "/security",
   DASHBOARD: "/dashboard",
   TASK_MANAGER: "/taskmanager",
   TASK_MANAGER_COMPLETED: "/taskmanager/completed",

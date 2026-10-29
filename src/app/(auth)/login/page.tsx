@@ -1,4 +1,6 @@
+import Link from "next/link";
 import LoginForm from "@/components/auth/LoginForm";
+import { ROUTES } from "@/routes/paths";
 import { ThemeSwitcher } from "@ops-upgrade/auth-core/ui";
 import LoginLogo from "./LoginLogo";
 
@@ -31,6 +33,16 @@ export default function LoginPage() {
         {/* Card */}
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <LoginForm />
+        </div>
+
+        {/* Footer link */}
+        <div className="text-center">
+          <Link
+            href={ROUTES.SECURITY}
+            className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+          >
+            Security
+          </Link>
         </div>
       </div>
     </div>
