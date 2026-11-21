@@ -100,13 +100,10 @@ export async function changePassword(
   // Step 1: Re-wrap DEK to new password material.
   try {
     await rewrapDEK(userId, oldPassword, newPassword, userEmail);
-  } catch (err) {
+  } catch {
     return {
       success: false,
-      error:
-        err instanceof Error
-          ? err.message
-          : "Failed to re-encrypt keys. Password not changed.",
+      error: "Failed to re-encrypt keys. Password not changed.",
     };
   }
 
@@ -119,15 +116,12 @@ export async function changePassword(
       await rewrapDEK(userId, newPassword, oldPassword, userEmail);
       return {
         success: false,
-        error: `Password update failed: ${error.message}. Crypto key changes were rolled back.`,
+        error: "Password update failed. Crypto key changes were rolled back.",
       };
-    } catch (rollbackErr) {
+    } catch {
       return {
         success: false,
-        error:
-          rollbackErr instanceof Error
-            ? `Password update failed: ${error.message}. Automatic key rollback also failed (${rollbackErr.message}). Please contact support immediately.`
-            : `Password update failed: ${error.message}. Automatic key rollback also failed. Please contact support immediately.`,
+        error: "Password update failed and automatic key rollback also failed. Please contact support immediately.",
       };
     }
   }

@@ -12,7 +12,7 @@ export async function fetchEducations(userId: string): Promise<Education[]> {
     .select("id, user_id, iv, data, created_at")
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to fetch educations: ${error.message}`);
+  if (error) throw new Error("Failed to fetch educations.");
   if (!rows || rows.length === 0) return [];
 
   return Promise.all(
@@ -48,7 +48,7 @@ export async function createEducation(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create education: ${error.message}`);
+  if (error) throw new Error("Failed to create education.");
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -71,7 +71,7 @@ export async function updateEducation(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update education: ${error.message}`);
+  if (error) throw new Error("Failed to update education.");
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -87,5 +87,5 @@ export async function deleteEducation(educationId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("educations").delete().eq("id", educationId);
 
-  if (error) throw new Error(`Failed to delete education: ${error.message}`);
+  if (error) throw new Error("Failed to delete education.");
 }

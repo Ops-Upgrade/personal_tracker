@@ -35,7 +35,7 @@ export async function fetchDocuments(userId: string): Promise<Document[]> {
     .select("id, user_id, iv, data, created_at")
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to fetch documents: ${error.message}`);
+  if (error) throw new Error("Failed to fetch documents.");
   if (!rows || rows.length === 0) {
     cachedDocuments = [];
     cacheUserId = userId;
@@ -96,7 +96,7 @@ export async function createDocument(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create document: ${error.message}`);
+  if (error) throw new Error("Failed to create document.");
 
   const created: Document = { id: data.id, created_at: data.created_at, ...deduplicated };
 
@@ -133,7 +133,7 @@ export async function updateDocument(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update document: ${error.message}`);
+  if (error) throw new Error("Failed to update document.");
 
   const updated: Document = { id: data.id, created_at: data.created_at, ...deduplicated };
 
@@ -155,7 +155,7 @@ export async function deleteDocument(documentId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("documents").delete().eq("id", documentId);
 
-  if (error) throw new Error(`Failed to delete document: ${error.message}`);
+  if (error) throw new Error("Failed to delete document.");
 
   // Maintain cache — remove deleted entry
   if (cachedDocuments !== null) {

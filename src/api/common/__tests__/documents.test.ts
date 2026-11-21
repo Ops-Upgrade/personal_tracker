@@ -168,7 +168,7 @@ describe("fetchDocuments", () => {
   it("throws when Supabase reports an error", async () => {
     state.selectResult = { data: null, error: { message: "boom" } };
     await expect(fetchDocuments("u1")).rejects.toThrow(
-      "Failed to fetch documents: boom",
+      "Failed to fetch documents.",
     );
   });
 });
@@ -234,7 +234,7 @@ describe("deleteDocument", () => {
   it("throws when Supabase reports an error", async () => {
     state.deleteResult = { error: { message: "boom" } };
     await expect(deleteDocument("d1")).rejects.toThrow(
-      "Failed to delete document: boom",
+      "Failed to delete document.",
     );
   });
 });

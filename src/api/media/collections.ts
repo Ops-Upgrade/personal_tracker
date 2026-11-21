@@ -15,7 +15,7 @@ export async function listCollections(
     .select("id, user_id, iv, data, created_at")
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to fetch collections: ${error.message}`);
+  if (error) throw new Error("Failed to fetch collections.");
   if (!rows || rows.length === 0) return [];
 
   return Promise.all(
@@ -55,7 +55,7 @@ export async function createCollection(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create collection: ${error.message}`);
+  if (error) throw new Error("Failed to create collection.");
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }

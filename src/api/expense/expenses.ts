@@ -12,7 +12,7 @@ export async function fetchExpenses(userId: string): Promise<Expense[]> {
     .select("id, user_id, iv, data, created_at")
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to fetch expenses: ${error.message}`);
+  if (error) throw new Error("Failed to fetch expenses.");
   if (!rows || rows.length === 0) return [];
 
   return Promise.all(
@@ -48,7 +48,7 @@ export async function createExpense(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create expense: ${error.message}`);
+  if (error) throw new Error("Failed to create expense.");
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -71,7 +71,7 @@ export async function updateExpense(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update expense: ${error.message}`);
+  if (error) throw new Error("Failed to update expense.");
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -87,5 +87,5 @@ export async function deleteExpense(expenseId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("expenses").delete().eq("id", expenseId);
 
-  if (error) throw new Error(`Failed to delete expense: ${error.message}`);
+  if (error) throw new Error("Failed to delete expense.");
 }

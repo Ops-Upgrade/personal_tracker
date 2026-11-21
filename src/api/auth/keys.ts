@@ -20,7 +20,7 @@ export async function fetchUserKeys(
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to fetch user_keys: ${error.message}`);
+  if (error) throw new Error("Failed to fetch user keys.");
   return data;
 }
 
@@ -65,7 +65,7 @@ export async function insertUserKeys(
     );
   }
 
-  throw new Error(`Failed to insert user_keys: ${error.message}`);
+  throw new Error("Failed to insert user keys.");
 }
 
 /**
@@ -97,7 +97,7 @@ export async function upsertUserKeys(
     { onConflict: "user_id" }
   );
 
-  if (error) throw new Error(`Failed to upsert user_keys: ${error.message}`);
+  if (error) throw new Error("Failed to update user keys.");
 }
 
 /**
@@ -112,7 +112,7 @@ export async function hasRecoveryKey(userId: string): Promise<boolean> {
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to check recovery key: ${error.message}`);
+  if (error) throw new Error("Failed to check recovery key status.");
   return data?.recovery_wrapped_dek != null;
 }
 
@@ -137,5 +137,5 @@ export async function upsertRecoveryKey(
     })
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to save recovery key: ${error.message}`);
+  if (error) throw new Error("Failed to save recovery key.");
 }

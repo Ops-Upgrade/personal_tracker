@@ -11,9 +11,11 @@ import VaultProvider from "@/components/vault/VaultProvider";
  * Protected layout — wraps all authenticated routes.
  *
  * Defense-in-depth: validates the session server-side even though
- * the middleware already guards these routes. If the session is
- * missing, redirects to login; if it lacks an email, redirects to
- * /logout (the shared Navbar's contract requires one).
+ * the middleware already guards these routes. Uses getClaims() via
+ * createServerClient (local JWT signature check, no extra network
+ * round-trip) instead of getUser() (live Supabase revalidation call).
+ * If the session is missing, redirects to login; if it lacks an email,
+ * redirects to /logout (the shared Navbar's contract requires one).
  *
  * CryptoProvider (client-side) ensures the DEK is in IndexedDB.
  * If missing, the user is redirected to /login to re-derive it.
@@ -25,22 +27,27 @@ export default async function ProtectedLayout({
 }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: claimsData, error: claimsError } =
+    await supabase.auth.getClaims();
 
-  if (!user) {
+  if (claimsError || !claimsData?.claims) {
     redirect(AUTH_ROUTE);
   }
 
+  const claims = claimsData!.claims;
+
+  const userId = claims.sub as string;
+  const email =
+    typeof claims.email === "string" ? claims.email : undefined;
+
   // The shared Navbar requires a logged-in user with an email. Without one
   // the logout chain can loop, so bounce early.
-  if (!user.email) {
+  if (!email) {
     redirect(ROUTES.LOGOUT);
   }
 
   // user_metadata is user-writable — treat every field as untrusted input.
-  const meta = user.user_metadata as Record<string, unknown> | undefined;
+  const meta = (claims.user_metadata ?? {}) as Record<string, unknown>;
 
   const rawName = meta?.full_name ?? meta?.name;
   const name = typeof rawName === "string" ? rawName.trim() : null;
@@ -56,24 +63,24 @@ export default async function ProtectedLayout({
 
   // Fallback: this app's avatar pipeline uploads to the `avatars` bucket and
   // stamps user_metadata.avatar_updated_at for cache-busting. Derive the
-  // public URL from the bucket, with the same strict https: sanitization.
+  // public URL from NEXT_PUBLIC_SUPABASE_URL directly (no SDK call needed —
+  // the storage public URL pattern is deterministic).
   if (!avatarUrl) {
     const avatarTs =
       typeof meta?.avatar_updated_at === "string"
         ? (meta.avatar_updated_at as string)
         : null;
     if (avatarTs) {
-      const { data } = supabase.storage
-        .from("avatars")
-        .getPublicUrl(`${user.id}/avatar.jpg`);
-      if (data?.publicUrl && data.publicUrl.startsWith("https://")) {
-        avatarUrl = `${data.publicUrl}?t=${encodeURIComponent(avatarTs)}`;
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+      const rawUrl = `${supabaseUrl}/storage/v1/object/public/avatars/${userId}/avatar.jpg`;
+      if (rawUrl.startsWith("https://")) {
+        avatarUrl = `${rawUrl}?t=${encodeURIComponent(avatarTs)}`;
       }
     }
   }
 
   const navUser: NavbarUser = {
-    email: user.email,
+    email,
     name: finalName,
     avatarUrl,
   };
@@ -82,8 +89,8 @@ export default async function ProtectedLayout({
     <div className="min-h-screen">
       <NavbarWrapper user={navUser} serverDate={new Date().toISOString()} />
       <main className="px-4 py-8 sm:px-6 lg:px-8">
-        <CryptoProvider userId={user.id}>
-          <VaultProvider userId={user.id}>{children}</VaultProvider>
+        <CryptoProvider userId={userId}>
+          <VaultProvider userId={userId}>{children}</VaultProvider>
         </CryptoProvider>
       </main>
     </div>
