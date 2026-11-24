@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import {
+  buildFieldAad,
   decrypt,
   decryptBlob,
   deriveKEK,
@@ -9,6 +10,10 @@ import {
   generateDEK,
   generateIV,
   generateSalt,
+  packBlobHeader,
+  packFieldPayload,
+  parseBlobHeader,
+  parseFieldPayload,
   unwrapDEK,
   wrapDEK,
 } from "@/lib/crypto/primitives";
@@ -313,5 +318,170 @@ describe("encryptBlob → decryptBlob round-trip", () => {
     await expect(
       decryptBlob(tampered.buffer, iv, dek, "application/octet-stream")
     ).rejects.toThrow();
+  });
+});
+
+// ── AAD binding (v1 payload format) ──
+
+describe("buildFieldAad", () => {
+  it("joins feature, user id and row id", () => {
+    expect(buildFieldAad("expenses", "u1", "r1")).toBe("expenses|u1|r1");
+  });
+
+  it("produces distinct bindings for distinct rows, features and users", () => {
+    expect(buildFieldAad("expenses", "u1", "r1")).not.toBe(
+      buildFieldAad("expenses", "u1", "r2")
+    );
+    expect(buildFieldAad("expenses", "u1", "r1")).not.toBe(
+      buildFieldAad("notes", "u1", "r1")
+    );
+    expect(buildFieldAad("expenses", "u1", "r1")).not.toBe(
+      buildFieldAad("expenses", "u2", "r1")
+    );
+  });
+});
+
+describe("packFieldPayload / parseFieldPayload", () => {
+  it("round-trips the aad and ciphertext with a version prefix", () => {
+    const packed = packFieldPayload("expenses|u1|r1", "Y2lwaGVy");
+    expect(packed.startsWith("v1|")).toBe(true);
+    expect(parseFieldPayload(packed)).toEqual({
+      version: 1,
+      aad: "expenses|u1|r1",
+      ciphertextB64: "Y2lwaGVy",
+    });
+  });
+
+  it("treats an unversioned string as a legacy payload", () => {
+    expect(parseFieldPayload("Y2lwaGVy")).toEqual({
+      version: 0,
+      ciphertextB64: "Y2lwaGVy",
+    });
+  });
+
+  it("rejects a truncated v1 payload", () => {
+    expect(() => parseFieldPayload("v1|onlyaad")).toThrow();
+  });
+});
+
+describe("packBlobHeader / parseBlobHeader", () => {
+  it("round-trips the aad and the ciphertext offset", () => {
+    const header = packBlobHeader("documents|u1|f.enc");
+    const parsed = parseBlobHeader(header);
+    expect(parsed.version).toBe(1);
+    if (parsed.version === 1) {
+      expect(parsed.aad).toBe("documents|u1|f.enc");
+      expect(parsed.offset).toBe(header.length);
+    }
+  });
+
+  it("treats bytes without the version prefix as legacy (offset 0)", () => {
+    expect(parseBlobHeader(new Uint8Array([1, 2, 3, 4]))).toEqual({
+      version: 0,
+      offset: 0,
+    });
+  });
+});
+
+describe("encrypt/decrypt AAD binding", () => {
+  it("round-trips when the same aad is supplied", async () => {
+    const dek = await generateDEK();
+    const payload = await encrypt("secret", dek, "expenses|u1|r1");
+    await expect(
+      decrypt(payload.iv, payload.ciphertext, dek, "expenses|u1|r1")
+    ).resolves.toBe("secret");
+  });
+
+  it("rejects when the aad differs from encryption (row swap)", async () => {
+    const dek = await generateDEK();
+    const payload = await encrypt("secret", dek, "expenses|u1|r1");
+    await expect(
+      decrypt(payload.iv, payload.ciphertext, dek, "expenses|u1|r2")
+    ).rejects.toThrow();
+  });
+
+  it("decrypts without aad (legacy behaviour) when none was bound", async () => {
+    const dek = await generateDEK();
+    const payload = await encrypt("secret", dek);
+    await expect(decrypt(payload.iv, payload.ciphertext, dek)).resolves.toBe(
+      "secret"
+    );
+  });
+
+  it("rejects an aad-supplied decrypt against an unbound payload", async () => {
+    const dek = await generateDEK();
+    const payload = await encrypt("secret", dek);
+    await expect(
+      decrypt(payload.iv, payload.ciphertext, dek, "expenses|u1|r1")
+    ).rejects.toThrow();
+  });
+});
+
+describe("encryptBlob/decryptBlob AAD binding", () => {
+  it("embeds a v1 header and round-trips with the expected aad", async () => {
+    const dek = await generateDEK();
+    const file = new File([new Uint8Array([1, 2, 3, 4, 5])], "f.bin", {
+      type: "application/octet-stream",
+    });
+
+    const { iv, encryptedData } = await encryptBlob(
+      file,
+      dek,
+      "documents|u1|f.enc"
+    );
+    const header = parseBlobHeader(new Uint8Array(encryptedData));
+    expect(header.version).toBe(1);
+    if (header.version === 1) {
+      expect(header.aad).toBe("documents|u1|f.enc");
+    }
+
+    const blob = await decryptBlob(
+      encryptedData,
+      iv,
+      dek,
+      "application/octet-stream",
+      "documents|u1|f.enc"
+    );
+    expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+  });
+
+  it("rejects a v1 file read under a different file identity", async () => {
+    const dek = await generateDEK();
+    const file = new File([new Uint8Array([1, 2, 3, 4, 5])], "f.bin", {
+      type: "application/octet-stream",
+    });
+
+    const { iv, encryptedData } = await encryptBlob(
+      file,
+      dek,
+      "documents|u1|f.enc"
+    );
+    await expect(
+      decryptBlob(
+        encryptedData,
+        iv,
+        dek,
+        "application/octet-stream",
+        "documents|u1|other.enc"
+      )
+    ).rejects.toThrow();
+  });
+
+  it("still decrypts legacy files (no header) without aad", async () => {
+    const dek = await generateDEK();
+    const file = new File([new Uint8Array([9, 9, 9])], "old.bin", {
+      type: "application/octet-stream",
+    });
+
+    const { iv, encryptedData } = await encryptBlob(file, dek);
+    const blob = await decryptBlob(
+      encryptedData,
+      iv,
+      dek,
+      "application/octet-stream"
+    );
+    expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual([9, 9, 9]);
   });
 });

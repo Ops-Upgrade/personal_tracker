@@ -16,6 +16,9 @@ import {
   decrypt,
   encryptBlob as encryptBlobPrimitive,
   decryptBlob as decryptBlobPrimitive,
+  buildFieldAad,
+  packFieldPayload,
+  parseFieldPayload,
   type EncryptedPayload,
 } from "./primitives";
 import { saveDEK, loadDEK, clearDEK as clearStore, hasDEK } from "./store";
@@ -66,49 +69,76 @@ export async function bootstrapCrypto(
 
 /**
  * Encrypt a plaintext string with the user's DEK from IndexedDB.
+ * The payload is bound to `feature|userId|rowId` (v1 format), so a row
+ * moved between tables, users or ids fails to decrypt.
  */
 export async function encryptField(
   userId: string,
-  plaintext: string
+  plaintext: string,
+  feature: string,
+  rowId: string
 ): Promise<EncryptedPayload> {
   const dek = await requireDEK(userId);
-  return encrypt(plaintext, dek);
+  const aad = buildFieldAad(feature, userId, rowId);
+  const payload = await encrypt(plaintext, dek, aad);
+  return {
+    iv: payload.iv,
+    ciphertext: packFieldPayload(aad, payload.ciphertext),
+  };
 }
 
 /**
  * Decrypt a ciphertext payload back to a string.
+ * v1 payloads must match the expected `feature|userId|rowId` binding;
+ * legacy payloads (no version prefix) decrypt without AAD and migrate
+ * lazily on their next write.
  */
 export async function decryptField(
   userId: string,
   iv: string,
-  ciphertext: string
+  data: string,
+  feature: string,
+  rowId: string
 ): Promise<string> {
   const dek = await requireDEK(userId);
-  return decrypt(iv, ciphertext, dek);
+  const parsed = parseFieldPayload(data);
+  if (parsed.version === 1) {
+    const expected = buildFieldAad(feature, userId, rowId);
+    if (parsed.aad !== expected) {
+      throw new Error("Failed to decrypt record.");
+    }
+    return decrypt(iv, parsed.ciphertextB64, dek, expected);
+  }
+  return decrypt(iv, parsed.ciphertextB64, dek);
 }
 
 /**
  * Encrypt a File/Blob for storage bucket upload.
+ * `aad` is the file identity (e.g. `documents|userId|fileName`) bound into
+ * the stored v1 file layout.
  */
 export async function encryptBlob(
   userId: string,
-  file: File
+  file: File,
+  aad: string
 ): Promise<{ iv: string; encryptedData: ArrayBuffer }> {
   const dek = await requireDEK(userId);
-  return encryptBlobPrimitive(file, dek);
+  return encryptBlobPrimitive(file, dek, aad);
 }
 
 /**
  * Decrypt an ArrayBuffer back to a Blob.
+ * `aad` must match the identity stored in a v1 file's header.
  */
 export async function decryptBlob(
   userId: string,
   encryptedData: ArrayBuffer,
   iv: string,
-  mimeType: string
+  mimeType: string,
+  aad: string
 ): Promise<Blob> {
   const dek = await requireDEK(userId);
-  return decryptBlobPrimitive(encryptedData, iv, dek, mimeType);
+  return decryptBlobPrimitive(encryptedData, iv, dek, mimeType, aad);
 }
 
 /**

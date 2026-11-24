@@ -8,6 +8,9 @@ import type {
   VaultEntryPlaintextUnion,
 } from "@/types/vault";
 
+/** AAD feature id — the table name. Bound into every encrypted payload. */
+const FEATURE = "vault_entries";
+
 // ── Helpers ──
 
 function parseVaultEntry<T extends VaultEntryPlaintextUnion>(
@@ -37,7 +40,7 @@ export async function fetchVaultEntries(
 
   return Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const raw = JSON.parse(plaintext) as VaultEntryPlaintextUnion;
       return parseVaultEntry(row, raw);
     })
@@ -67,7 +70,7 @@ export async function fetchVaultEntriesBySection(
 
   return Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const raw = JSON.parse(plaintext) as VaultEntryPlaintextUnion;
       return parseVaultEntry(row, raw);
     })
@@ -84,11 +87,13 @@ export async function createVaultEntry<T extends VaultEntryPlaintextUnion>(
   plaintext: T
 ): Promise<T & { id: string; created_at: string }> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const id = crypto.randomUUID();
+  const encrypted = await encryptField(userId, JSON.stringify(plaintext), FEATURE, id);
 
   const { data, error } = await supabase
     .from("vault_entries")
     .insert({
+      id,
       user_id: userId,
       section: plaintext.section,
       iv: encrypted.iv,
@@ -113,7 +118,12 @@ export async function updateVaultEntry<T extends VaultEntryPlaintextUnion>(
   plaintext: T
 ): Promise<T & { id: string; created_at: string }> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const encrypted = await encryptField(
+    userId,
+    JSON.stringify(plaintext),
+    FEATURE,
+    entryId
+  );
 
   const { data, error } = await supabase
     .from("vault_entries")

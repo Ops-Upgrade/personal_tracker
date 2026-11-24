@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Shield, Lock } from "lucide-react";
-import { resetPinWithPassword } from "@/api/vault";
+import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
+import { resetVaultPin } from "@/api/vault";
 import { getSession } from "@/api/auth";
 import Button from "@/components/common/Button";
 import { InputField } from "@/components/common/FormField";
@@ -12,8 +13,9 @@ interface VaultPinResetProps {
 }
 
 /**
- * "Forgot PIN?" flow — verifies login password, then allows setting a new PIN.
- * Uses the existing session for email lookup.
+ * "Forgot PIN?" flow — verifies the login password in the browser (Supabase
+ * sign-in), then sends the fresh access token along with the new PIN so the
+ * server can confirm the re-authentication without ever seeing the password.
  */
 export default function VaultPinReset({ onBack }: VaultPinResetProps) {
   const [step, setStep] = useState<"password" | "newPin" | "confirmPin">("password");
@@ -24,15 +26,12 @@ export default function VaultPinReset({ onBack }: VaultPinResetProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [shake, setShake] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [freshToken, setFreshToken] = useState<string | null>(null);
 
   useEffect(() => {
     getSession().then((session) => {
       if (session?.user?.email) {
         setEmail(session.user.email);
-      }
-      if (session?.user?.id) {
-        setUserId(session.user.id);
       }
     });
   }, []);
@@ -42,7 +41,7 @@ export default function VaultPinReset({ onBack }: VaultPinResetProps) {
     setTimeout(() => setShake(false), 500);
   }, []);
 
-  // ── Step 1: Verify password ──
+  // ── Step 1: Verify password with Supabase (client-side) ──
 
   const handlePasswordSubmit = async () => {
     if (!password) {
@@ -58,17 +57,31 @@ export default function VaultPinReset({ onBack }: VaultPinResetProps) {
     setError(null);
 
     try {
-      // resetPinWithPassword verifies the password server-side
-      // We just move to the next step — the actual reset happens after new PIN entry
+      const supabase = createClient();
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError || !data.session?.access_token) {
+        setError("Incorrect password. Please try again.");
+        return;
+      }
+
+      // The fresh access token proves the re-authentication to the server —
+      // the raw password never leaves the browser.
+      setFreshToken(data.session.access_token);
+      setPassword(""); // drop the plaintext password from state once verified
       setStep("newPin");
     } catch {
-      // Won't throw here — actual auth happens on final submit
+      // Network / unexpected failure — opaque feedback, no raw error detail.
+      setError("Could not verify your password. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // ── Final submit: reset PIN with password ──
+  // ── Final submit: reset PIN with the fresh re-auth token ──
 
   const handleFinalSubmit = useCallback(
     async (pin: string, confirmed: string) => {
@@ -79,32 +92,39 @@ export default function VaultPinReset({ onBack }: VaultPinResetProps) {
         return;
       }
 
-      if (!email) {
-        setError("Could not determine your email. Please refresh and try again.");
-        return;
-      }
-
       setIsSubmitting(true);
       setError(null);
 
       try {
-        if (!userId) {
-          setError("Could not determine your user ID. Please refresh and try again.");
-          setIsSubmitting(false);
+        if (!freshToken) {
+          setError("Password verification expired. Please verify again.");
+          setStep("password");
+          setPassword("");
           return;
         }
-        await resetPinWithPassword(userId, email, password, pin);
+        await resetVaultPin(pin, freshToken);
         onBack();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to reset PIN. Please try again.");
-        setNewPin("");
-        setConfirmPin("");
-        setStep("newPin");
+        if (
+          err instanceof Error &&
+          err.message === "Password verification failed. PIN reset denied."
+        ) {
+          // Re-auth window lapsed — start over at the password step.
+          setFreshToken(null);
+          setPassword("");
+          setStep("password");
+          setError("Password verification expired. Please verify again.");
+        } else {
+          setError(err instanceof Error ? err.message : "Failed to reset PIN. Please try again.");
+          setNewPin("");
+          setConfirmPin("");
+          setStep("newPin");
+        }
       } finally {
         setIsSubmitting(false);
       }
     },
-    [email, userId, password, onBack, triggerShake]
+    [freshToken, onBack, triggerShake]
   );
 
   // ── Numpad for new PIN ──

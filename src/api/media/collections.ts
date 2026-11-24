@@ -3,6 +3,9 @@ import { encryptField, decryptField } from "@/lib/crypto";
 import type { MediaCollection, MediaCollectionPlaintext } from "@/types/media";
 import { listMedia, unlinkFromCollection } from "./media";
 
+/** AAD feature id — the table name. Bound into every encrypted payload. */
+const FEATURE = "media_collections";
+
 /**
  * Fetch all collection rows for a user, decrypt each, and return hydrated MediaCollection[].
  */
@@ -20,7 +23,7 @@ export async function listCollections(
 
   return Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const raw = JSON.parse(plaintext);
       const parsed: MediaCollectionPlaintext = {
         name: raw.name,
@@ -43,11 +46,13 @@ export async function createCollection(
     ...input,
     ordered_media_ids: input.ordered_media_ids ?? [],
   };
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const id = crypto.randomUUID();
+  const encrypted = await encryptField(userId, JSON.stringify(plaintext), FEATURE, id);
 
   const { data, error } = await supabase
     .from("media_collections")
     .insert({
+      id,
       user_id: userId,
       iv: encrypted.iv,
       data: encrypted.ciphertext,
@@ -83,10 +88,10 @@ export async function updateCollection(
     );
   }
 
-  const plaintext = await decryptField(userId, current.iv, current.data);
+  const plaintext = await decryptField(userId, current.iv, current.data, FEATURE, current.id);
   const existing = JSON.parse(plaintext) as MediaCollectionPlaintext;
   const merged: MediaCollectionPlaintext = { ...existing, ...patch };
-  const encrypted = await encryptField(userId, JSON.stringify(merged));
+  const encrypted = await encryptField(userId, JSON.stringify(merged), FEATURE, current.id);
 
   const { data, error } = await supabase
     .from("media_collections")

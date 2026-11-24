@@ -2,6 +2,9 @@ import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import { encryptField, decryptField } from "@/lib/crypto";
 import type { Media, MediaPlaintext, EpisodeTracking, SeasonTracking } from "@/types/media";
 
+/** AAD feature id — the table name. Bound into every encrypted payload. */
+const FEATURE = "media";
+
 // ── In-memory session cache ──
 // Because tmdb_id lives inside an encrypted blob, Supabase cannot filter by it.
 // We cache the full decrypted list once per session so that detail pages
@@ -44,7 +47,7 @@ export async function listMedia(userId: string): Promise<Media[]> {
 
   const allParsed = await Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const raw = JSON.parse(plaintext);
       const parsed: MediaPlaintext = {
         type: raw.type,
@@ -118,7 +121,7 @@ export async function cleanupDuplicateMedia(userId: string): Promise<number> {
   // Decrypt all rows to read tmdb_id + type
   const decrypted = await Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const raw = JSON.parse(plaintext);
       return { id: row.id, tmdb_id: raw.tmdb_id as number, type: raw.type as string };
     }),
@@ -155,11 +158,13 @@ export async function createMedia(
   input: MediaPlaintext
 ): Promise<Media> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(input));
+  const id = crypto.randomUUID();
+  const encrypted = await encryptField(userId, JSON.stringify(input), FEATURE, id);
 
   const { data, error } = await supabase
     .from("media")
     .insert({
+      id,
       user_id: userId,
       iv: encrypted.iv,
       data: encrypted.ciphertext,
@@ -200,10 +205,10 @@ export async function updateMedia(
     throw new Error(`Failed to fetch media for update.`);
   }
 
-  const plaintext = await decryptField(userId, current.iv, current.data);
+  const plaintext = await decryptField(userId, current.iv, current.data, FEATURE, current.id);
   const existing = JSON.parse(plaintext) as MediaPlaintext;
   const merged: MediaPlaintext = { ...existing, ...patch };
-  const encrypted = await encryptField(userId, JSON.stringify(merged));
+  const encrypted = await encryptField(userId, JSON.stringify(merged), FEATURE, current.id);
 
   const { data, error } = await supabase
     .from("media")

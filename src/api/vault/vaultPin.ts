@@ -4,8 +4,6 @@ import { createServerClient as createClient } from "@ops-upgrade/auth-core";
 import { argon2id } from "hash-wasm";
 
 // ── Argon2id parameters for PIN hashing ──
-// Strong params because a 4-digit PIN has only 10,000 possibilities.
-// Making each hash expensive is the primary defence against brute-force.
 
 const PIN_ARGON2_MEMORY = 19456; // 19 MiB
 const PIN_ARGON2_ITERATIONS = 2;
@@ -13,9 +11,21 @@ const PIN_ARGON2_PARALLELISM = 1;
 const PIN_ARGON2_HASH_LENGTH = 32; // 256 bits
 const PIN_SALT_BYTE_LENGTH = 16;
 
-const MAX_ATTEMPTS = 10;
-const ATTEMPT_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
+// ── Cumulative failure policy ──
+// Each failed attempt adds 1 to the counter; one attempt decays after each
+// full hour since the last failure. Reaching the cap locks the PIN
+// permanently until it is reset through the password flow. Because the
+// counter only ever decays slowly, the per-account hash cost is bounded.
+
+const PIN_MAX_CUMULATIVE_FAILURES = 30;
+const PIN_DECAY_MS = 60 * 60 * 1000;
+
+// A password re-authentication must be this recent to authorise a PIN reset.
+const PIN_RESET_REAUTH_WINDOW_MS = 10 * 60 * 1000;
+
 // ── Helpers ──
+
+type ServerSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 function generateSalt(): Uint8Array {
   const salt = new Uint8Array(PIN_SALT_BYTE_LENGTH);
@@ -55,14 +65,50 @@ async function hashPin(pin: string, saltB64: string): Promise<string> {
   return toBase64(new Uint8Array(rawHash));
 }
 
+/**
+ * Derive the caller's user id from the validated session. Every action
+ * operates on this id — a client-supplied id is never trusted.
+ */
+async function requireSessionUserId(
+  supabase: ServerSupabaseClient
+): Promise<string> {
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data?.claims?.sub) {
+    throw new Error("Session check failed. Please log in again.");
+  }
+  return data.claims.sub as string;
+}
+
+/**
+ * True when the claims include a password sign-in within the re-auth
+ * window. Refreshed tokens keep the original (older) password timestamp,
+ * so a session that merely got refreshed does not satisfy this check.
+ */
+function hasRecentPasswordAuth(claims: Record<string, unknown>): boolean {
+  const amr = claims.amr;
+  if (!Array.isArray(amr)) return false;
+  const cutoffSec =
+    Math.floor(Date.now() / 1000) - Math.floor(PIN_RESET_REAUTH_WINDOW_MS / 1000);
+  for (const entry of amr) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const method = (entry as { method?: unknown }).method;
+    const timestamp = (entry as { timestamp?: unknown }).timestamp;
+    if (method === "password" && typeof timestamp === "number" && timestamp >= cutoffSec) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // ── Public Server Actions ──
 
 /**
  * Check whether the user has set a vault PIN.
  * Returns true if a PIN hash exists in user_keys.
  */
-export async function checkVaultPinSet(userId: string): Promise<boolean> {
+export async function checkVaultPinSet(): Promise<boolean> {
   const supabase = await createClient();
+  const userId = await requireSessionUserId(supabase);
   const { data, error } = await supabase
     .from("user_keys")
     .select("vault_pin_hash")
@@ -80,17 +126,18 @@ export async function checkVaultPinSet(userId: string): Promise<boolean> {
 /**
  * Verify a vault PIN attempt.
  *
- * Sliding window logic:
- * - If >10 minutes since vault_last_failed_at, reset vault_failed_attempts to 0.
- * - If vault_locked_out is true, reject immediately.
- * - On correct PIN: reset attempts, clear last_failed_at, return success.
- * - On wrong PIN: increment attempts. If >= MAX_ATTEMPTS, set vault_locked_out.
+ * Cumulative counter logic:
+ * - If vault_locked_out is true, reject immediately (permanent until reset).
+ * - The counter decays by 1 per full hour since the last failure.
+ * - If the effective counter is at or above the cap, lock permanently.
+ * - On correct PIN: reset the counter and clear last_failed_at.
+ * - On wrong PIN: increment; reaching the cap sets vault_locked_out.
  */
 export async function verifyVaultPin(
-  userId: string,
   pin: string
 ): Promise<{ success: boolean; attemptsLeft?: number; lockedOut?: boolean }> {
   const supabase = await createClient();
+  const userId = await requireSessionUserId(supabase);
   const now = new Date().toISOString();
 
   // Fetch current state
@@ -115,22 +162,33 @@ export async function verifyVaultPin(
     return { success: false, lockedOut: true };
   }
 
-  let attempts = keys.vault_failed_attempts ?? 0;
-  const lastFailed = keys.vault_last_failed_at
+  const storedAttempts = keys.vault_failed_attempts ?? 0;
+  const lastFailedMs = keys.vault_last_failed_at
     ? new Date(keys.vault_last_failed_at).getTime()
     : null;
 
-  // Sliding window: reset if > 10 minutes since last failure
-  if (lastFailed && Date.now() - lastFailed > ATTEMPT_WINDOW_MS) {
-    attempts = 0;
-    await supabase
+  // Decay: one attempt drops off per full hour since the last failure.
+  // The elapsed time is clamped at 0 so a clock-skewed (future) timestamp
+  // can never inflate the counter.
+  const decayedAttempts = lastFailedMs
+    ? Math.max(
+        0,
+        storedAttempts -
+          Math.floor(Math.max(0, Date.now() - lastFailedMs) / PIN_DECAY_MS)
+      )
+    : storedAttempts;
+
+  // Hard floor: once the cumulative counter reaches the cap the lockout is
+  // permanent — decay never brings it back (cleared only by the reset flow).
+  if (decayedAttempts >= PIN_MAX_CUMULATIVE_FAILURES) {
+    const { error: lockError } = await supabase
       .from("user_keys")
-      .update({
-        vault_failed_attempts: 0,
-        vault_last_failed_at: null,
-        updated_at: now,
-      })
+      .update({ vault_locked_out: true, updated_at: now })
       .eq("user_id", userId);
+    if (lockError) {
+      console.error("verifyVaultPin lockout persist failed:", lockError);
+    }
+    return { success: false, lockedOut: true };
   }
 
   // Hash the PIN and compare
@@ -139,7 +197,7 @@ export async function verifyVaultPin(
 
   if (correct) {
     // Reset attempt counter on success
-    await supabase
+    const { error: resetError } = await supabase
       .from("user_keys")
       .update({
         vault_failed_attempts: 0,
@@ -147,15 +205,18 @@ export async function verifyVaultPin(
         updated_at: now,
       })
       .eq("user_id", userId);
+    if (resetError) {
+      console.error("verifyVaultPin counter reset failed:", resetError);
+    }
 
     return { success: true };
   }
 
-  // Wrong PIN — increment counter
-  const newAttempts = attempts + 1;
-  const lockedOut = newAttempts >= MAX_ATTEMPTS;
+  // Wrong PIN — increment the cumulative counter
+  const newAttempts = decayedAttempts + 1;
+  const lockedOut = newAttempts >= PIN_MAX_CUMULATIVE_FAILURES;
 
-  await supabase
+  const { error: incrementError } = await supabase
     .from("user_keys")
     .update({
       vault_failed_attempts: newAttempts,
@@ -164,8 +225,11 @@ export async function verifyVaultPin(
       updated_at: now,
     })
     .eq("user_id", userId);
+  if (incrementError) {
+    console.error("verifyVaultPin counter increment failed:", incrementError);
+  }
 
-  const attemptsLeft = MAX_ATTEMPTS - newAttempts;
+  const attemptsLeft = PIN_MAX_CUMULATIVE_FAILURES - newAttempts;
   return {
     success: false,
     attemptsLeft: Math.max(0, attemptsLeft),
@@ -177,11 +241,9 @@ export async function verifyVaultPin(
  * Set the vault PIN for the first time.
  * Generates a salt, hashes the PIN with Argon2id, stores in user_keys.
  */
-export async function setVaultPin(
-  userId: string,
-  pin: string
-): Promise<void> {
+export async function setVaultPin(pin: string): Promise<void> {
   const supabase = await createClient();
+  const userId = await requireSessionUserId(supabase);
   const now = new Date().toISOString();
 
   // Check PIN is not already set
@@ -219,33 +281,44 @@ export async function setVaultPin(
 }
 
 /**
- * Reset the vault PIN by verifying the login password first.
+ * Reset the vault PIN.
  *
- * 1. Re-authenticates with Supabase (signInWithPassword) to verify password.
- * 2. If password is correct, re-hashes the new PIN and updates user_keys.
- * 3. Clears lockout state (vault_locked_out, vault_failed_attempts).
- *
- * NOTE: signInWithPassword is called server-side but does NOT create a new
- * session — the existing cookie session remains active.
+ * The client re-authenticates against Supabase directly (sign-in with
+ * password in the browser — the password never reaches this server) and
+ * presents the fresh access token as proof. The token must belong to the
+ * session's user and carry a password sign-in within the re-auth window.
+ * On success the new PIN is hashed and the lockout state cleared.
  */
-export async function resetPinWithPassword(
-  userId: string,
-  email: string,
-  password: string,
-  newPin: string
+export async function resetVaultPin(
+  newPin: string,
+  freshAccessToken: string
 ): Promise<void> {
   const supabase = await createClient();
-  const now = new Date().toISOString();
+  const userId = await requireSessionUserId(supabase);
 
-  // Re-authenticate to verify password
-  const { error: authError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (authError) {
-    throw new Error("Incorrect password. PIN reset denied.");
+  // Fail closed on a missing proof: GoTrue's getClaims() falls back to the
+  // cookie session for a falsy token, which would silently validate the
+  // caller's own session instead of the presented re-authentication.
+  if (!freshAccessToken) {
+    throw new Error("Password verification failed. PIN reset denied.");
   }
+
+  // Verify the presented token: valid signature/expiry, same user, and a
+  // password sign-in inside the re-auth window.
+  const { data: tokenData, error: tokenError } =
+    await supabase.auth.getClaims(freshAccessToken);
+  const claims = tokenData?.claims as Record<string, unknown> | undefined;
+
+  if (
+    tokenError ||
+    !claims ||
+    claims.sub !== userId ||
+    !hasRecentPasswordAuth(claims)
+  ) {
+    throw new Error("Password verification failed. PIN reset denied.");
+  }
+
+  const now = new Date().toISOString();
 
   // Generate new salt and hash for the new PIN
   const salt = generateSalt();

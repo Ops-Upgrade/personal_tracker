@@ -63,11 +63,18 @@ const { state, browserClientMock, serverClientMock } = vi.hoisted(() => {
    * createClient()` — awaiting the CLIENT. A thenable client would be
    * assimilated by promise resolution into its query result, so this builder
    * is plain and the TERMINAL methods resolve the result directly
-   * (the same shape the repo's vaultPin.test.ts uses).
+   * (the same shape the repo's vaultPin.test.ts uses). Server actions also
+   * derive the caller from `supabase.auth.getClaims()`.
    */
   const makeServerBuilder = () => {
     const builder: Record<string, unknown> = {};
-    for (const method of ["from", "select", "eq", "order", "ascending"]) {
+    builder.auth = {
+      getClaims: vi.fn(async () => ({
+        data: { claims: { sub: "u1" } },
+        error: null,
+      })),
+    };
+    for (const method of ["from", "select", "eq", "order", "ascending", "update"]) {
       builder[method] = vi.fn(() => builder);
     }
     builder.single = vi.fn(async () =>
@@ -106,7 +113,7 @@ const LEAKY_MODULES: Array<[string, Call]> = [
   ["taskmanager/notes.fetchNotes", (u) => fetchNotes(u)],
   ["taskmanager/tasks.fetchTasks", (u) => fetchTasks(u)],
   ["vault/vaultEntries.fetchVaultEntries", (u) => fetchVaultEntries(u)],
-  ["vault/vaultPin.checkVaultPinSet", (u) => checkVaultPinSet(u)],
+  ["vault/vaultPin.checkVaultPinSet", () => checkVaultPinSet()],
 ];
 
 /** Modules made opaque earlier (regression pins). */

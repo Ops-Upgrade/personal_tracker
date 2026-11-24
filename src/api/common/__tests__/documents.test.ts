@@ -144,7 +144,13 @@ describe("fetchDocuments", () => {
     const docs = await fetchDocuments("u1");
 
     expect(docs).toEqual([expect.objectContaining({ id: "d1", label: "report" })]);
-    expect(decryptFieldMock).toHaveBeenCalledWith("u1", "iv", "ct-d1");
+    expect(decryptFieldMock).toHaveBeenCalledWith(
+      "u1",
+      "iv",
+      "ct-d1",
+      "documents",
+      "d1",
+    );
   });
 
   it("serves the same userId from the warm cache without refetching", async () => {

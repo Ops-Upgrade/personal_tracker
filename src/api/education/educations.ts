@@ -2,6 +2,9 @@ import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import { encryptField, decryptField } from "@/lib/crypto";
 import type { Education, EducationPlaintext } from "@/types/education";
 
+/** AAD feature id — the table name. Bound into every encrypted payload. */
+const FEATURE = "educations";
+
 /**
  * Fetch all educations for a user, decrypt each row, and return hydrated Education[].
  */
@@ -17,7 +20,7 @@ export async function fetchEducations(userId: string): Promise<Education[]> {
 
   return Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const raw = JSON.parse(plaintext);
       const parsed: EducationPlaintext = {
         document_ids: [],
@@ -36,11 +39,13 @@ export async function createEducation(
   plaintext: EducationPlaintext
 ): Promise<Education> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const id = crypto.randomUUID();
+  const encrypted = await encryptField(userId, JSON.stringify(plaintext), FEATURE, id);
 
   const { data, error } = await supabase
     .from("educations")
     .insert({
+      id,
       user_id: userId,
       iv: encrypted.iv,
       data: encrypted.ciphertext,
@@ -62,7 +67,12 @@ export async function updateEducation(
   plaintext: EducationPlaintext
 ): Promise<Education> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const encrypted = await encryptField(
+    userId,
+    JSON.stringify(plaintext),
+    FEATURE,
+    educationId
+  );
 
   const { data, error } = await supabase
     .from("educations")

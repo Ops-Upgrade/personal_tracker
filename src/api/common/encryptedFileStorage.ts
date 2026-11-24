@@ -1,6 +1,9 @@
 import { encryptBlob, decryptBlob } from "@/lib/crypto";
 import { MAX_FILE_SIZE, ALLOWED_TYPES } from "@/lib/fileConstants";
 
+/** R2 folder prefix — also the first component of the file AAD binding. */
+const FOLDER = "documents";
+
 export interface EncryptedFileMeta {
   /** UUID.enc filename stored in R2 */
   fileName: string;
@@ -28,7 +31,8 @@ export async function uploadFile(userId: string, file: File): Promise<EncryptedF
   if (!ALLOWED_TYPES.includes(file.type)) throw new Error("Unsupported file type. Allowed: PDF, JPEG, PNG, WEBP.");
 
   const fileName = generateUUID() + ".enc";
-  const { iv, encryptedData } = await encryptBlob(userId, file);
+  const aad = `${FOLDER}|${userId}|${fileName}`;
+  const { iv, encryptedData } = await encryptBlob(userId, file, aad);
 
   // 1. Get a presigned upload URL from our API route
   const res = await fetch("/api/storage/upload", {
@@ -88,7 +92,8 @@ export async function downloadFile(
   }
 
   const encryptedData = await downloadRes.arrayBuffer();
-  return decryptBlob(userId, encryptedData, iv, mimeType || "application/octet-stream");
+  const aad = `${FOLDER}|${userId}|${fileName}`;
+  return decryptBlob(userId, encryptedData, iv, mimeType || "application/octet-stream", aad);
 }
 
 /** Delete a file from R2 (idempotent — succeeds even if the object is absent). */

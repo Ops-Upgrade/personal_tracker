@@ -89,7 +89,11 @@ describe("uploadFile", () => {
 
     const result = await uploadFile("u1", makeFile());
 
-    expect(encryptBlobMock).toHaveBeenCalledWith("u1", expect.any(File));
+    expect(encryptBlobMock).toHaveBeenCalledWith(
+      "u1",
+      expect.any(File),
+      `documents|u1|${result.fileName}`,
+    );
     expect(result.iv).toBe("test-iv");
     expect(result.mimeType).toBe("application/pdf");
     expect(result.fileName).toMatch(/^[0-9a-f-]{36}\.enc$/);
@@ -146,6 +150,7 @@ describe("downloadFile", () => {
       expect.any(ArrayBuffer),
       "iv-x",
       "application/pdf",
+      "documents|u1|f.enc",
     );
     await expect(blob.text()).resolves.toBe("decrypted");
   });

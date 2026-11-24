@@ -2,8 +2,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "@ops-upgrade/auth-core";
 import { fetchUserKeys, getSession, insertUserKeys, upsertUserKeys } from "@/api/auth";
-import { saveDEK } from "@/lib/crypto/store";
-import { bootstrapCrypto, generateRecoveryPhrase, rewrapDEK } from "@/lib/crypto/manager";
+import { loadDEK, saveDEK } from "@/lib/crypto/store";
+import { bootstrapCrypto, decryptField, encryptField, generateRecoveryPhrase, rewrapDEK } from "@/lib/crypto/manager";
 import {
   decrypt,
   deriveKEK,
@@ -297,5 +297,67 @@ describe("rewrapDEK", () => {
 
     expect(upsertUserKeys).not.toHaveBeenCalled();
     expect(saveDEK).not.toHaveBeenCalled();
+  });
+});
+
+// ── encryptField / decryptField AAD binding ──
+
+describe("encryptField / decryptField AAD binding", () => {
+  beforeEach(() => {
+    vi.mocked(loadDEK).mockResolvedValue(realDEK);
+  });
+
+  it("round-trips a v1 payload bound to feature + user + row", async () => {
+    const payload = await encryptField(USER_ID, "hello", "expenses", "row-1");
+    expect(payload.ciphertext.startsWith("v1|")).toBe(true);
+
+    await expect(
+      decryptField(USER_ID, payload.iv, payload.ciphertext, "expenses", "row-1")
+    ).resolves.toBe("hello");
+  });
+
+  it("rejects a payload read under a different row id (row swap)", async () => {
+    const payload = await encryptField(USER_ID, "hello", "expenses", "row-1");
+
+    await expect(
+      decryptField(USER_ID, payload.iv, payload.ciphertext, "expenses", "row-2")
+    ).rejects.toThrow("Failed to decrypt record.");
+  });
+
+  it("rejects a payload read under a different feature (cross-feature swap)", async () => {
+    const payload = await encryptField(USER_ID, "hello", "expenses", "row-1");
+
+    await expect(
+      decryptField(USER_ID, payload.iv, payload.ciphertext, "notes", "row-1")
+    ).rejects.toThrow("Failed to decrypt record.");
+  });
+
+  it("rejects a payload read by a different user", async () => {
+    const payload = await encryptField(USER_ID, "hello", "expenses", "row-1");
+
+    await expect(
+      decryptField("other-user", payload.iv, payload.ciphertext, "expenses", "row-1")
+    ).rejects.toThrow("Failed to decrypt record.");
+  });
+
+  it("still decrypts legacy payloads without a version prefix (lazy migration)", async () => {
+    const legacy = await encrypt("legacy data", realDEK);
+
+    await expect(
+      decryptField(USER_ID, legacy.iv, legacy.ciphertext, "expenses", "row-1")
+    ).resolves.toBe("legacy data");
+  });
+
+  it("rejects a tampered v1 payload", async () => {
+    const payload = await encryptField(USER_ID, "hello", "expenses", "row-1");
+    // Flip one character inside the embedded aad — GCM must reject.
+    const parts = payload.ciphertext.split("|");
+    const aadB64 = parts[1];
+    const flipped = aadB64[0] === "A" ? `B${aadB64.slice(1)}` : `A${aadB64.slice(1)}`;
+    const tampered = `${parts[0]}|${flipped}|${parts[2]}`;
+
+    await expect(
+      decryptField(USER_ID, payload.iv, tampered, "expenses", "row-1")
+    ).rejects.toThrow();
   });
 });

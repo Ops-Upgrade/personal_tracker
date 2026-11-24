@@ -59,7 +59,8 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
     let cancelled = false;
     async function init() {
       try {
-        const hasPin = await checkVaultPinSet(userId);
+        // Server actions derive the user from the session — no id passed.
+        const hasPin = await checkVaultPinSet();
         if (cancelled) return;
         // Session persistence: an unlock survives refreshes on vault pages.
         // Keyed by userId so a different account in the same tab cannot
@@ -142,7 +143,8 @@ export default function VaultProvider({ userId, children }: VaultProviderProps) 
   const unlock = useCallback(
     async (pin: string): Promise<boolean> => {
       try {
-        const result = await verifyVaultPin(userId, pin);
+        // The server action derives the user from the session.
+        const result = await verifyVaultPin(pin);
         setLastVerifyResult(result);
         if (result.success) {
           setState("unlocked");

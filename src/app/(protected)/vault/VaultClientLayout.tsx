@@ -14,17 +14,15 @@ import { ROUTES } from "@/routes/paths";
  * navigation away from vault routes.
  */
 export default function VaultClientLayout({
-  userId,
   children,
 }: {
-  userId: string;
   children: React.ReactNode;
 }) {
-  return <VaultGate userId={userId}>{children}</VaultGate>;
+  return <VaultGate>{children}</VaultGate>;
 }
 
 /** Inner component — reads vault state and renders the appropriate UI. */
-function VaultGate({ userId, children }: { userId: string; children: React.ReactNode }) {
+function VaultGate({ children }: { children: React.ReactNode }) {
   const { state } = useVault();
   const router = useRouter();
   const pathname = usePathname();
@@ -47,7 +45,6 @@ function VaultGate({ userId, children }: { userId: string; children: React.React
   if (state === "setup_required") {
     return (
       <VaultPinSetup
-        userId={userId}
         onComplete={() => {
           // After setting PIN, transition to locked state
           // The VaultProvider will detect the PIN is now set on reload

@@ -150,19 +150,21 @@ export interface EncryptedPayload {
 
 /**
  * AES-GCM encrypt arbitrary string data with the DEK.
+ * `aad` (optional) is bound as additional authenticated data — the
+ * ciphertext only decrypts when the same AAD is supplied again.
  */
 export async function encrypt(
   data: string,
-  dek: CryptoKey
+  dek: CryptoKey,
+  aad?: string
 ): Promise<EncryptedPayload> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTE_LENGTH));
   const encoded = new TextEncoder().encode(data);
+  const aadBytes = aad !== undefined ? new TextEncoder().encode(aad) : undefined;
+  const params: AesGcmParams = { name: "AES-GCM", iv };
+  if (aadBytes !== undefined) params.additionalData = aadBytes;
 
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    dek,
-    encoded
-  );
+  const ciphertext = await crypto.subtle.encrypt(params, dek, encoded);
 
   return {
     iv: toBase64(iv),
@@ -172,54 +174,88 @@ export async function encrypt(
 
 /**
  * AES-GCM decrypt a payload back to the original string.
+ * Pass the same `aad` that was supplied at encryption time.
  */
 export async function decrypt(
   ivB64: string,
   ciphertextB64: string,
-  dek: CryptoKey
+  dek: CryptoKey,
+  aad?: string
 ): Promise<string> {
   const iv = fromBase64(ivB64);
   const ciphertext = fromBase64(ciphertextB64);
+  const aadBytes = aad !== undefined ? new TextEncoder().encode(aad) : undefined;
+  const params: AesGcmParams = { name: "AES-GCM", iv };
+  if (aadBytes !== undefined) params.additionalData = aadBytes;
 
-  const decrypted = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
-    dek,
-    ciphertext
-  );
+  const decrypted = await crypto.subtle.decrypt(params, dek, ciphertext);
 
   return new TextDecoder().decode(decrypted);
 }
 
 /**
  * AES-GCM encrypt a File/Blob for storage bucket upload.
- * Returns raw encrypted ArrayBuffer (prepend IV when storing).
+ * With `aad` set, the result is the v1 file layout: a `v1|<aad-b64>|`
+ * header followed by the raw ciphertext (the IV stays in the parent
+ * record's metadata). Without `aad` the legacy layout (bare ciphertext)
+ * is produced.
  */
 export async function encryptBlob(
   file: File,
-  dek: CryptoKey
+  dek: CryptoKey,
+  aad?: string
 ): Promise<{ iv: string; encryptedData: ArrayBuffer }> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTE_LENGTH));
   const plaintext = await file.arrayBuffer();
+  const aadBytes = aad !== undefined ? new TextEncoder().encode(aad) : undefined;
+  const params: AesGcmParams = { name: "AES-GCM", iv };
+  if (aadBytes !== undefined) params.additionalData = aadBytes;
 
-  const encryptedData = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    dek,
-    plaintext
-  );
+  const encryptedData = await crypto.subtle.encrypt(params, dek, plaintext);
 
-  return { iv: toBase64(iv), encryptedData };
+  if (aad === undefined) {
+    return { iv: toBase64(iv), encryptedData };
+  }
+
+  const header = packBlobHeader(aad);
+  const out = new Uint8Array(header.length + encryptedData.byteLength);
+  out.set(header, 0);
+  out.set(new Uint8Array(encryptedData), header.length);
+  return { iv: toBase64(iv), encryptedData: out.buffer };
 }
 
 /**
  * AES-GCM decrypt an ArrayBuffer back to a Blob.
+ * For v1 files the header's stored identity must equal the `aad` the
+ * caller passes (the identity the file is being read as); legacy files
+ * decrypt without AAD.
  */
 export async function decryptBlob(
   encryptedData: ArrayBuffer,
   ivB64: string,
   dek: CryptoKey,
-  mimeType: string
+  mimeType: string,
+  aad?: string
 ): Promise<Blob> {
   const iv = fromBase64(ivB64);
+  const bytes = new Uint8Array(encryptedData);
+  const parsed = parseBlobHeader(bytes);
+
+  if (parsed.version === 1) {
+    if (aad === undefined || parsed.aad !== aad) {
+      throw new Error("File identity check failed.");
+    }
+    const decrypted = await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv,
+        additionalData: new TextEncoder().encode(aad),
+      },
+      dek,
+      bytes.slice(parsed.offset)
+    );
+    return new Blob([decrypted], { type: mimeType });
+  }
 
   const decrypted = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv },
@@ -228,4 +264,87 @@ export async function decryptBlob(
   );
 
   return new Blob([decrypted], { type: mimeType });
+}
+
+// --- Payload format (versioned, AAD-bound) ---
+
+/**
+ * Build the AAD context string for a feature row: `feature|userId|rowId`.
+ * This value is bound into the GCM tag, so a row moved between tables,
+ * users or row ids no longer decrypts.
+ */
+export function buildFieldAad(
+  feature: string,
+  userId: string,
+  rowId: string
+): string {
+  return `${feature}|${userId}|${rowId}`;
+}
+
+/**
+ * v1 field payload: `v1|<aad-b64>|<ciphertext-b64>`. The IV stays in the
+ * row's `iv` column. Legacy rows hold the bare base64 ciphertext (no
+ * version prefix) and decrypt without AAD until they are re-written.
+ */
+export function packFieldPayload(aad: string, ciphertextB64: string): string {
+  const aadB64 = toBase64(new TextEncoder().encode(aad));
+  return `v1|${aadB64}|${ciphertextB64}`;
+}
+
+export type ParsedFieldPayload =
+  | { version: 1; aad: string; ciphertextB64: string }
+  | { version: 0; ciphertextB64: string };
+
+export function parseFieldPayload(data: string): ParsedFieldPayload {
+  if (!data.startsWith("v1|")) {
+    return { version: 0, ciphertextB64: data };
+  }
+  const rest = data.slice(3);
+  const sep = rest.indexOf("|");
+  if (sep === -1) {
+    throw new Error("Malformed encrypted payload.");
+  }
+  const aadB64 = rest.slice(0, sep);
+  const ciphertextB64 = rest.slice(sep + 1);
+  const aad = new TextDecoder().decode(fromBase64(aadB64));
+  return { version: 1, aad, ciphertextB64 };
+}
+
+/**
+ * v1 blob header: `v1|<aad-b64>|`, prepended to the raw ciphertext bytes.
+ * Legacy files start with the ciphertext directly.
+ */
+export function packBlobHeader(aad: string): Uint8Array {
+  const aadB64 = toBase64(new TextEncoder().encode(aad));
+  return new TextEncoder().encode(`v1|${aadB64}|`);
+}
+
+export type ParsedBlobHeader =
+  | { version: 1; aad: string; offset: number }
+  | { version: 0; offset: number };
+
+export function parseBlobHeader(bytes: Uint8Array): ParsedBlobHeader {
+  // Version prefix check: ASCII "v1|". A raw GCM ciphertext begins with
+  // these exact bytes with probability 2^-24 — negligible.
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0x76 &&
+    bytes[1] === 0x31 &&
+    bytes[2] === 0x7c
+  ) {
+    let sep = -1;
+    for (let i = 3; i < bytes.length; i++) {
+      if (bytes[i] === 0x7c) {
+        sep = i;
+        break;
+      }
+    }
+    if (sep === -1) {
+      throw new Error("Malformed encrypted file.");
+    }
+    const aadB64 = new TextDecoder().decode(bytes.slice(3, sep));
+    const aad = new TextDecoder().decode(fromBase64(aadB64));
+    return { version: 1, aad, offset: sep + 1 };
+  }
+  return { version: 0, offset: 0 };
 }

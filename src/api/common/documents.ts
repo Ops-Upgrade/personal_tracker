@@ -3,6 +3,9 @@ import { encryptField, decryptField } from "@/lib/crypto";
 import type { Document, DocumentPlaintext } from "@/types/document";
 import { getUniqueFileName } from "@/lib/viewHelpers";
 
+/** AAD feature id — the table name. Bound into every encrypted payload. */
+const FEATURE = "documents";
+
 // ── In-memory session cache ──
 // Fetching documents requires decrypting every row, so we cache the full
 // hydrated list once per session (mirroring media.ts). Dedupe checks inside
@@ -44,7 +47,7 @@ export async function fetchDocuments(userId: string): Promise<Document[]> {
 
   const parsed = await Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const parsedPlaintext: DocumentPlaintext = JSON.parse(plaintext);
       return { id: row.id, created_at: row.created_at, ...parsedPlaintext };
     })
@@ -84,11 +87,13 @@ export async function createDocument(
   const deduplicated = { ...plaintext, label: getUniqueFileName(plaintext.label, existingLabels) };
 
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(deduplicated));
+  const id = crypto.randomUUID();
+  const encrypted = await encryptField(userId, JSON.stringify(deduplicated), FEATURE, id);
 
   const { data, error } = await supabase
     .from("documents")
     .insert({
+      id,
       user_id: userId,
       iv: encrypted.iv,
       data: encrypted.ciphertext,
@@ -124,7 +129,12 @@ export async function updateDocument(
   const deduplicated = { ...plaintext, label: getUniqueFileName(plaintext.label, existingLabels) };
 
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(deduplicated));
+  const encrypted = await encryptField(
+    userId,
+    JSON.stringify(deduplicated),
+    FEATURE,
+    documentId
+  );
 
   const { data, error } = await supabase
     .from("documents")

@@ -2,6 +2,9 @@ import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import { encryptField, decryptField } from "@/lib/crypto";
 import type { Task, TaskPlaintext } from "@/types/taskmanager";
 
+/** AAD feature id — the table name. Bound into every encrypted payload. */
+const FEATURE = "tasks";
+
 /**
  * Fetch all tasks for a user, decrypt each row, and return hydrated Task[].
  */
@@ -17,7 +20,7 @@ export async function fetchTasks(userId: string): Promise<Task[]> {
 
   return Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const parsed: TaskPlaintext = JSON.parse(plaintext);
       return { id: row.id, created_at: row.created_at, ...parsed };
     })
@@ -32,11 +35,13 @@ export async function createTask(
   plaintext: TaskPlaintext
 ): Promise<Task> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const id = crypto.randomUUID();
+  const encrypted = await encryptField(userId, JSON.stringify(plaintext), FEATURE, id);
 
   const { data, error } = await supabase
     .from("tasks")
     .insert({
+      id,
       user_id: userId,
       iv: encrypted.iv,
       data: encrypted.ciphertext,
@@ -58,7 +63,12 @@ export async function updateTask(
   plaintext: TaskPlaintext
 ): Promise<Task> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const encrypted = await encryptField(
+    userId,
+    JSON.stringify(plaintext),
+    FEATURE,
+    taskId
+  );
 
   const { data, error } = await supabase
     .from("tasks")

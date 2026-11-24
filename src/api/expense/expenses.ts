@@ -2,6 +2,9 @@ import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import { encryptField, decryptField } from "@/lib/crypto";
 import type { Expense, ExpensePlaintext } from "@/types/expense";
 
+/** AAD feature id — the table name. Bound into every encrypted payload. */
+const FEATURE = "expenses";
+
 /**
  * Fetch all expenses for a user, decrypt each row, and return hydrated Expense[].
  */
@@ -17,7 +20,7 @@ export async function fetchExpenses(userId: string): Promise<Expense[]> {
 
   return Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const raw = JSON.parse(plaintext);
       const parsed: ExpensePlaintext = {
         document_ids: [],
@@ -36,11 +39,13 @@ export async function createExpense(
   plaintext: ExpensePlaintext
 ): Promise<Expense> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const id = crypto.randomUUID();
+  const encrypted = await encryptField(userId, JSON.stringify(plaintext), FEATURE, id);
 
   const { data, error } = await supabase
     .from("expenses")
     .insert({
+      id,
       user_id: userId,
       iv: encrypted.iv,
       data: encrypted.ciphertext,
@@ -62,7 +67,12 @@ export async function updateExpense(
   plaintext: ExpensePlaintext
 ): Promise<Expense> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const encrypted = await encryptField(
+    userId,
+    JSON.stringify(plaintext),
+    FEATURE,
+    expenseId
+  );
 
   const { data, error } = await supabase
     .from("expenses")

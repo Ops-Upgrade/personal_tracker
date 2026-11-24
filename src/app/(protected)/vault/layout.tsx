@@ -30,7 +30,5 @@ export default async function VaultLayout({
     redirect(AUTH_ROUTE);
   }
 
-  const userId = claimsData!.claims.sub as string;
-
-  return <VaultClientLayout userId={userId}>{children}</VaultClientLayout>;
+  return <VaultClientLayout>{children}</VaultClientLayout>;
 }

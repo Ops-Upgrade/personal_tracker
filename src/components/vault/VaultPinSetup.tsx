@@ -6,12 +6,11 @@ import { Shield, Lock } from "lucide-react";
 import { setVaultPin } from "@/api/vault";
 
 interface VaultPinSetupProps {
-  userId: string;
   onComplete: () => void;
 }
 
 /** First-time PIN setup dialog. Shown when vault state is "setup_required". */
-export default function VaultPinSetup({ userId, onComplete }: VaultPinSetupProps) {
+export default function VaultPinSetup({ onComplete }: VaultPinSetupProps) {
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [step, setStep] = useState<"create" | "confirm">("create");
@@ -42,7 +41,8 @@ export default function VaultPinSetup({ userId, onComplete }: VaultPinSetupProps
       setError(null);
 
       try {
-        await setVaultPin(userId, createdPin);
+        // The server action derives the user from the session.
+        await setVaultPin(createdPin);
         onComplete();
       } catch (err) {
         setError(
@@ -55,7 +55,7 @@ export default function VaultPinSetup({ userId, onComplete }: VaultPinSetupProps
         setIsSubmitting(false);
       }
     },
-    [userId, onComplete, triggerShake]
+    [onComplete, triggerShake]
   );
 
   const handleDigit = useCallback(

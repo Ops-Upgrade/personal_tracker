@@ -2,7 +2,7 @@ export {
   checkVaultPinSet,
   verifyVaultPin,
   setVaultPin,
-  resetPinWithPassword,
+  resetVaultPin,
 } from "./vaultPin";
 
 export {

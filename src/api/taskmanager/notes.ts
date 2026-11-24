@@ -2,6 +2,9 @@ import { createBrowserClient as createClient } from "@ops-upgrade/auth-core";
 import { encryptField, decryptField } from "@/lib/crypto";
 import type { Note, NotePlaintext } from "@/types/taskmanager";
 
+/** AAD feature id — the table name. Bound into every encrypted payload. */
+const FEATURE = "notes";
+
 /**
  * Fetch all notes for a user, decrypt each row, and return hydrated Note[].
  */
@@ -17,7 +20,7 @@ export async function fetchNotes(userId: string): Promise<Note[]> {
 
   return Promise.all(
     rows.map(async (row) => {
-      const plaintext = await decryptField(userId, row.iv, row.data);
+      const plaintext = await decryptField(userId, row.iv, row.data, FEATURE, row.id);
       const parsed: NotePlaintext = JSON.parse(plaintext);
       return { id: row.id, created_at: row.created_at, ...parsed };
     })
@@ -32,11 +35,13 @@ export async function createNote(
   plaintext: NotePlaintext
 ): Promise<Note> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const id = crypto.randomUUID();
+  const encrypted = await encryptField(userId, JSON.stringify(plaintext), FEATURE, id);
 
   const { data, error } = await supabase
     .from("notes")
     .insert({
+      id,
       user_id: userId,
       iv: encrypted.iv,
       data: encrypted.ciphertext,
@@ -58,7 +63,12 @@ export async function updateNote(
   plaintext: NotePlaintext
 ): Promise<Note> {
   const supabase = createClient();
-  const encrypted = await encryptField(userId, JSON.stringify(plaintext));
+  const encrypted = await encryptField(
+    userId,
+    JSON.stringify(plaintext),
+    FEATURE,
+    noteId
+  );
 
   const { data, error } = await supabase
     .from("notes")
