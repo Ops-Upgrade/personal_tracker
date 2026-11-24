@@ -1,4 +1,4 @@
-import { ROUTES } from "./paths";
+import { API_PATHS, ROUTES } from "./paths";
 
 /**
  * Routes that do NOT require authentication.
@@ -11,6 +11,8 @@ export const PUBLIC_ROUTES: string[] = [
   ROUTES.LOGOUT,
   "/api/auth/recovery-data",
   "/api/auth/reset-password",
+  API_PATHS.AUTH_LOGIN_GUARD,
+  API_PATHS.AUTH_LOGIN_RESULT,
 ];
 
 /**

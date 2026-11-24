@@ -12,7 +12,7 @@ export async function fetchMedicalRecords(userId: string): Promise<MedicalRecord
     .select("id, user_id, iv, data, created_at")
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to fetch medical records: ${error.message}`);
+  if (error) throw new Error(`Failed to fetch medical records.`);
   if (!rows || rows.length === 0) return [];
 
   return Promise.all(
@@ -48,7 +48,7 @@ export async function createMedicalRecord(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create medical record: ${error.message}`);
+  if (error) throw new Error(`Failed to create medical record.`);
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -71,7 +71,7 @@ export async function updateMedicalRecord(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update medical record: ${error.message}`);
+  if (error) throw new Error(`Failed to update medical record.`);
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -83,5 +83,5 @@ export async function deleteMedicalRecord(recordId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("medical_records").delete().eq("id", recordId);
 
-  if (error) throw new Error(`Failed to delete medical record: ${error.message}`);
+  if (error) throw new Error(`Failed to delete medical record.`);
 }

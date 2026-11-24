@@ -79,7 +79,7 @@ export async function updateCollection(
 
   if (fetchErr || !current) {
     throw new Error(
-      `Failed to fetch collection for update: ${fetchErr?.message ?? "not found"}`
+      `Failed to fetch collection for update.`
     );
   }
 
@@ -95,7 +95,7 @@ export async function updateCollection(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update collection: ${error.message}`);
+  if (error) throw new Error(`Failed to update collection.`);
 
   return { id: data.id, created_at: data.created_at, ...merged };
 }
@@ -119,5 +119,5 @@ export async function deleteCollection(
     .delete()
     .eq("id", id);
 
-  if (error) throw new Error(`Failed to delete collection: ${error.message}`);
+  if (error) throw new Error(`Failed to delete collection.`);
 }

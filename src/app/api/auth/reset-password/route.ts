@@ -1,11 +1,18 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
-import { verifyResetToken } from "../_helpers/resetToken";
-import { ipLimiter, emailLimiter } from "@/lib/rate-limit";
+import {
+  consumeResetToken,
+  createUpstashConsumedStore,
+  emailLimiter,
+  ipLimiter,
+} from "@ops-upgrade/auth-core/defense";
 
 const GENERIC_ERROR = "Invalid request.";
 
 const resetPasswordLimiter = emailLimiter("reset-password");
+
+// Single-use marking for reset tokens (sha256-at-rest in Upstash).
+const consumedStore = createUpstashConsumedStore();
 
 export async function POST(request: Request) {
   // --- Parse body ---
@@ -41,7 +48,7 @@ export async function POST(request: Request) {
 
   // --- Rate limiting ---
   const [ipResult, emailResult] = await Promise.all([
-    ipLimiter.limit(request.headers.get("x-forwarded-for") ?? "anonymous"),
+    ipLimiter().limit(request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for") ?? "anonymous"),
     resetPasswordLimiter.limit(normalizedEmail),
   ]);
 
@@ -52,9 +59,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // --- Verify proof token (extracts userId; may be a dummy UUID from
-  //     recovery-data so we MUST check user_keys below before acting) ---
-  const tokenPayload = verifyResetToken(reset_token);
+  // --- Verify proof token (single-use; extracts userId; may be a dummy
+  //     UUID from recovery-data so we MUST check user_keys below before
+  //     acting) ---
+  const tokenPayload = await consumeResetToken(reset_token, consumedStore);
   if (!tokenPayload) {
     return NextResponse.json({ error: GENERIC_ERROR }, { status: 400 });
   }

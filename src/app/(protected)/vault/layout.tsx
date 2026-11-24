@@ -11,8 +11,10 @@ export const metadata = {
 /**
  * Vault layout — Server Component for session validation.
  *
- * Renders a client-side VaultClientLayout which wraps children with VaultProvider
- * (PIN gating). This is the same pattern as (protected)/layout.tsx → CryptoProvider.
+ * Defense-in-depth gate: validates the session locally via getClaims()
+ * (JWT signature check, no extra network round-trip) — the same pattern
+ * as (protected)/layout.tsx. Renders a client-side VaultClientLayout
+ * which wraps children with VaultProvider (PIN gating).
  */
 export default async function VaultLayout({
   children,
@@ -21,13 +23,14 @@ export default async function VaultLayout({
 }) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: claimsData, error: claimsError } =
+    await supabase.auth.getClaims();
 
-  if (!user) {
+  if (claimsError || !claimsData?.claims) {
     redirect(AUTH_ROUTE);
   }
 
-  return <VaultClientLayout userId={user.id}>{children}</VaultClientLayout>;
+  const userId = claimsData!.claims.sub as string;
+
+  return <VaultClientLayout userId={userId}>{children}</VaultClientLayout>;
 }

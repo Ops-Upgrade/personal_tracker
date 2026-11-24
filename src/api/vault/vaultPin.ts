@@ -69,7 +69,11 @@ export async function checkVaultPinSet(userId: string): Promise<boolean> {
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to check PIN status: ${error.message}`);
+  if (error) {
+    // Server-side only: the detail is logged, never shipped to the client.
+    console.error("checkVaultPinSet failed:", error);
+    throw new Error("Failed to check PIN status.");
+  }
   return data?.vault_pin_hash != null;
 }
 
@@ -98,7 +102,10 @@ export async function verifyVaultPin(
     .eq("user_id", userId)
     .maybeSingle();
 
-  if (error) throw new Error(`Failed to verify PIN: ${error.message}`);
+  if (error) {
+    console.error("verifyVaultPin failed:", error);
+    throw new Error("Failed to verify PIN.");
+  }
   if (!keys?.vault_pin_hash) {
     throw new Error("No PIN has been set for this user.");
   }
@@ -205,7 +212,10 @@ export async function setVaultPin(
     })
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to set PIN: ${error.message}`);
+  if (error) {
+    console.error("setVaultPin failed:", error);
+    throw new Error("Failed to set PIN.");
+  }
 }
 
 /**
@@ -256,5 +266,8 @@ export async function resetPinWithPassword(
     })
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to reset PIN: ${error.message}`);
+  if (error) {
+    console.error("resetVaultPin failed:", error);
+    throw new Error("Failed to reset PIN.");
+  }
 }

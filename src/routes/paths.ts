@@ -43,3 +43,12 @@ export const ROUTES = {
 } as const;
 
 export type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];
+
+/**
+ * Server API route paths — client-side auth flow calls these endpoints.
+ */
+export const API_PATHS = {
+  AUTH_LOGIN_GUARD: "/api/auth/login-guard",
+  AUTH_LOGIN_RESULT: "/api/auth/login-result",
+} as const;
+

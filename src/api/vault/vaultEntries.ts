@@ -32,7 +32,7 @@ export async function fetchVaultEntries(
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
-  if (error) throw new Error(`Failed to fetch vault entries: ${error.message}`);
+  if (error) throw new Error(`Failed to fetch vault entries.`);
   if (!rows || rows.length === 0) return [];
 
   return Promise.all(
@@ -61,7 +61,7 @@ export async function fetchVaultEntriesBySection(
 
   if (error)
     throw new Error(
-      `Failed to fetch vault entries for ${section}: ${error.message}`
+      `Failed to fetch vault entries for ${section}.`
     );
   if (!rows || rows.length === 0) return [];
 
@@ -97,7 +97,7 @@ export async function createVaultEntry<T extends VaultEntryPlaintextUnion>(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create vault entry: ${error.message}`);
+  if (error) throw new Error(`Failed to create vault entry.`);
 
   return parseVaultEntry(data, plaintext);
 }
@@ -122,7 +122,7 @@ export async function updateVaultEntry<T extends VaultEntryPlaintextUnion>(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update vault entry: ${error.message}`);
+  if (error) throw new Error(`Failed to update vault entry.`);
 
   return parseVaultEntry(data, plaintext);
 }
@@ -139,5 +139,5 @@ export async function deleteVaultEntry(entryId: string): Promise<void> {
     .delete()
     .eq("id", entryId);
 
-  if (error) throw new Error(`Failed to delete vault entry: ${error.message}`);
+  if (error) throw new Error(`Failed to delete vault entry.`);
 }

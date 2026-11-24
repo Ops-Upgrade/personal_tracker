@@ -3,7 +3,8 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { login } from "@/api/auth";
+import { login, getSession } from "@/api/auth";
+import { reportLoginResult, requestLoginGuard } from "@/api/auth/loginFlow";
 import { ROUTES } from "@/routes/paths";
 import Button from "@/components/common/Button";
 import type { AuthErrorCode } from "@/types";
@@ -39,12 +40,34 @@ export default function LoginForm() {
     setError(null);
     setLoading(true);
 
+    // Pre-flight throttle gate BEFORE the sign-in attempt (D6).
+    const guard = await requestLoginGuard(email);
+    if (!guard.allowed) {
+      const retry = guard.retryAfterSec
+        ? ` Please try again in ${guard.retryAfterSec} second${guard.retryAfterSec === 1 ? "" : "s"}.`
+        : "";
+      setError(`Too many requests.${retry}`);
+      setLoading(false);
+      return;
+    }
+
     const result = await login(email, password);
 
     if (!result.success) {
+      // Fire-and-forget: reporting must never block or fail the login.
+      reportLoginResult(guard.ticket, "failure");
       setError(USER_MESSAGES[result.errorCode ?? "unknown"]);
       setLoading(false);
       return;
+    }
+
+    // Report the success with the real access token so the server can
+    // verify it before clearing the failure budget.
+    try {
+      const session = await getSession();
+      reportLoginResult(guard.ticket, "success", session?.access_token);
+    } catch {
+      // Best-effort only.
     }
 
     router.push(ROUTES.DASHBOARD);

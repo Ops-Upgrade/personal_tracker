@@ -149,10 +149,12 @@ describe("verifyVaultPin", () => {
     );
   });
 
-  it("surfaces Supabase read errors", async () => {
-    state.selectError = { message: "boom" };
+  it("rejects with an opaque message on Supabase read errors", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    state.selectError = { message: "SENTINEL_RAW_DETAIL" };
     await expect(verifyVaultPin("u1", "1234")).rejects.toThrow(
-      "Failed to verify PIN: boom",
+      "Failed to verify PIN.",
     );
+    errorSpy.mockRestore();
   });
 });

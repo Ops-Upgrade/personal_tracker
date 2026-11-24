@@ -35,7 +35,7 @@ export async function listMedia(userId: string): Promise<Media[]> {
     .select("id, user_id, iv, data, created_at")
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to fetch media: ${error.message}`);
+  if (error) throw new Error(`Failed to fetch media.`);
   if (!rows || rows.length === 0) {
     cachedMedia = [];
     cacheUserId = userId;
@@ -112,7 +112,7 @@ export async function cleanupDuplicateMedia(userId: string): Promise<number> {
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
-  if (error) throw new Error(`Failed to fetch media for cleanup: ${error.message}`);
+  if (error) throw new Error(`Failed to fetch media for cleanup.`);
   if (!rows || rows.length <= 1) return 0;
 
   // Decrypt all rows to read tmdb_id + type
@@ -167,7 +167,7 @@ export async function createMedia(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create media: ${error.message}`);
+  if (error) throw new Error(`Failed to create media.`);
 
   const created: Media = { id: data.id, created_at: data.created_at, ...input };
 
@@ -197,7 +197,7 @@ export async function updateMedia(
     .single();
 
   if (fetchErr || !current) {
-    throw new Error(`Failed to fetch media for update: ${fetchErr?.message ?? "not found"}`);
+    throw new Error(`Failed to fetch media for update.`);
   }
 
   const plaintext = await decryptField(userId, current.iv, current.data);
@@ -212,7 +212,7 @@ export async function updateMedia(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update media: ${error.message}`);
+  if (error) throw new Error(`Failed to update media.`);
 
   const updated: Media = { id: data.id, created_at: data.created_at, ...merged };
 
@@ -232,7 +232,7 @@ export async function deleteMedia(id: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("media").delete().eq("id", id);
 
-  if (error) throw new Error(`Failed to delete media: ${error.message}`);
+  if (error) throw new Error(`Failed to delete media.`);
 
   // Maintain cache — remove deleted entry
   if (cachedMedia !== null) {

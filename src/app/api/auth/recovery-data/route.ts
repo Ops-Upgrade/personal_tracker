@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase-admin";
-import { generateResetToken } from "../_helpers/resetToken";
-import { ipLimiter, emailLimiter } from "@/lib/rate-limit";
+import {
+  emailLimiter,
+  generateResetToken,
+  ipLimiter,
+} from "@ops-upgrade/auth-core/defense";
 import crypto from "crypto";
 
 const GENERIC_ERROR =
@@ -92,7 +95,7 @@ export async function POST(request: Request) {
 
   // --- Rate limiting ---
   const [ipResult, emailResult] = await Promise.all([
-    ipLimiter.limit(request.headers.get("x-forwarded-for") ?? "anonymous"),
+    ipLimiter().limit(request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for") ?? "anonymous"),
     recoveryDataLimiter.limit(normalizedEmail),
   ]);
 

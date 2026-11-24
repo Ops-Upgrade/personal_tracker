@@ -12,7 +12,7 @@ export async function fetchNotes(userId: string): Promise<Note[]> {
     .select("id, user_id, iv, data, created_at")
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to fetch notes: ${error.message}`);
+  if (error) throw new Error(`Failed to fetch notes.`);
   if (!rows || rows.length === 0) return [];
 
   return Promise.all(
@@ -44,7 +44,7 @@ export async function createNote(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create note: ${error.message}`);
+  if (error) throw new Error(`Failed to create note.`);
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -67,7 +67,7 @@ export async function updateNote(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update note: ${error.message}`);
+  if (error) throw new Error(`Failed to update note.`);
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -79,5 +79,5 @@ export async function deleteNote(noteId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("notes").delete().eq("id", noteId);
 
-  if (error) throw new Error(`Failed to delete note: ${error.message}`);
+  if (error) throw new Error(`Failed to delete note.`);
 }

@@ -12,7 +12,7 @@ export async function fetchTasks(userId: string): Promise<Task[]> {
     .select("id, user_id, iv, data, created_at")
     .eq("user_id", userId);
 
-  if (error) throw new Error(`Failed to fetch tasks: ${error.message}`);
+  if (error) throw new Error(`Failed to fetch tasks.`);
   if (!rows || rows.length === 0) return [];
 
   return Promise.all(
@@ -44,7 +44,7 @@ export async function createTask(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to create task: ${error.message}`);
+  if (error) throw new Error(`Failed to create task.`);
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -67,7 +67,7 @@ export async function updateTask(
     .select("id, created_at")
     .single();
 
-  if (error) throw new Error(`Failed to update task: ${error.message}`);
+  if (error) throw new Error(`Failed to update task.`);
 
   return { id: data.id, created_at: data.created_at, ...plaintext };
 }
@@ -79,5 +79,5 @@ export async function deleteTask(taskId: string): Promise<void> {
   const supabase = createClient();
   const { error } = await supabase.from("tasks").delete().eq("id", taskId);
 
-  if (error) throw new Error(`Failed to delete task: ${error.message}`);
+  if (error) throw new Error(`Failed to delete task.`);
 }
