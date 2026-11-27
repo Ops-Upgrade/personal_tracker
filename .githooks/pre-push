@@ -1,0 +1,7 @@
+#!/bin/sh
+# Pre-push gate: npm audit + compromised-package cross-check, plus
+# gitleaks when the push touches config/env files.
+# Emergency override (documented in the monitoring runbook):
+#   PREPUSH_SKIP=all git push ...
+root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+exec node "$root/scripts/prepush-check.mjs"

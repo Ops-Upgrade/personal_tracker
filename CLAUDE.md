@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Build:** `npm run build` (also `--webpack` — Next 16 Turbopack dev mode does not emit Tailwind variant rules, so the Webpack fallback is mandatory for both)
 - **Lint:** `npm run lint` (ESLint 9 with `eslint-config-next`)
 - **Tests:** `npm test` (vitest, config `vitest.config.mts`) — Tier 1 pure-function unit tests (hermetic, `vi.mock`ed Supabase/crypto). `npm run test:integration` (config `vitest.integration.config.mts`) — media Tier 2/3 suites against the REAL Supabase project as the dummy test user (credentials in gitignored `.env.test.local`; fails fast if absent; excluded from `npm test`; per-test teardown wipes only the dummy user's rows). See `docs/plans/PLAN-mediamanager.md` Stage 11. Component tests exist for the generic engines: `GenericDomainModal` and `DatePicker` run under jsdom via per-file `// @vitest-environment jsdom` pragmas (no config change), using `@testing-library/react` + `user-event` with plain assertions (no jest-dom). JSX in tests requires the `.tsx` extension (Oxc parses JSX only in `.tsx`); `@vitejs/plugin-react` is NOT required. Still verify complex UI changes by driving the UI (`npm run dev`).
+- **Pre-push gate:** `.githooks/pre-push` (npm audit + compromised-package cross-check + gitleaks on config/env changes). Enable once per clone: `git config core.hooksPath .githooks`. Emergency override: `PREPUSH_SKIP=all git push ...` (restore checks afterwards).
 
 ## Essential docs (read first)
 

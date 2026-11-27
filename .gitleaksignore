@@ -1,0 +1,2 @@
+# Known-benign findings (verified test placeholders, never real secrets).
+src/app/api/auth/__tests__/loginRoutes.test.ts:generic-api-key:142

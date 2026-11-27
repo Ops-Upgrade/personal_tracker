@@ -45,3 +45,6 @@ revoke-test.mjs
 next-env.d.ts
 
 #developer agents
+
+# security pre-push cache (compromised-package list)
+.security-cache/
